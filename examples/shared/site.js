@@ -93,13 +93,14 @@ export function errorText(error) {
   return text;
 }
 
-/** A list of labelled pass/fail checks. `checks` is [label, boolean][]. */
+/** A list of labelled checks. `checks` is [label, boolean | null][]; null means "not run yet". */
 export function renderChecks(target, checks) {
+  const view = (ok) => (ok == null ? ['pending', 'not run'] : ok ? ['pass', 'pass'] : ['fail', 'fail']);
   target.innerHTML = checks
-    .map(([label, ok]) => `<li><span class="status ${ok ? 'pass' : 'fail'}">${ok ? 'pass' : 'fail'}</span><span>${label}</span></li>`)
+    .map(([label, ok]) => { const [cls, text] = view(ok); return `<li><span class="status ${cls}">${text}</span><span>${label}</span></li>`; })
     .join('');
   target.classList.add('checks');
-  return checks.every(([, ok]) => ok);
+  return checks.every(([, ok]) => ok === true);
 }
 
 export function status(ok, text = ok ? 'pass' : 'fail') {

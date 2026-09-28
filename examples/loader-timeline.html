@@ -185,18 +185,24 @@
     }
 
     const results = {};
+    const running = new Set();
     const run = async (name, fn) => {
+      if (running.has(name)) return; // one run per scenario at a time
+      running.add(name);
       try {
         results[name] = await fn();
       } catch (error) {
         results[name] = error;
         logLine('error', `        ${esc(name)} rejected: ${esc(errorText(error))}`);
       }
+      running.delete(name);
       updateChecks();
     };
 
     $('graph').addEventListener('click', () => run('graph', () => Promise.all([loader.load('./barrels/top.html'), loader.load('@lib')])));
     $('again').addEventListener('click', () => run('again', async () => {
+      // make sure the first load has finished, so every fetch it needs is already counted
+      await Promise.all([loader.load('./barrels/top.html'), loader.load('@lib')]);
       const before = new Map(fetches);
       await Promise.all([loader.load('./barrels/top.html'), loader.load('@lib')]);
       return [...fetches].every(([u, n]) => before.get(u) === n);
@@ -207,6 +213,9 @@
       return a === b && b === c && fetches.get(url) === 1;
     }));
     $('flaky').addEventListener('click', () => run('flaky', async () => {
+      // Each click replays the scenario: drop the cached copy and fail the next request again.
+      loader.cache.delete(new URL('./timeline/flaky.html', location.href).href);
+      flakyFailures = 0;
       try {
         await loader.load('./timeline/flaky.html');
         return 'loaded first time';
@@ -243,16 +252,18 @@
 
     function updateChecks() {
       const flaky = results.flaky;
+      // null = the scenario hasn't been run yet (shown as "not run", not "fail")
+      const ran = (key) => (key in results ? true : null);
       renderChecks($('checks'), [
         ['Nested modules finish before the barrels that re-export them', (() => {
           const at = (suffix) => events.find((e) => e.type === 'load' && e.url.endsWith(suffix))?.t;
-          return results.graph ? at('/barrels/common.html') < at('/barrels/top.html') && at('/library/tokens.html') < at('/library/all.html') : false;
+          return results.graph ? at('/barrels/common.html') < at('/barrels/top.html') && at('/library/tokens.html') < at('/library/all.html') : null;
         })()],
-        ['Loading again is served from the cache: resolve events, no new fetches', results.again === true],
-        ['Three concurrent loads of one URL share one fetch and one namespace', results.dedupe === true],
-        ['The flaky module errored, was evicted, and loaded on retry', !!flaky?.first && flaky.evicted && flaky.ns?.status?.loaded === 'on the retry'],
-        ['A late <code>&lt;module-import&gt;</code> fired <code>load</code>', results.late === true],
-        ['A missing export rejects <code>.module</code> with a <code>SyntaxError</code> (the module itself loaded fine)', results.lateBad instanceof SyntaxError],
+        ['Loading again is served from the cache: resolve events, no new fetches', ran('again') && results.again === true],
+        ['Three concurrent loads of one URL share one fetch and one namespace', ran('dedupe') && results.dedupe === true],
+        ['The flaky module errored, was evicted, and loaded on retry', ran('flaky') && !!flaky?.first && flaky.evicted && flaky.ns?.status?.loaded === 'on the retry'],
+        ['A late <code>&lt;module-import&gt;</code> fired <code>load</code>', ran('late') && results.late === true],
+        ['A missing export rejects <code>.module</code> with a <code>SyntaxError</code> (the module itself loaded fine)', ran('lateBad') && results.lateBad instanceof SyntaxError],
       ]);
     }
 

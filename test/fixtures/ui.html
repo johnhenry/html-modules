@@ -1,0 +1,8 @@
+<!doctype html>
+<template id="helper"><span>private</span></template>
+<template export="Card"><article class="card"><slot></slot></article></template>
+<template export="default"><main>default</main></template>
+<style export="theme">.card { border: 1px solid; }</style>
+<script type="application/json" export="config">{ "size": 3 }</script>
+<script type="module" export="controller">export const greet = (n) => `hi ${n}`;</script>
+<svg export="logo"><circle r="4"></circle></svg>

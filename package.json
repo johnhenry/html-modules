@@ -1,0 +1,52 @@
+{
+  "name": "@johnhenry/web-module-graph",
+  "version": "0.0.0",
+  "description": "A unified JS + HTML module graph for the browser: HTML modules with named/default/namespace exports, declarative <module-import>/<module-binding> Web Components, import-map compilation, and a pluggable router interface for multi-CDN resolution (mport adapter included).",
+  "author": "John Henry <john@iamjohnhenry.com>",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "sideEffects": [
+    "./src/browser.js"
+  ],
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./browser": "./src/browser.js",
+    "./routers": "./src/routers/index.js"
+  },
+  "bin": {
+    "web-module-graph": "./bin/web-module-graph.js"
+  },
+  "files": [
+    "src",
+    "bin"
+  ],
+  "scripts": {
+    "test": "node --test \"test/*.test.js\"",
+    "check": "node scripts/check.js",
+    "build": "node scripts/check.js"
+  },
+  "peerDependencies": {
+    "mport": ">=1.0.0"
+  },
+  "peerDependenciesMeta": {
+    "mport": {
+      "optional": true
+    }
+  },
+  "keywords": [
+    "esm",
+    "html-modules",
+    "import-maps",
+    "web-components",
+    "cdn",
+    "module-router"
+  ],
+  "devDependencies": {
+    "linkedom": "^0.18.13",
+    "mport": "file:../../mport"
+  }
+}

@@ -1,0 +1,8 @@
+<!doctype html>
+<!-- An HTML module: exported nodes form its namespace; everything else is private. -->
+<template export="Card">
+  <style>article { border: 1px solid #8884; border-radius: 8px; padding: 1rem; }</style>
+  <article><slot></slot></article>
+</template>
+<style export="theme">body { font-family: system-ui, sans-serif; }</style>
+<script type="application/json" export="config">{ "brand": "demo" }</script>

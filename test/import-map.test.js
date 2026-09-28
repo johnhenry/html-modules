@@ -74,8 +74,9 @@ test('compileImportMap: resolution keys, mport-style scopes, integrity, custom c
     scopes: { '/legacy/': { react: 'https://esm.sh/react@18.3.1' } },
     integrity: { 'https://esm.sh/react@19.2.0': 'sha384-abc' },
   });
-  assert.deepEqual(Object.keys(lock.packages), ['npm:lit@', 'npm:react@18', 'npm:react@^19']);
-  assert.equal(lock.packages['npm:react@^19'].integrity, 'sha384-abc');
+  assert.deepEqual(Object.keys(lock.packages), ['lit', 'react@18', 'react@^19'], 'keys are the specifiers as written');
+  assert.equal(lock.packages['react@^19'].integrity, 'sha384-abc');
+  assert.equal(lock.packages['react@^19'].registry, 'npm');
   const custom = await compileImportMap(router, ['lit/'], { compile: (resolved) => ({ imports: { n: String(resolved.length) } }) });
   assert.deepEqual(custom.importMap, { imports: { n: '1' } });
   await assert.rejects(compileImportMap(() => ({ url: 'https://x.example/a.js' }), ['a/']), /does not end in "\/"/);

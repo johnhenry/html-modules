@@ -103,9 +103,14 @@ export function mergeImportMaps(...maps) {
 
 // mport's lockfile fields and key (see mport/src/lock.mjs).
 const LOCK_FIELDS = ['specifier', 'registry', 'name', 'range', 'version', 'path', 'entry', 'build', 'provider', 'url', 'integrity'];
-const lockKeyOf = (res, specifier, scope) => res.registry && res.name
-  ? `${res.registry}:${res.name}@${res.range ?? ''}${res.path ? `/${res.path}` : ''}`
-  : scope ? `${scope} ${specifier}` : specifier;
+// Package keys are the specifier as written: a registry prefix only when the
+// specifier had one ("npm:react@^19"; "gh:" is spelled "github:"), no trailing
+// "/". The entry's `registry` records which registry actually served it.
+const lockKeyOf = (res, specifier, scope) => {
+  if (!(res.registry && res.name)) return scope ? `${scope} ${specifier}` : specifier;
+  const explicit = /^(npm|jsr|github|gh):/.test(specifier);
+  return `${explicit ? `${res.registry}:` : ''}${res.name}${res.range ? `@${res.range}` : ''}${res.path ? `/${res.path}` : ''}`;
+};
 
 function lockEntry(res, specifier) {
   const rec = {};
@@ -155,7 +160,7 @@ export function compileResolutions(resolved, scoped = {}) {
  *   version: `react@^19` → `react`), else the specifier as written.
  * - The lockfile uses mport's format, `{ lockfileVersion: 1, packages }`, so
  *   `createRouter(routes, { lock })` can pin from it. Package entries use
- *   mport's keys (`npm:react@^19`); entries from other routers are keyed by
+ *   mport's keys (the specifier as written: `react@^19`, `npm:react@^19`); entries from other routers are keyed by
  *   the specifier (`"<scope> <specifier>"` inside scopes).
  *
  * @param {import('./routers/interface.js').Router | Function} router

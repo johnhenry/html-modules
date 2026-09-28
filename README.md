@@ -208,7 +208,7 @@ web-module-graph resolve react@^19 --trace
 ```
 
 - Package keys drop the version, as in mport (`react@^19` → `react`); other keys are the specifier as written.
-- The lockfile is mport's format, `{ lockfileVersion: 1, packages }`, keyed like mport (`npm:react@^19`). Entries from non-package routers are keyed by the specifier (`"<scope> <specifier>"` inside scopes); mport ignores them.
+- The lockfile is mport's format, `{ lockfileVersion: 1, packages }`, keyed like mport: by the specifier as written (`react@^19`, or `npm:react@^19` if you wrote the prefix), with the serving registry in each entry's `registry`. Entries from non-package routers are keyed by the specifier (`"<scope> <specifier>"` inside scopes); mport ignores them.
 - If the `--lock` file exists, the CLI reads it and passes it to a config function, so a rebuild pins the same versions and builds without asking the registry. `--relock` ignores it.
 - If `router` is a plain mport router (and scopes use mport's object form), the CLI calls mport's `router.build()` directly. Otherwise it uses `compileImportMap()`, with mport's own `compileImportMap` and `mergeImportMaps` when mport is installed.
 - mport's default `probe: "head"` works in Node, so live CDN configs work at build time too.
@@ -225,7 +225,7 @@ The CDN pieces that duplicated mport are gone or reduced to thin wrappers:
 | `basicRouter({ routes: { '*': [a, b] }, probe })`: ordered fallback with a probe | **Removed.** `basicRouter` is for static aliases; several targets or a `probe` throw a `TypeError` that explains the migration. Use `fromMport(createRouter({ '*': fallback(custom(a), custom(b)) }, { probe }))`. |
 | `httpProbe({ fetch, timeout })` | **Removed.** mport's default `probe: "head"` (HEAD, then GET on 405/501), or `probe: fn`. |
 | `parsePackageSpecifier(s)` → `{ name, version, path }` | **Removed.** Use mport's `parseSpecifier(s)` → `{ registry, name, range, path, prefix }` (`version` is `range`). It also handles `jsr:` and `github:`. |
-| Lockfile `{ "<specifier>": { specifier, url, provider, route } }` | mport's `{ lockfileVersion: 1, packages: { "npm:react@^19": { … } } }`. |
+| Lockfile `{ "<specifier>": { specifier, url, provider, route } }` | mport's `{ lockfileVersion: 1, packages: { "react@^19": { registry: "npm", … } } }`. |
 | Import-map keys were the specifier as written (`react@19`) | Resolutions with a `key` (mport) use it (`react`). |
 | `mport` peer `>=1.0.0` | `^2.0.0` (still optional). |
 

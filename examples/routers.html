@@ -278,7 +278,7 @@ const pinned = createRouter({ '*': fallback(transformCdn, verified(mirror('backu
     $('lock').textContent = JSON.stringify(built.lock, null, 2).replaceAll(location.origin, '');
     $('lock-map').textContent = JSON.stringify(built.importMap, null, 2).replaceAll(location.origin, '');
     $('pinned-trace').innerHTML = `<p class="small">with <code>primary</code> down:</p><div class="error-box">${esc(errorText(pinnedError).replaceAll(location.origin, ''))}</div>${traceHTML(pinnedError?.trace)}<p class="small">with <code>primary</code> back:</p>${traceHTML(pinned.trace)}`;
-    const entry = built.lock.packages['npm:greet@^1'];
+    const entry = built.lock.packages['greet@^1'];
     renderChecks($('lock-checks'), [
       [`The lock pins <code>greet@^1</code> to <code>${esc(entry.version)}</code>, build <code>${esc(entry.build)}</code>, with an SRI hash`, entry.version === '1.0.0' && entry.build === 'mirror' && entry.integrity?.startsWith('sha384-')],
       ['The import map carries the <code>integrity</code> map', built.importMap.integrity?.[entry.url] === entry.integrity],

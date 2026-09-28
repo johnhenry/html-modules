@@ -17,6 +17,16 @@
       "specifier": "@tokens",
       "url": "/examples/import-maps/tokens-v2.html"
     },
+    "greet@^1": {
+      "specifier": "greet@^1",
+      "registry": "npm",
+      "name": "greet",
+      "range": "^1",
+      "version": "1.0.0",
+      "build": "mirror",
+      "provider": "primary",
+      "url": "/examples/routers/mirrors/primary/greet@1.0.0/index.js"
+    },
     "jsr:@demo/scoped@^2": {
       "specifier": "jsr:@demo/scoped@^2",
       "registry": "jsr",
@@ -26,16 +36,6 @@
       "build": "mirror",
       "provider": "primary",
       "url": "/examples/routers/mirrors/primary/@demo/scoped@2.0.0/index.js"
-    },
-    "npm:greet@^1": {
-      "specifier": "greet@^1",
-      "registry": "npm",
-      "name": "greet",
-      "range": "^1",
-      "version": "1.0.0",
-      "build": "mirror",
-      "provider": "primary",
-      "url": "/examples/routers/mirrors/primary/greet@1.0.0/index.js"
     }
   }
 }

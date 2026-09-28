@@ -95,7 +95,7 @@ test('build with an mport router: router.build(), mport lockfile, pinning and --
     assert.deepEqual(map.scopes, { 'https://legacy.example/': { react: 'https://esm.sh/react@18.3.1' } });
     const lock = JSON.parse(await readFile(join(dir, 'mport.lock.json'), 'utf8'));
     assert.equal(lock.lockfileVersion, 1);
-    assert.deepEqual(lock.packages['npm:react@^19'], {
+    assert.deepEqual(lock.packages['react@^19'], {
       specifier: 'react@^19', registry: 'npm', name: 'react', range: '^19', version: '19.2.0', build: 'esm.sh', provider: 'esm.sh', url: 'https://esm.sh/react@19.2.0',
     });
 

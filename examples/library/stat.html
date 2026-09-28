@@ -1,0 +1,10 @@
+<!doctype html>
+<template export="Stat">
+  <style>
+    :host { display: grid; gap: 0.1rem; padding: 0.8rem 1rem; border-radius: var(--lib-radius); background: var(--lib-surface-2); font-family: var(--lib-font); }
+    ::slotted([slot="label"]) { color: var(--lib-muted); font-size: 0.8rem; }
+    ::slotted([slot="value"]) { font-size: 1.6rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+    ::slotted([slot="delta"]) { font-size: 0.8rem; color: var(--lib-ok); }
+  </style>
+  <slot name="label"></slot><slot name="value"></slot><slot name="delta"></slot>
+</template>

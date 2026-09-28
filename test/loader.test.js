@@ -117,3 +117,16 @@ test('failed loads are evicted from the cache and reported', async () => {
 test('HTML fetch errors surface', async () => {
   await assert.rejects(make().load('./missing.html'), /Failed to fetch HTML module .*missing\.html: 404/);
 });
+
+test('URL-like specifiers: import-map URL keys apply, and non-fetchable schemes reach the router', async () => {
+  const loader = make({
+    importMap: { imports: { 'https://esm.sh/react@19': 'https://mirror.example/react.js', './old.js': './new.js' } },
+    router: basicRouter({ routes: { 'jsr:': (rest) => `https://jsr.example/${rest}/mod.js` } }),
+  });
+  assert.deepEqual(await loader.resolve('https://esm.sh/react@19'), { url: 'https://mirror.example/react.js', provider: 'import-map' });
+  assert.equal((await loader.resolve('./old.js')).url, new URL('new.js', fixtures).href);
+  assert.equal((await loader.resolve('./other.js')).url, new URL('other.js', fixtures).href, 'unmapped relative URLs pass through');
+  assert.equal((await loader.resolve('jsr:@std/fs')).url, 'https://jsr.example/@std/fs/mod.js');
+  assert.deepEqual(await loader.resolve('npm:nothing-claims-this'), { url: 'npm:nothing-claims-this' }, 'unclaimed schemes are used as-is');
+  assert.deepEqual(await make({ router: () => 'https://routed.example/' }).resolve('https://x.example/a.js'), { url: 'https://x.example/a.js' }, 'fetchable URLs never reach the router');
+});

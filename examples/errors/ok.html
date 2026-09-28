@@ -1,0 +1,6 @@
+<!doctype html>
+<!-- A healthy module. The error cases import things it does not have, or misuse what it does. -->
+<template export="Card"><article><slot></slot></article></template>
+<template export="default"><p>default</p></template>
+<script type="application/json" export="data">{ "not": "a component or a stylesheet" }</script>
+<style export="sheet">.never-used {}</style>

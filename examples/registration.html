@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Registration · web-module-graph</title>
+  <script>try { const t = localStorage.getItem('wmg-examples-theme'); if (t) document.documentElement.dataset.theme = t; } catch {}</script>
+  <link rel="stylesheet" href="./shared/site.css">
+  <style>
+    iframe { width: 100%; height: 5.5rem; border: 1px dashed var(--border); border-radius: 8px; background: var(--surface); }
+    .pending-dot { display: inline-block; width: 0.6rem; height: 0.6rem; border-radius: 50%; background: var(--warn); margin-right: 0.35rem; animation: pulse 1.2s infinite; }
+    @keyframes pulse { 50% { opacity: 0.25; } }
+    @media (prefers-reduced-motion: reduce) { .pending-dot { animation: none; } }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <a class="home" href="./index.html">web-module-graph</a>
+    <span class="crumb">Registration</span>
+    <span class="spacer"></span>
+    <button class="theme-toggle" type="button">Dark mode</button>
+  </header>
+
+  <!-- 1. One class, several tags. `as` is only a local alias; element= registers. -->
+  <module-import id="imp-counters" from="./registration/widgets.js">
+    <module-binding name="Counter" element="reg-counter"></module-binding>
+    <module-binding name="Counter" as="Tally" element="reg-tally"></module-binding>
+  </module-import>
+  <!-- <define-element> AFTER the import: a third tag for the same class. -->
+  <define-element id="def-clicker" name="reg-clicker" component="Counter"></define-element>
+  <!-- Same tag, same value again: a no-op, not an error. -->
+  <define-element id="def-tally-again" name="reg-tally" component="Tally"></define-element>
+
+  <!-- 2. <define-element> BEFORE the import that declares its component (a default= local). -->
+  <define-element id="def-banner" name="reg-banner" component="Banner"></define-element>
+  <module-import id="imp-templates" from="./registration/templates.html" default="Banner">
+    <!-- A template under two tags: each gets its own stamping class. -->
+    <module-binding name="Pill" element="reg-pill"></module-binding>
+    <module-binding name="Pill" as="Tag" element="reg-tag"></module-binding>
+  </module-import>
+
+  <!-- 3. A misspelled component never registers: the element waits forever. -->
+  <define-element id="def-typo" name="reg-typo" component="Countr"></define-element>
+
+  <!-- 4. Side-effect-only import. -->
+  <module-import id="imp-setup" from="./registration/setup.js"></module-import>
+
+  <!-- 5. A custom prefix with its own scope and a logging registry (set up in the script below). -->
+  <esm-import id="esm-imp" from="./registration/widgets.js">
+    <esm-binding name="Counter" element="esm-counter"></esm-binding>
+  </esm-import>
+  <esm-define id="esm-def" name="esm-clicker" component="Counter"></esm-define>
+
+  <main class="page">
+    <h1>Registration</h1>
+    <p class="lede">
+      Importing never registers anything by itself. <code>element=</code> and <code>&lt;define-element&gt;</code> are explicit,
+      separate steps, and the same export can be registered under as many tags as you like.
+    </p>
+    <div class="covers" data-page="registration"></div>
+
+    <section class="card">
+      <h2>One class, four tags</h2>
+      <div class="row">
+        <reg-counter></reg-counter><reg-tally></reg-tally><reg-clicker></reg-clicker><esm-counter></esm-counter><esm-clicker></esm-clicker>
+      </div>
+      <p class="small muted">Each tag keeps its own count. The first registration uses <code>Counter</code> itself; later names get a subclass, because a constructor can only be defined once per registry.</p>
+      <div id="ctor-table"></div>
+    </section>
+
+    <section class="card">
+      <h2>Templates and <code>&lt;define-element&gt;</code> ordering</h2>
+      <p><reg-banner>&lt;reg-banner&gt;: the <code>&lt;define-element&gt;</code> came before the import of its <code>default="Banner"</code> local.</reg-banner></p>
+      <p class="row"><reg-pill>&lt;reg-pill&gt;</reg-pill><reg-tag>&lt;reg-tag&gt; (same template)</reg-tag><prog-pill>&lt;prog-pill&gt; via defineElement()</prog-pill><manual-pill>&lt;manual-pill&gt; via templateElementClass()</manual-pill></p>
+      <ul id="template-checks"></ul>
+    </section>
+
+    <section class="card">
+      <h2>Late insertion</h2>
+      <p class="small">Insert a <code>&lt;define-element name="reg-late" component="LateGreeting"&gt;</code> first: it waits on <code>scope.whenDeclared()</code>. Then insert the import that declares <code>LateGreeting</code>, and it registers.</p>
+      <div class="row">
+        <button id="add-define" class="primary">1. Insert &lt;define-element&gt;</button>
+        <button id="add-import" disabled>2. Insert &lt;module-import&gt;</button>
+      </div>
+      <p id="late-state" class="small"></p>
+      <div id="late-host"></div>
+    </section>
+
+    <section class="card">
+      <h2>A misspelled component</h2>
+      <p class="small"><code>&lt;define-element name="reg-typo" component="Countr"&gt;</code> never registers and never times out. Its <code>.defined</code> promise stays pending:</p>
+      <p id="typo-state"></p>
+    </section>
+
+    <section class="card">
+      <h2>Custom prefix, own scope, logging registry</h2>
+<pre><code>const esmScope = new ModuleScope();
+defineModuleElements({ prefix: 'esm', loader, scope: esmScope, registry: loggingRegistry });
+// → &lt;esm-import&gt;, &lt;esm-binding&gt;, &lt;esm-define&gt;</code></pre>
+      <ul id="prefix-checks"></ul>
+    </section>
+
+    <section class="card">
+      <h2>Another window</h2>
+      <p class="small">The <code>window</code> option targets another realm: here a same-origin iframe gets its own <code>&lt;module-import&gt;</code> and registers a template from the same HTML module.</p>
+      <iframe id="frame" title="iframe with its own module elements" srcdoc="<!doctype html><style>body{margin:.6rem;font:14px system-ui;color:#555}</style><module-import from='./registration/templates.html'><module-binding name='Pill' element='frame-pill'></module-binding></module-import><frame-pill>&lt;frame-pill&gt; inside the iframe</frame-pill>"></iframe>
+      <p id="frame-state" class="small"></p>
+    </section>
+
+    <section class="card">
+      <h2>Element and scope APIs</h2>
+      <ul id="api-checks"></ul>
+      <h3>imp-templates.declaration</h3>
+      <pre id="declaration"></pre>
+    </section>
+
+    <section class="card">
+      <h2>Events</h2>
+      <p class="small muted"><code>load</code> and <code>error</code> events from every import and define element on the page, in order.</p>
+      <div class="log" id="events"></div>
+    </section>
+  </main>
+
+  <script type="module">
+    import {
+      createLoader, defineModuleElements, ModuleScope, scopeFor, readImportDeclaration, applyImport,
+      defineElement, templateElementClass, toElementConstructor,
+    } from '../src/index.js';
+    import { renderChecks, esc, status } from './shared/site.js';
+
+    const loader = createLoader();
+    const eventsLog = document.getElementById('events');
+    const t0 = performance.now();
+    const log = (target, e) => {
+      const id = target.id || target.localName;
+      const detail = e.type === 'error' ? e.detail.error.message : e.detail.name ? `defined <${e.detail.name}>` : `bindings: ${Object.keys(e.detail.bindings).join(', ') || '(side effect)'}`;
+      eventsLog.insertAdjacentHTML('beforeend', `<div>${(performance.now() - t0).toFixed(0).padStart(5)}ms <strong>${e.type}</strong> #${esc(id)} · ${esc(detail)}</div>`);
+    };
+    const watch = (el) => ['load', 'error'].forEach((t) => el.addEventListener(t, (e) => log(el, e)));
+
+    // The page's own elements, with the document's scope.
+    const { scope } = defineModuleElements({ loader });
+
+    // The esm-* elements: separate scope, logging registry.
+    const esmScope = new ModuleScope();
+    const registered = [];
+    const loggingRegistry = {
+      get: (name) => customElements.get(name),
+      getName: (ctor) => customElements.getName(ctor),
+      define(name, ctor, options) {
+        registered.push(name);
+        customElements.define(name, ctor, options);
+      },
+    };
+    defineModuleElements({ prefix: 'esm', loader, scope: esmScope, registry: loggingRegistry });
+
+    for (const el of document.querySelectorAll('module-import, define-element, esm-import, esm-define')) watch(el);
+
+    // Programmatic registration.
+    const templates = await document.getElementById('imp-templates').module;
+    defineElement(customElements, 'prog-pill', templates.Pill);
+    customElements.define('manual-pill', templateElementClass(templates.Pill));
+
+    // --- one class, several tags ---
+    const [widgets] = await Promise.all([document.getElementById('imp-counters').module]);
+    const [clicker, tallyAgain] = await Promise.all(['def-clicker', 'def-tally-again'].map((id) => document.getElementById(id).defined));
+    await document.getElementById('esm-def').defined;
+    const { Counter } = widgets;
+    const tags = ['reg-counter', 'reg-tally', 'reg-clicker', 'esm-counter', 'esm-clicker'];
+    document.getElementById('ctor-table').innerHTML = `<div class="table-wrap"><table><thead><tr><th>tag</th><th>constructor.name</th><th>=== Counter</th><th>subclass of Counter</th></tr></thead><tbody>${tags.map((t) => {
+      const C = customElements.get(t);
+      return `<tr><td><code>&lt;${t}&gt;</code></td><td><code>${esc(C.name || '(anonymous subclass)')}</code></td><td>${C === Counter}</td><td>${C.prototype instanceof Counter}</td></tr>`;
+    }).join('')}</tbody></table></div>`;
+
+    // --- templates ---
+    const banner = await document.getElementById('def-banner').defined;
+    const Pill = customElements.get('reg-pill'), Tag = customElements.get('reg-tag');
+    renderChecks(document.getElementById('template-checks'), [
+      ['<code>&lt;define-element&gt;</code> before its import resolved once the import declared <code>Banner</code>', banner === customElements.get('reg-banner') && banner.template === scope.get('Banner')],
+      ['The same template under two tags gives two classes that share <code>.template</code>', Pill !== Tag && Pill.template === Tag.template && Tag.template === templates.Pill],
+      ['Template elements stamp into an open shadow root', document.querySelector('reg-pill').shadowRoot?.querySelector('slot') != null],
+      ['<code>toElementConstructor()</code> passes HTMLElement classes through unchanged', toElementConstructor(Counter) === Counter],
+      ['Re-registering <code>reg-tally</code> with the same value returned the existing class (no-op)', tallyAgain === customElements.get('reg-tally')],
+      ['<code>defineElement()</code> with the same name and value is idempotent', defineElement(customElements, 'prog-pill', templates.Pill) === customElements.get('prog-pill')],
+      ['<code>reg-clicker</code> (third name for Counter) is a subclass', clicker.prototype instanceof Counter && clicker !== Counter],
+    ]);
+
+    // --- late insertion ---
+    const lateState = document.getElementById('late-state');
+    const lateHost = document.getElementById('late-host');
+    let lateDefine;
+    lateState.innerHTML = `${status('pending', 'not inserted')}`;
+    document.getElementById('add-define').addEventListener('click', (e) => {
+      e.target.disabled = true;
+      lateDefine = Object.assign(document.createElement('define-element'), { id: 'late-define' });
+      lateDefine.setAttribute('name', 'reg-late');
+      lateDefine.setAttribute('component', 'LateGreeting');
+      watch(lateDefine);
+      document.body.append(lateDefine);
+      lateHost.innerHTML = '<reg-late>&lt;reg-late&gt; is in the DOM but not defined yet.</reg-late>';
+      lateState.innerHTML = `<span class="pending-dot"></span>waiting on <code>scope.whenDeclared("LateGreeting")</code>; has("LateGreeting") = ${scope.has('LateGreeting')}`;
+      document.getElementById('add-import').disabled = false;
+      lateDefine.defined.then((C) => {
+        lateState.innerHTML = `${status(true, 'defined')} <code>&lt;reg-late&gt;</code> → <code>${esc(C.name)}</code>; the existing element upgraded in place.`;
+      });
+    });
+    document.getElementById('add-import').addEventListener('click', (e) => {
+      e.target.disabled = true;
+      const imp = document.createElement('module-import');
+      imp.id = 'late-import';
+      imp.setAttribute('from', './registration/widgets.js');
+      imp.setAttribute('default', 'LateGreeting');
+      watch(imp);
+      document.body.append(imp);
+    });
+
+    // --- misspelled component ---
+    const typo = document.getElementById('def-typo');
+    let typoDone = false;
+    typo.defined.then(() => (typoDone = true));
+    const started = performance.now();
+    const tick = () => {
+      document.getElementById('typo-state').innerHTML = typoDone
+        ? status(false, 'unexpectedly defined')
+        : `<span class="pending-dot"></span>still pending after ${((performance.now() - started) / 1000).toFixed(0)}s · <code>scope.has("Countr")</code> = ${scope.has('Countr')}`;
+    };
+    tick();
+    setInterval(tick, 1000);
+
+    // --- prefix ---
+    const esmImp = document.getElementById('esm-imp');
+    await esmImp.module;
+    renderChecks(document.getElementById('prefix-checks'), [
+      ['<code>&lt;esm-import&gt;</code>, <code>&lt;esm-binding&gt;</code> and <code>&lt;esm-define&gt;</code> are defined', ['esm-import', 'esm-binding', 'esm-define'].every((t) => customElements.get(t))],
+      ['The esm scope holds only its own bindings: ' + esmScope.names().map((n) => `<code>${n}</code>`).join(', '), esmScope.names().join() === 'Counter'],
+      ['The document scope does not see esm bindings, and vice versa', scopeFor(document) === scope && !esmScope.has('Tally') && scope.get('Counter') === esmScope.get('Counter')],
+      ['Registrations went through the logging registry: ' + registered.map((n) => `<code>${n}</code>`).join(', '), registered.join() === 'esm-counter,esm-clicker'],
+      ['<code>&lt;esm-define&gt;</code> resolved its component from the esm scope', customElements.get('esm-clicker')?.prototype instanceof Counter],
+    ]);
+
+    // --- another window ---
+    const frame = document.getElementById('frame');
+    const frameReady = frame.contentDocument?.readyState === 'complete' ? Promise.resolve() : new Promise((r) => frame.addEventListener('load', r, { once: true }));
+    await frameReady;
+    const fw = frame.contentWindow;
+    const inFrame = defineModuleElements({ window: fw, loader: createLoader({ window: fw, baseURL: document.baseURI }) });
+    await fw.document.querySelector('module-import').module;
+    const FramePill = fw.customElements.get('frame-pill');
+    document.getElementById('frame-state').innerHTML = [
+      status(FramePill && FramePill.prototype instanceof fw.HTMLElement, 'frame-pill defined in the iframe realm'),
+      status(customElements.get('frame-pill') === undefined, 'not in the parent registry'),
+      status(inFrame.scope !== scope && inFrame.scope.names().join() === 'Pill', 'its own per-document scope (only Pill)'),
+    ].join(' ');
+
+    // --- element and scope APIs ---
+    const impTemplates = document.getElementById('imp-templates');
+    const decl = impTemplates.declaration;
+    document.getElementById('declaration').textContent = JSON.stringify(decl, null, 2);
+    const other = new ModuleScope();
+    // Registration is separate from binding: drop element= to bind only.
+    const bindOnly = readImportDeclaration(impTemplates);
+    bindOnly.bindings = bindOnly.bindings.map(({ element, ...b }) => b);
+    const created = applyImport(bindOnly, templates, { scope: other });
+    const redeclared = (() => { try { scope.declare('Tally', Counter, 'again'); return true; } catch { return false; } })();
+    renderChecks(document.getElementById('api-checks'), [
+      ['<code>el.module</code> is the namespace promise; awaiting it twice gives the same object', (await impTemplates.module) === templates],
+      ['<code>el.bindings</code> lists the locals it created: ' + Object.keys(impTemplates.bindings).map((k) => `<code>${k}</code>`).join(', '), Object.keys(impTemplates.bindings).join() === 'Banner,Pill,Tag'],
+      ['<code>el.declaration</code> equals <code>readImportDeclaration(el)</code>', JSON.stringify(decl) === JSON.stringify(readImportDeclaration(impTemplates))],
+      ['<code>applyImport(decl, ns, { scope })</code> binds a declaration (minus <code>element=</code>) into any scope, no DOM needed', Object.keys(created).join() === 'Banner,Pill,Tag' && other.get('Tag') === templates.Pill],
+      ['<code>scope.names()</code>: ' + scope.names().map((n) => `<code>${n}</code>`).join(', '), scope.names().includes('Counter') && scope.names().includes('Banner')],
+      ['<code>scope.whenDeclared()</code> resolves immediately for an existing name', (await scope.whenDeclared('Counter')) === Counter],
+      ['Declaring an existing local with the same value is allowed (like importing twice)', redeclared],
+      ['<code>as</code> only aliases: <code>Tag</code> is a local, <code>Pill</code> is too, but nothing named <code>Tag</code> was exported', scope.has('Tag') && !('Tag' in templates)],
+      ['The side-effect import ran <code>setup.js</code> once and created no bindings', globalThis.__registrationSetupRuns === 1 && Object.keys(document.getElementById('imp-setup').bindings).length === 0 && document.getElementById('imp-setup').declaration.sideEffectOnly],
+    ]);
+  </script>
+  <script type="module" src="./shared/site.js"></script>
+</body>
+</html>

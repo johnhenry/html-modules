@@ -1,0 +1,20 @@
+<!doctype html>
+<!-- Seed data and the store, as exports of one HTML module. -->
+<script type="application/json" export="seed">
+  {
+    "columns": [
+      { "id": "todo", "title": "To do" },
+      { "id": "doing", "title": "In progress" },
+      { "id": "done", "title": "Done" }
+    ],
+    "tasks": [
+      { "id": "t1", "title": "Write HTML module for the column", "tag": "ui", "status": "done" },
+      { "id": "t2", "title": "Re-export TaskCard through the barrel", "tag": "modules", "status": "done" },
+      { "id": "t3", "title": "Adopt an accent theme", "tag": "styles", "status": "doing" },
+      { "id": "t4", "title": "Persist the board in localStorage", "tag": "data", "status": "doing" },
+      { "id": "t5", "title": "Add keyboard shortcuts", "tag": "ui", "status": "todo" },
+      { "id": "t6", "title": "Compile an import map for production", "tag": "modules", "status": "todo" }
+    ]
+  }
+</script>
+<script type="module" src="./store.js" export="store"></script>

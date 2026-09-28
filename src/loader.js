@@ -5,13 +5,17 @@
  *   1. `importMap` (explicit pins / a compiled lock)
  *   2. `router`    (e.g. mportRouter → CDN racing)
  *   3. `hostResolve` (e.g. `import.meta.resolve`, which honors the page's import map)
- * Relative and absolute URLs resolve against the referrer.
+ * Relative and absolute URLs resolve against the referrer (after the import
+ * map, which may remap them with URL keys). URL-like specifiers with other
+ * schemes ("npm:react", "jsr:@std/path") go to the router and hostResolve, and
+ * are used as-is only if nothing claims them.
  */
 import { resolveImportMap, parseURLLikeSpecifier } from './import-map.js';
 import { parseHTMLModule, defaultExportValue, dataScriptURL } from './html-module.js';
 import { toRouter } from './routers/interface.js';
 
 const HTML_EXT = /\.html?(?:[?#]|$)/i;
+const FETCHABLE = new Set(['http:', 'https:', 'file:', 'data:', 'blob:']);
 
 /**
  * @param {object} [options]
@@ -53,17 +57,21 @@ export function createLoader({
   async function resolve(specifier, referrer) {
     referrer ||= baseURL;
     const asURL = parseURLLikeSpecifier(specifier, referrer);
-    if (asURL) return { url: asURL.href };
     if (importMap) {
+      // Import maps also remap URL-like specifiers (URL keys), as in browsers.
       const url = resolveImportMap(importMap, specifier, { referrer, mapBaseURL: baseURL ?? referrer });
-      if (url) return { url, provider: 'import-map' };
+      if (url && url !== asURL?.href) return { url, provider: 'import-map' };
     }
+    // Fetchable URLs load directly. Other schemes ("npm:", "jsr:", …) parse as
+    // URLs but are routing prefixes, so routers and hostResolve see them first.
+    if (asURL && FETCHABLE.has(asURL.protocol)) return { url: asURL.href };
     if (routerImpl) {
       const res = await routerImpl.resolve(specifier, { referrer });
       if (res?.url) return res;
     }
     const hosted = hostResolve?.(specifier);
     if (hosted) return { url: String(hosted) };
+    if (asURL) return { url: asURL.href };
     throw new TypeError(`Unable to resolve bare specifier "${specifier}"${referrer ? ` from ${referrer}` : ''}`);
   }
 

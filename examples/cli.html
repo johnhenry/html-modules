@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Compiled import map · web-module-graph</title>
+  <script>try { const t = localStorage.getItem('wmg-examples-theme'); if (t) document.documentElement.dataset.theme = t; } catch {}</script>
+  <link rel="stylesheet" href="./shared/site.css">
+  <style>
+    pre.small-pre { font-size: 0.78rem; max-height: 22rem; }
+    td.url { font-family: var(--mono); font-size: 0.8rem; }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <a class="home" href="./index.html">web-module-graph</a>
+    <span class="crumb">Compiled import map (CLI)</span>
+    <span class="spacer"></span>
+    <button class="theme-toggle" type="button">Dark mode</button>
+  </header>
+
+  <main class="page">
+    <h1>Compile routing to an import map</h1>
+    <p class="lede">
+      The CLI asks a router once, ahead of time, and writes a standard import map and a lockfile. The files on this page were
+      produced by <code>web-module-graph build</code> from <a href="./cli/modules.config.js"><code>cli/modules.config.js</code></a>
+      (a <code>basicRouter</code> with ordered candidates, a file-system probe, a scope and a merged map). The test suite checks they are up to date.
+    </p>
+    <div class="covers" data-page="cli"></div>
+
+    <section class="card">
+      <h2>Commands</h2>
+<pre><code># from the package root
+node bin/web-module-graph.js build --config examples/cli/modules.config.js \
+  --out examples/cli/importmap.json --lock examples/cli/modules.lock.json
+node bin/web-module-graph.js build --config examples/cli/modules.config.js --html --out examples/cli/importmap.html
+node bin/web-module-graph.js resolve @tokens greet@1.0.0 @lib/ --config examples/cli/modules.config.js</code></pre>
+    </section>
+
+    <div class="grid-2">
+      <section class="card">
+        <h2><a href="./cli/importmap.json">importmap.json</a></h2>
+        <pre class="small-pre" id="map"></pre>
+      </section>
+      <section class="card">
+        <h2><a href="./cli/modules.lock.json">modules.lock.json</a></h2>
+        <pre class="small-pre" id="lock"></pre>
+      </section>
+      <section class="card">
+        <h2><a href="./cli/importmap.html">importmap.html</a> (<code>--html</code>)</h2>
+        <pre class="small-pre" id="html"></pre>
+      </section>
+      <section class="card">
+        <h2><a href="./cli/resolve.txt">resolve.txt</a> (<code>resolve</code>)</h2>
+        <pre class="small-pre" id="resolve"></pre>
+      </section>
+    </div>
+
+    <section class="card">
+      <h2>Using the compiled map at runtime</h2>
+      <p class="small">Two loaders consume the same compiled map: one with <code>importMap</code>, one with <code>router: importMapRouter(map)</code>. Both reproduce the build-time decisions without re-running the router.</p>
+      <div class="table-wrap"><table id="runtime"></table></div>
+      <ul id="checks"></ul>
+    </section>
+  </main>
+
+  <script type="module">
+    import { createLoader, importMapRouter, exportNames } from '../src/index.js';
+    import { esc, renderChecks } from './shared/site.js';
+
+    const $ = (id) => document.getElementById(id);
+    const text = (path) => fetch(path, { cache: 'no-cache' }).then((r) => r.text());
+    const [mapText, lockText, htmlText, resolveText] = await Promise.all(['./cli/importmap.json', './cli/modules.lock.json', './cli/importmap.html', './cli/resolve.txt'].map(text));
+    $('map').textContent = mapText;
+    $('lock').textContent = lockText;
+    $('html').textContent = htmlText;
+    $('resolve').textContent = resolveText;
+
+    const map = JSON.parse(mapText);
+    const lock = JSON.parse(lockText);
+    const viaMap = createLoader({ importMap: map });
+    const viaRouter = createLoader({ router: importMapRouter(map, { mapBaseURL: location.href }) });
+
+    const rows = [];
+    for (const s of ['@lib', '@lib/badge.html', '@tokens', 'greet@1.0.0', '@board/ui']) {
+      const [a, b] = await Promise.all([viaMap.resolve(s), viaRouter.resolve(s)]);
+      rows.push([s, a.url.replace(location.origin, ''), a.url === b.url]);
+    }
+    $('runtime').innerHTML = '<thead><tr><th>specifier</th><th>resolved</th><th>importMap === importMapRouter</th></tr></thead><tbody>' +
+      rows.map(([s, u, same]) => `<tr><td><code>${esc(s)}</code></td><td class="url">${esc(u)}</td><td>${same}</td></tr>`).join('') + '</tbody>';
+
+    const lib = await viaMap.load('@lib');
+    const tokens = await viaMap.load('@tokens');
+    const legacy = await viaRouter.load('./cli/legacy/panel.html');
+    const greet = await viaMap.load('greet@1.0.0');
+    renderChecks($('checks'), [
+      ['The probe skipped the missing <code>vendor-cache</code> candidate and the <code>down</code> mirror', !mapText.includes('vendor-cache') && !mapText.includes('/down/')],
+      ['The config\'s own <code>importMap</code> was merged in (<code>@board/ui</code>)', map.imports['@board/ui'] === '/examples/app/ui.html'],
+      ['The lockfile records every resolution, scoped ones keyed by <code>"scope specifier"</code>', Object.keys(lock).length === 5 && lock['/examples/cli/legacy/ @tokens'].url.endsWith('tokens-v1.html')],
+      ['<code>--html</code> wrapped the same map in <code>&lt;script type="importmap"&gt;</code>', htmlText.startsWith('<script type="importmap">') && JSON.stringify(JSON.parse(htmlText.replace(/<\/?script[^>]*>/g, ''))) === JSON.stringify(map)],
+      ['Both runtime loaders agree on every specifier', rows.every(([, , same]) => same)],
+      ['<code>@lib</code> loads the component library barrel: ' + exportNames(lib).slice(0, 5).map((n) => `<code>${n}</code>`).join(' ') + '…', exportNames(lib).includes('Card')],
+      [`<code>@tokens</code> is v${esc(tokens.tokens.version)} at the top level, v${esc(legacy.tokens.version)} inside <code>cli/legacy/</code> (scope)`, tokens.tokens.version === '2.0.0' && legacy.tokens.version === '1.4.2'],
+      ['<code>greet@1.0.0</code> loads from the primary mirror', greet.mirror === 'primary'],
+    ]);
+  </script>
+  <script type="module" src="./shared/site.js"></script>
+</body>
+</html>

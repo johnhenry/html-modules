@@ -3,17 +3,19 @@
 <template id="helper"><p>Private: not exported.</p></template>
 
 <template export="Card">
-  <style>article { border: 2px solid rebeccapurple; border-radius: 8px; padding: 1rem; margin: .5rem 0; }</style>
+  <style>
+    article { border: 2px solid var(--accent, rebeccapurple); border-radius: 10px; padding: 0.8rem 1rem; margin: 0.5rem 0; background: var(--surface, transparent); }
+  </style>
   <article><slot></slot></article>
 </template>
 
 <template export="default">
-  <strong style="color: teal"><slot></slot></strong>
+  <strong style="color: var(--ok, teal)"><slot></slot></strong>
 </template>
 
 <style export="theme">
-  body { font-family: system-ui, sans-serif; margin: 2rem; }
-  h1 { color: rebeccapurple; }
+  .quickstart h1 { color: var(--accent); }
+  .quickstart demo-counter button, .quickstart other-counter button { font-variant-numeric: tabular-nums; }
 </style>
 
 <script type="application/json" export="config">{ "brand": "demo" }</script>

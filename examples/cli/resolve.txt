@@ -1,0 +1,3 @@
+@tokens	{"url":"/examples/import-maps/tokens-v2.html","route":"@tokens"}
+greet@1.0.0	{"url":"/examples/routers/mirrors/primary/greet@1.0.0/index.js","route":"*"}
+@lib/	{"url":"/examples/library/","route":"@lib/*"}

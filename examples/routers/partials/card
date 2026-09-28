@@ -1,0 +1,3 @@
+<!-- No file extension: a router says type: "html", so the loader parses it as an HTML module. -->
+<template export="default"><article><slot></slot></article></template>
+<script type="application/json" export="info">{ "loadedAs": "html", "because": "the router's resolution said type: html" }</script>

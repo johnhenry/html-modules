@@ -42,6 +42,13 @@ export function toElementConstructor(value, win = globalThis) {
 
 const definedFrom = new WeakMap(); // registry -> Map<name, sourceValue>
 
+/** A subclass for an extra tag name, keeping the base class's name (not "ctor"). */
+function renamedSubclass(Base) {
+  const Sub = class extends Base {};
+  Object.defineProperty(Sub, 'name', { value: Base.name, configurable: true });
+  return Sub;
+}
+
 /**
  * Register `value` as custom element `name`. The same export may be registered
  * under several names (a subclass is used when the constructor is taken).
@@ -60,12 +67,12 @@ export function defineElement(registry, name, value, win = globalThis) {
   }
   let ctor = toElementConstructor(value, win);
   const taken = typeof registry.getName === 'function' ? registry.getName(ctor) : null;
-  if (taken) ctor = class extends ctor {};
+  if (taken) ctor = renamedSubclass(ctor);
   try {
     registry.define(name, ctor);
   } catch (error) {
     if (ctor !== value || typeof value !== 'function') throw error;
-    ctor = class extends ctor {};
+    ctor = renamedSubclass(ctor);
     registry.define(name, ctor);
   }
   sources.set(name, value);

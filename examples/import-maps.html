@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Import-map playground · web-module-graph</title>
+  <script>try { const t = localStorage.getItem('wmg-examples-theme'); if (t) document.documentElement.dataset.theme = t; } catch {}</script>
+  <link rel="stylesheet" href="./shared/site.css">
+  <!-- The page's own import map. The loader below reaches it only through hostResolve. -->
+  <script type="importmap">
+    { "imports": { "@acme/host": "./import-maps/host.html" } }
+  </script>
+  <style>
+    .result { font-family: var(--mono); font-size: 0.88rem; padding: 0.6rem 0.75rem; border-radius: 8px; background: var(--surface-2); margin: 0.5rem 0; }
+    .result .url { color: var(--ok); font-weight: 600; }
+    .result .null { color: var(--warn); font-weight: 600; }
+    .inputs { display: grid; gap: 0.5rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); }
+    .inputs input { width: 100%; font-family: var(--mono); font-size: 0.85rem; }
+    td.url { font-family: var(--mono); font-size: 0.8rem; }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <a class="home" href="./index.html">web-module-graph</a>
+    <span class="crumb">Import-map playground</span>
+    <span class="spacer"></span>
+    <button class="theme-toggle" type="button">Dark mode</button>
+  </header>
+
+  <main class="page">
+    <h1>Import-map playground</h1>
+    <p class="lede">
+      <code>resolveImportMap()</code> follows the browser's algorithm: exact keys, trailing-slash prefixes, the longest key first,
+      scopes chosen by the referrer, and URL keys that remap absolute URLs. Edit the map and every result below updates.
+    </p>
+    <div class="covers" data-page="import-maps"></div>
+
+    <div class="grid-2">
+      <section class="card">
+        <h2>Map</h2>
+        <textarea id="map" aria-label="Import map JSON" spellcheck="false" style="min-height: 20rem"></textarea>
+        <div class="row"><button id="reset">Reset</button><span id="map-status" class="small"></span></div>
+      </section>
+      <section class="card">
+        <h2>Resolve</h2>
+        <div class="inputs">
+          <div class="field"><label for="spec">specifier</label><input id="spec" value="lodash/fp"></div>
+          <div class="field"><label for="ref">referrer</label><input id="ref" value="https://app.example/src/main.js"></div>
+          <div class="field"><label for="base">mapBaseURL</label><input id="base" value="https://app.example/"></div>
+        </div>
+        <div class="result" id="one"></div>
+        <p class="small muted">The explanation names the table and key that answered, found by the same order <code>resolveImportMap()</code> uses: matching scopes from longest to shortest, then <code>imports</code>; within each, longest key first.</p>
+      </section>
+    </div>
+
+    <section class="card">
+      <h2>Cases</h2>
+      <p class="small muted">Referrers are on <code>https://app.example</code>; the map base is the <code>mapBaseURL</code> above.</p>
+      <div class="table-wrap"><table id="cases"></table></div>
+    </section>
+
+    <section class="card">
+      <h2>Merge and serialize</h2>
+      <p class="small"><code>mergeImportMaps(a, b)</code>: later maps win, and scopes merge entry by entry. <code>importMapScript()</code> escapes <code>&lt;</code> so a URL cannot close the script tag.</p>
+      <div class="grid-2">
+        <div class="field"><label for="merge-a">a</label><textarea id="merge-a" spellcheck="false"></textarea></div>
+        <div class="field"><label for="merge-b">b</label><textarea id="merge-b" spellcheck="false"></textarea></div>
+      </div>
+      <pre id="merged"></pre>
+    </section>
+
+    <section class="card">
+      <h2><code>parseURLLikeSpecifier()</code></h2>
+      <div class="table-wrap"><table id="parse"></table></div>
+    </section>
+
+    <section class="card">
+      <h2>Compile a map ahead of time</h2>
+      <p class="small"><code>compileImportMap(router, specifiers, { scopes })</code> asks a router once and emits a standard map plus lock entries. This is what the CLI's <code>build</code> command does.</p>
+      <pre id="compiled"></pre>
+    </section>
+
+    <section class="card">
+      <h2>The loader: import map → router → hostResolve</h2>
+      <p class="small">A loader with its own <code>importMap</code> (with a scope for <code>import-maps/legacy/</code> and a prefix entry), a router function, and <code>hostResolve: import.meta.resolve</code> for the page's native import map. Scopes apply inside HTML-module re-exports, because the referrer there is the HTML module's URL.</p>
+      <pre id="loader-map"></pre>
+      <div class="table-wrap"><table id="order"></table></div>
+      <ul id="loader-checks"></ul>
+    </section>
+  </main>
+
+  <script type="module">
+    import {
+      resolveImportMap, mergeImportMaps, importMapScript, parseURLLikeSpecifier, compileImportMap,
+      createLoader, basicRouter,
+    } from '../src/index.js';
+    import { esc, errorText, renderChecks } from './shared/site.js';
+
+    const defaultMap = {
+      imports: {
+        react: 'https://esm.sh/react@19.2.0',
+        'lodash/': 'https://esm.sh/lodash-es@4.17.21/',
+        'lodash/fp': 'https://cdn.example/lodash-fp.js',
+        '@myorg/': '/vendor/myorg/',
+        'https://esm.sh/react@18': 'https://mirror.example/react@18.js',
+        'broken/': 'https://cdn.example/no-slash',
+      },
+      scopes: {
+        '/legacy/': { react: 'https://esm.sh/react@18' },
+        '/legacy/admin/': { react: 'https://esm.sh/react@17' },
+      },
+    };
+    const cases = [
+      ['react', 'https://app.example/src/main.js', 'exact key'],
+      ['lodash/debounce.js', 'https://app.example/src/main.js', 'prefix key'],
+      ['lodash/fp', 'https://app.example/src/main.js', 'longest key wins over "lodash/"'],
+      ['@myorg/button.js', 'https://app.example/src/main.js', 'prefix → path relative to the map'],
+      ['react', 'https://app.example/legacy/old.js', 'scope by referrer'],
+      ['react', 'https://app.example/legacy/admin/x.js', 'longest scope wins'],
+      ['https://esm.sh/react@18', 'https://app.example/src/main.js', 'URL key remaps an absolute URL'],
+      ['./util.js', 'https://app.example/src/main.js', 'relative: passes through'],
+      ['vue', 'https://app.example/src/main.js', 'unmapped bare → null'],
+      ['broken/x.js', 'https://app.example/src/main.js', 'prefix target must end in "/"'],
+    ];
+
+    const $ = (id) => document.getElementById(id);
+    const mapInput = $('map');
+    const reset = () => (mapInput.value = JSON.stringify(defaultMap, null, 2));
+    reset();
+
+    /** Which entry answers, following the same order as resolveImportMap. */
+    function explain(map, specifier, referrer, base) {
+      const normalized = parseURLLikeSpecifier(specifier, referrer)?.href ?? specifier;
+      const tables = [];
+      if (map.scopes) {
+        Object.keys(map.scopes)
+          .map((k) => [k, new URL(k, base).href])
+          .sort(([, a], [, b]) => b.length - a.length)
+          .filter(([, p]) => p === referrer || (p.endsWith('/') && referrer.startsWith(p)))
+          .forEach(([k]) => tables.push([`scopes["${k}"]`, map.scopes[k]]));
+      }
+      tables.push(['imports', map.imports ?? {}]);
+      for (const [where, table] of tables) {
+        const keys = Object.keys(table)
+          .map((k) => [k, parseURLLikeSpecifier(k, base)?.href ?? k])
+          .sort(([, a], [, b]) => b.length - a.length || (a < b ? 1 : -1));
+        for (const [key, norm] of keys) {
+          if (norm === normalized) return `${where} · exact key "${key}"`;
+          if (norm.endsWith('/') && normalized.startsWith(norm)) return `${where} · prefix key "${key}"`;
+        }
+      }
+      return parseURLLikeSpecifier(specifier, referrer) ? 'no entry: URL-like specifier passes through' : 'no entry';
+    }
+
+    function resolveCell(map, spec, ref, base) {
+      try {
+        const url = resolveImportMap(map, spec, { referrer: ref, mapBaseURL: base });
+        return { html: url ? `<span class="url">${esc(url)}</span>` : '<span class="null">null</span>', why: explain(map, spec, ref, base) };
+      } catch (error) {
+        return { html: `<span class="status fail">${esc(error.name)}</span> ${esc(error.message)}`, why: 'error' };
+      }
+    }
+
+    function update() {
+      let map;
+      try {
+        map = JSON.parse(mapInput.value);
+        $('map-status').innerHTML = '<span class="status pass">valid JSON</span>';
+      } catch (error) {
+        $('map-status').innerHTML = `<span class="status fail">${esc(error.message)}</span>`;
+        return;
+      }
+      const base = $('base').value;
+      const one = resolveCell(map, $('spec').value, $('ref').value, base);
+      $('one').innerHTML = `${one.html}<div class="small muted">${esc(one.why)}</div>`;
+      $('cases').innerHTML = '<thead><tr><th>specifier</th><th>referrer</th><th>result</th><th>shows</th></tr></thead><tbody>' + cases.map(([s, r, note]) => {
+        const c = resolveCell(map, s, r, base);
+        return `<tr><td><code>${esc(s)}</code></td><td class="url">${esc(r.replace('https://app.example', ''))}</td><td class="url">${c.html}<div class="small muted">${esc(c.why)}</div></td><td class="small">${esc(note)}</td></tr>`;
+      }).join('') + '</tbody>';
+    }
+    for (const id of ['map', 'spec', 'ref', 'base']) $(id).addEventListener('input', update);
+    $('reset').addEventListener('click', () => (reset(), update()));
+    update();
+
+    // --- merge ---
+    $('merge-a').value = JSON.stringify({ imports: { react: 'https://esm.sh/react@18', lit: 'https://esm.sh/lit@3' }, scopes: { '/admin/': { react: 'https://esm.sh/react@17' } } }, null, 2);
+    $('merge-b').value = JSON.stringify({ imports: { react: 'https://esm.sh/react@19', evil: 'https://x.example/<\/script><script>alert(1)<\/script>' }, scopes: { '/admin/': { lit: 'https://esm.sh/lit@2' } } }, null, 2);
+    function updateMerge() {
+      try {
+        const merged = mergeImportMaps(JSON.parse($('merge-a').value), JSON.parse($('merge-b').value));
+        $('merged').textContent = importMapScript(merged);
+      } catch (error) {
+        $('merged').textContent = errorText(error);
+      }
+    }
+    $('merge-a').addEventListener('input', updateMerge);
+    $('merge-b').addEventListener('input', updateMerge);
+    updateMerge();
+
+    // --- parseURLLikeSpecifier ---
+    const parseCases = ['./a.js', '../b.js', '/c.js', 'https://cdn.example/d.js', 'data:text/javascript,export{}', 'react', '@scope/pkg', 'node:fs'];
+    $('parse').innerHTML = '<thead><tr><th>specifier</th><th>parseURLLikeSpecifier(s, "https://app.example/src/")</th></tr></thead><tbody>' + parseCases.map((s) => {
+      const u = parseURLLikeSpecifier(s, 'https://app.example/src/');
+      return `<tr><td><code>${esc(s)}</code></td><td class="url">${u ? esc(u.href) : '<span class="null">null (bare)</span>'}</td></tr>`;
+    }).join('') + '</tbody>';
+
+    // --- compile ---
+    const router = basicRouter({ routes: { '@std/*': 'https://jsr.example/', '*': 'https://esm.sh/' } });
+    const compiled = await compileImportMap(router, ['react@19.2.0', '@std/path', 'lit/'], { scopes: { 'https://app.example/legacy/': ['react@18.3.1'] } });
+    $('compiled').textContent = JSON.stringify(compiled, null, 2);
+
+    // --- loader ---
+    const loaderMap = {
+      imports: { '@acme/tokens': './import-maps/tokens-v2.html', '@acme/icons/': './import-maps/icons/' },
+      scopes: { './import-maps/legacy/': { '@acme/tokens': './import-maps/tokens-v1.html' } },
+    };
+    $('loader-map').textContent = `createLoader({\n  importMap: ${JSON.stringify(loaderMap, null, 2).replace(/\n/g, '\n  ')},\n  router: (s) => s === '@acme/routed' ? new URL('./import-maps/routed.html', location.href).href : null,\n  hostResolve: (s) => import.meta.resolve(s),\n})`;
+    const events = [];
+    const loader = createLoader({
+      importMap: loaderMap,
+      router: (s) => (s === '@acme/routed' ? new URL('./import-maps/routed.html', location.href).href : null),
+      hostResolve: (s) => { try { return import.meta.resolve(s); } catch { return null; } },
+      onEvent: (e) => events.push(e),
+    });
+    const orderRows = [];
+    for (const s of ['@acme/tokens', '@acme/icons/set.html', '@acme/routed', '@acme/host', '@acme/missing']) {
+      try {
+        const r = await loader.resolve(s);
+        orderRows.push([s, r.url.replace(location.origin, ''), r.provider ?? (s === '@acme/host' ? 'hostResolve' : 'router')]);
+      } catch (error) {
+        orderRows.push([s, `<span class="status fail">${esc(error.name)}</span> ${esc(error.message)}`, '—', true]);
+      }
+    }
+    $('order').innerHTML = '<thead><tr><th>specifier</th><th>resolved</th><th>by</th></tr></thead><tbody>' +
+      orderRows.map(([s, u, by, raw]) => `<tr><td><code>${esc(s)}</code></td><td class="url">${raw ? u : esc(u)}</td><td>${esc(by)}</td></tr>`).join('') + '</tbody>';
+
+    const app = await loader.load('./import-maps/app.html');
+    const widget = await loader.load('./import-maps/legacy/widget.html');
+    const routed = await loader.load('@acme/routed');
+    const hosted = await loader.load('@acme/host');
+    renderChecks($('loader-checks'), [
+      [`app.html re-exports <code>@acme/tokens</code> → version <code>${esc(app.tokens.version)}</code> (top-level imports)`, app.tokens.version === '2.0.0'],
+      [`legacy/widget.html re-exports the same specifier → version <code>${esc(widget.tokens.version)}</code> (scope matched the re-exporting module's URL)`, widget.tokens.version === '1.4.2'],
+      ['A prefix entry reached <code>@acme/icons/set.html</code>, re-exported with <code>all</code>', app.logo instanceof SVGElement],
+      ['A router function answered what the map did not', routed.where.resolvedBy === 'a router function'],
+      ['<code>hostResolve</code> (<code>import.meta.resolve</code>) used the page\'s native import map last', hosted.where.resolvedBy.includes('page import map')],
+      ['An unresolvable bare specifier is a <code>TypeError</code>', orderRows.at(-1)[3] === true && orderRows.at(-1)[1].includes('TypeError')],
+      ['<code>onEvent</code> saw resolve events for the re-exports, with <code>provider: "import-map"</code>', events.some((e) => e.type === 'resolve' && e.specifier === '@acme/tokens' && e.resolution.provider === 'import-map')],
+    ]);
+  </script>
+  <script type="module" src="./shared/site.js"></script>
+</body>
+</html>

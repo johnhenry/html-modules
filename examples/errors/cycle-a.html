@@ -1,0 +1,4 @@
+<!doctype html>
+<!-- a.html re-exports b.html, which re-exports a.html: the namespace can never be built. -->
+<module-export from="./cycle-b.html" all></module-export>
+<template export="A"></template>

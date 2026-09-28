@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Task board · web-module-graph</title>
+  <script>try { const t = localStorage.getItem('wmg-examples-theme'); if (t) document.documentElement.dataset.theme = t; } catch {}</script>
+  <link rel="stylesheet" href="./shared/site.css">
+  <script type="importmap">
+    { "imports": { "@board/ui": "./app/ui.html", "@board/": "./app/" } }
+  </script>
+  <style>
+    .app-title { display: flex; align-items: center; gap: 0.55rem; color: var(--board-accent); }
+    .app-title h1 { margin: 0; color: var(--text); }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+    .toolbar input[name="title"] { flex: 1 1 14rem; }
+    .toolbar .spacer { flex: 1; }
+    .toolbar button.primary { display: inline-flex; gap: 0.3rem; align-items: center; background: var(--board-accent); border-color: var(--board-accent); color: #fff; }
+    task-board-app:not(:defined) { visibility: hidden; }
+    #status summary { cursor: pointer; }
+    #status ol { margin: 0.4rem 0 0; padding-left: 1.2rem; }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <a class="home" href="./index.html">web-module-graph</a>
+    <span class="crumb">Task board app</span>
+    <span class="spacer"></span>
+    <button class="theme-toggle" type="button">Dark mode</button>
+  </header>
+
+  <!-- import { Shell, Column, Stat, TaskCard, calm, grape, citrus, icons as Icons } from "@board/ui" -->
+  <module-import id="ui" from="@board/ui">
+    <module-binding name="Shell" element="task-board-app"></module-binding>
+    <module-binding name="Column" element="board-column"></module-binding>
+    <module-binding name="Stat" element="board-stat"></module-binding>
+    <module-binding name="TaskCard" element="task-card"></module-binding>
+    <module-binding name="calm" adopt></module-binding>
+    <module-binding name="grape"></module-binding>
+    <module-binding name="citrus"></module-binding>
+    <module-binding name="icons" as="Icons"></module-binding>
+  </module-import>
+  <!-- The same component under a second tag, registered after its import. -->
+  <define-element name="task-card-compact" component="TaskCard"></define-element>
+  <!-- import * as Data from "@board/data.html"  (seed JSON + the store module) -->
+  <module-import id="data" from="@board/data.html" namespace="Data"></module-import>
+
+  <main class="page">
+    <p class="lede" style="margin-top:0">
+      A working app built from HTML modules. The layout, columns and stats are <code>&lt;template export&gt;</code> components, the
+      task card is a JS class re-exported through the same HTML barrel and registered under two tags, seed data and the store
+      come from one HTML module, and the accent colour is an adopted stylesheet you can swap. The board is saved in this browser.
+    </p>
+    <div class="covers" data-page="app" style="margin-bottom:0.8rem"></div>
+    <task-board-app id="board">
+      <div slot="title" class="app-title"><span id="logo"></span><h1>Task board</h1></div>
+      <div slot="stats" class="row" id="stats"></div>
+      <form slot="toolbar" class="toolbar" id="add" autocomplete="off">
+        <input id="new-title" name="title" aria-label="New task" placeholder="Add a task…" required maxlength="120">
+        <select name="tag" aria-label="Tag"><option>ui</option><option>modules</option><option>styles</option><option>data</option><option>general</option></select>
+        <button class="primary" type="submit"><span id="plus"></span>Add</button>
+        <span class="spacer"></span>
+        <select id="filter" aria-label="Filter by tag"><option value="">All tags</option><option>ui</option><option>modules</option><option>styles</option><option>data</option><option>general</option></select>
+        <select id="accent" aria-label="Accent theme"><option value="calm">Calm</option><option value="grape">Grape</option><option value="citrus">Citrus</option></select>
+        <button type="button" id="reset">Reset board</button>
+      </form>
+      <board-column data-status="todo"><span slot="title">To do</span><span slot="count">0</span></board-column>
+      <board-column data-status="doing"><span slot="title">In progress</span><span slot="count">0</span></board-column>
+      <board-column data-status="done"><span slot="title">Done</span><span slot="count">0</span></board-column>
+      <div slot="status" id="status"></div>
+    </task-board-app>
+  </main>
+
+  <script type="module">
+    import { createLoader, defineModuleElements, scopeFor } from '../src/index.js';
+    import { esc } from './shared/site.js';
+
+    // A loader that reports what it loads; bare specifiers use the page import map.
+    const loaded = [];
+    let events = 0;
+    const loader = createLoader({
+      hostResolve: (s) => import.meta.resolve(s),
+      onEvent: (e) => {
+        events++;
+        if (e.type === 'load') loaded.push(`${e.kind} ${e.url.replace(new URL('./', location.href).href, '')}`);
+        if (e.type === 'error') loaded.push(`error ${e.url}: ${e.error.message}`);
+        renderStatus();
+      },
+    });
+    defineModuleElements({ loader });
+    const scope = scopeFor(document);
+
+    const status = document.getElementById('status');
+    function renderStatus() {
+      status.innerHTML = `<details><summary>${loaded.length} modules loaded through the module graph · ${events} loader events</summary><ol>${loaded.map((l) => `<li>${esc(l)}</li>`).join('')}</ol></details>`;
+    }
+
+    await Promise.all([document.getElementById('ui').module, document.getElementById('data').module]);
+    await document.querySelector('define-element').defined;
+    const { Data, Icons, calm, grape, citrus } = Object.fromEntries(['Data', 'Icons', 'calm', 'grape', 'citrus'].map((n) => [n, scope.get(n)]));
+    document.getElementById('logo').append(Icons.board.cloneNode(true));
+    document.getElementById('plus').append(Icons.plus.cloneNode(true));
+
+    // Store: createStore comes from store.js, exported by data.html as a module script.
+    const store = Data.store.createStore(Data.seed);
+    const board = document.getElementById('board');
+    const filter = document.getElementById('filter');
+    const columns = [...board.querySelectorAll('board-column')];
+
+    function render(tasks) {
+      const shown = tasks.filter((t) => !filter.value || t.tag === filter.value);
+      for (const col of columns) {
+        const mine = shown.filter((t) => t.status === col.dataset.status);
+        col.querySelector('[slot="count"]').textContent = mine.length;
+        for (const card of col.querySelectorAll('task-card, task-card-compact')) card.remove();
+        for (const task of mine) {
+          const card = document.createElement(task.status === 'done' ? 'task-card-compact' : 'task-card');
+          card.task = task;
+          col.append(card);
+        }
+      }
+      const done = tasks.filter((t) => t.status === 'done').length;
+      const pct = tasks.length ? Math.round((done / tasks.length) * 100) : 0;
+      document.getElementById('stats').innerHTML = [
+        [tasks.length, 'tasks'], [tasks.filter((t) => t.status === 'doing').length, 'in progress'], [`${pct}%`, 'done'],
+      ].map(([v, l]) => `<board-stat><span slot="value">${v}</span><span slot="label">${l}</span></board-stat>`).join('');
+    }
+    store.subscribe(render);
+    filter.addEventListener('change', () => render(store.tasks));
+
+    board.addEventListener('task-action', (e) => {
+      const { id, action } = e.detail;
+      if (action === 'remove') store.remove(id);
+      else store.move(id, action === 'forward' ? 1 : -1);
+    });
+    document.getElementById('add').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const form = new FormData(e.target);
+      const title = String(form.get('title')).trim();
+      if (!title) return;
+      store.add(title, String(form.get('tag')));
+      e.target.elements.title.value = '';
+      e.target.elements.title.focus();
+    });
+    document.getElementById('reset').addEventListener('click', () => store.reset());
+
+    // Accent themes are adopted stylesheets exported by themes.html.
+    const accents = { calm, grape, citrus };
+    document.getElementById('accent').addEventListener('change', (e) => {
+      document.adoptedStyleSheets = [...document.adoptedStyleSheets.filter((s) => !Object.values(accents).includes(s)), accents[e.target.value]];
+    });
+
+    // For tests and curious readers.
+    window.__board = { store, scope, loader };
+  </script>
+  <script type="module" src="./shared/site.js"></script>
+</body>
+</html>

@@ -1,0 +1,36 @@
+<!doctype html>
+<!-- Themes as stylesheet exports. Each theme only sets custom properties on
+     .theme-demo; "base" consumes them. Custom properties inherit into shadow
+     roots, so components follow the theme without knowing about it. -->
+<style export="base">
+  .theme-demo {
+    background: var(--t-bg); color: var(--t-fg); border-radius: var(--t-radius); padding: 1.1rem;
+    border: 1px solid color-mix(in srgb, var(--t-fg) 15%, transparent); transition: background 0.25s, color 0.25s;
+  }
+  .theme-demo h3 { color: var(--t-accent); margin: 0 0 0.4rem; font-family: var(--t-heading); }
+  .theme-demo .cta { background: var(--t-accent); color: var(--t-bg); border: 0; border-radius: calc(var(--t-radius) / 2); padding: 0.45rem 0.9rem; font-weight: 600; }
+  .theme-demo .swatches { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.8rem; }
+</style>
+
+<style export="ocean">
+  .theme-demo { --t-bg: #0d2b45; --t-fg: #e4f1fb; --t-accent: #4fc3f7; --t-radius: 14px; --t-heading: ui-rounded, system-ui, sans-serif; }
+</style>
+
+<style export="sunset">
+  .theme-demo { --t-bg: #fff4e8; --t-fg: #3b1d0f; --t-accent: #e4572e; --t-radius: 4px; --t-heading: Georgia, "Times New Roman", serif; }
+</style>
+
+<style export="forest">
+  .theme-demo { --t-bg: #eaf3e6; --t-fg: #1c2e1a; --t-accent: #2e7d32; --t-radius: 22px; --t-heading: ui-monospace, Menlo, monospace; }
+</style>
+
+<!-- Shared into shadow roots by the page: one sheet object, many roots. -->
+<style export="shadowBase">
+  .chip { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.3rem 0.7rem 0.3rem 0.35rem; border-radius: 999px;
+          background: color-mix(in srgb, var(--t-accent) 18%, transparent); font: 600 0.8rem/1.4 system-ui, sans-serif; }
+  .dot { width: 1.1rem; height: 1.1rem; border-radius: 50%; background: var(--t-accent); }
+</style>
+
+<template export="Swatch">
+  <span class="chip" part="chip"><span class="dot"></span><slot>swatch</slot></span>
+</template>

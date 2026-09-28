@@ -1,29 +1,64 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>web-module-graph: CDN routing demo</title>
-  <script type="module">
-    import { createLoader, defineModuleElements, chainRouters, mportRouter } from '../src/index.js';
-    // Relative/absolute URLs load directly; bare npm specifiers race CDNs via mport.
-    // mport's published 1.0.0 tarball is missing files; import it from source/CDN you trust.
-    const { MPortURL } = await import('https://cdn.jsdelivr.net/gh/johnhenry/mport/src/index.mjs');
-    const loader = createLoader({
-      router: chainRouters(mportRouter({ MPortURL })),
-      onEvent: (e) => console.debug('[modules]', e.type, e.specifier ?? '', e.resolution?.provider ?? e.provider ?? ''),
-    });
-    defineModuleElements({ loader });
-  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Live CDN routing · web-module-graph</title>
+  <script>try { const t = localStorage.getItem('wmg-examples-theme'); if (t) document.documentElement.dataset.theme = t; } catch {}</script>
+  <link rel="stylesheet" href="./shared/site.css">
 </head>
 <body>
-  <!-- Needs network access: bare npm specifiers race public CDNs through mport. -->
+  <header class="site-header">
+    <a class="home" href="./index.html">web-module-graph</a>
+    <span class="crumb">Live CDN routing (mport)</span>
+    <span class="spacer"></span>
+    <button class="theme-toggle" type="button">Dark mode</button>
+  </header>
+
+  <!-- Relative URLs load directly; bare npm specifiers race public CDNs through mport. -->
   <module-import from="./components/ui.html" namespace="UI">
     <module-binding name="Card" element="ui-card"></module-binding>
-    <module-binding name="theme" adopt></module-binding>
   </module-import>
+  <module-import id="lodash" from="lodash-es@4.17.21" name="default" as="_"></module-import>
 
-  <module-import from="lodash-es@4.17.21" name="default" as="_"></module-import>
+  <main class="page">
+    <h1>Live CDN routing with mport</h1>
+    <p class="lede">
+      This page needs network access. Bare npm specifiers go through <code>chainRouters(mportRouter({ MPortURL }))</code>, which
+      races jsDelivr, JSPM and unpkg with the real <a href="https://github.com/johnhenry/mport">mport</a> package (v1 API) and returns
+      the winning URL with the already-evaluated module. For an offline version with a stand-in, see <a href="./routers.html">Router chaining</a>.
+    </p>
+    <div class="covers" data-page="cdn"></div>
 
-  <ui-card>Hello from an HTML module export.</ui-card>
+    <section class="card">
+      <ui-card>Hello from an HTML module export, next to a module that came from whichever CDN answered first.</ui-card>
+      <p id="result" class="muted">Racing CDNs…</p>
+      <div class="log" id="events"></div>
+    </section>
+  </main>
+
+  <script type="module">
+    import { createLoader, defineModuleElements, chainRouters, mportRouter } from '../src/index.js';
+    import { esc, errorText } from './shared/site.js';
+
+    const log = (line) => document.getElementById('events').insertAdjacentHTML('beforeend', `<div>${esc(line)}</div>`);
+    const result = document.getElementById('result');
+    try {
+      // mport's published 1.0.0 tarball is missing files; import it from source on a CDN you trust.
+      const { MPortURL } = await import('https://cdn.jsdelivr.net/gh/johnhenry/mport/src/index.mjs');
+      const loader = createLoader({
+        router: chainRouters(mportRouter({ MPortURL })),
+        onEvent: (e) => log(`${e.type} ${e.specifier ?? ''} ${e.resolution?.url ?? e.url ?? ''} ${e.resolution?.provider ?? e.provider ?? ''}${e.error ? ` ${e.error.message}` : ''}`),
+      });
+      defineModuleElements({ loader });
+      const imp = document.getElementById('lodash');
+      await imp.module;
+      const _ = imp.bindings._;
+      result.innerHTML = `<span class="status pass">loaded</span> lodash-es ${esc(_.VERSION)}: <code>_.chunk([1,2,3,4,5], 2)</code> = <code>${esc(JSON.stringify(_.chunk([1, 2, 3, 4, 5], 2)))}</code>`;
+    } catch (error) {
+      result.innerHTML = `<div class="error-box">${esc(errorText(error))}</div><p class="small muted">This page needs network access to public CDNs.</p>`;
+    }
+  </script>
+  <script type="module" src="./shared/site.js"></script>
 </body>
 </html>

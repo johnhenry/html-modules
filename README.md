@@ -79,7 +79,7 @@ The semantics follow ESM: `export *` skips `default`, local exports shadow star 
 ```
 
 - A `<template>` export registered with `element=` becomes an element that stamps the template into an open shadow root.
-- A constructor export registers as-is. It must extend `HTMLElement`; anything else fails at registration with a clear `TypeError`. You can register the same export under several names, and each extra name gets a subclass.
+- A constructor export registers as-is. It must extend `HTMLElement`; anything else fails at registration with a clear `TypeError`. You can register the same export under several names, and each extra name gets a subclass (with the same `name`).
 - Bindings go into a per-document `ModuleScope` (`scopeFor(document)`), with `get`, `has`, and `whenDeclared(name)`. Declaring the same name again with a different value throws, as a duplicate `import` would.
 - `el.module` is a promise of the namespace, and `el.bindings` holds the created locals. The element fires `load` and `error` events.
 - Use `defineModuleElements({ prefix: 'esm' })` to get `<esm-import>`/`<esm-binding>`/`<esm-define>`.
@@ -115,7 +115,7 @@ const ns = await loader.load('./ui.html');   // HTML module namespace
 const js = await loader.load('lodash-es@4');  // routed through mport
 ```
 
-The loader picks the module format from `resolution.type`, then the `.html`/`.htm` extension, then a `type` override. Namespaces are cached by URL, and failed loads are evicted from the cache so they can be retried.
+The loader resolves a specifier through `importMap` first (which can also remap URLs, via URL keys), then loads fetchable URLs (`http:`, `https:`, `file:`, `data:`, `blob:`) directly. Bare specifiers and other schemes such as `npm:` or `jsr:` go to the `router`, then `hostResolve`. It picks the module format from a `type` override, then `resolution.type`, then the `.html`/`.htm` extension. Namespaces are cached by URL, and failed loads are evicted from the cache so they can be retried.
 
 ## Routers: the CDN-routing seam
 
@@ -160,8 +160,24 @@ web-module-graph resolve react lit
 
 ## Examples
 
-- `examples/index.html` runs offline. It uses an import map, a barrel that re-exports from HTML and JS, a JS component registered under two tag names, `<define-element>` placed before its import, `adopt`, and a namespace import. Serve the package root (for example `python3 -m http.server`) and open `/examples/index.html`.
-- `examples/cdn.html` routes bare npm specifiers through `mportRouter`, so it needs network access.
+Serve the package root (for example `python3 -m http.server`) and open `/examples/`. The hub lists every page with the
+capability-checklist items it covers; together they cover the whole checklist. All pages except `cdn.html` work offline.
+
+| Page | Shows |
+|---|---|
+| `quickstart.html` | The one-script bootstrap (`src/browser.js`), a page import map, a barrel, `<define-element>` before its import. |
+| `component-library.html` | A component library written as HTML modules: templates, tokens, icons, JSON, module scripts, a nested barrel. |
+| `barrels.html` | Barrels of barrels using every re-export form, with checks for shadowing, ambiguity, `default` and diamonds. |
+| `registration.html` | One class under several tags, `<define-element>` before/after/late, custom prefixes, `registry`/`scope`/`window` options. |
+| `theming.html` | Adopted stylesheets, theme switching, one sheet shared with shadow roots, the `cssText` fallback. |
+| `import-maps.html` | An editable import-map playground: exact, prefix, scopes, URL keys, merging, and loader scopes in re-exports. |
+| `routers.html` | A traced router chain, `basicRouter` patterns and probes, and the mport adapter racing local mirrors. |
+| `loader-timeline.html` | Every loader event on a live timeline: nesting, cache hits, de-duplication, eviction and retry. |
+| `loader-hooks.html` | A module graph served from memory through every loader hook. |
+| `errors.html` | Every error path, triggered on purpose and shown on the page. |
+| `app.html` | A task board app built from HTML modules. |
+| `cli.html` | An import map and lockfile compiled by the CLI (`examples/cli/`), used at runtime. |
+| `cdn.html` | Live CDN routing through the real `mport` (needs network access). |
 
 ## Development
 

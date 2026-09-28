@@ -125,6 +125,7 @@ test('<define-element> registers one JS component under several names', async ()
   const [a, b] = await Promise.all([...win.document.querySelectorAll('define-element')].map((d) => d.defined));
   assert.equal(a, Counter);
   assert.ok(b.prototype instanceof Counter, 'second name gets a subclass');
+  assert.equal(b.name, 'Counter', 'the subclass keeps the base class name');
   assert.equal(win.customElements.get('store-counter'), b);
 });
 

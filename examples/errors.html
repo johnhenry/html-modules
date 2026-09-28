@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Error cases · web-module-graph</title>
+  <script>try { const t = localStorage.getItem('wmg-examples-theme'); if (t) document.documentElement.dataset.theme = t; } catch {}</script>
+  <link rel="stylesheet" href="./shared/site.css">
+  <style>
+    .cases { display: grid; gap: 0.8rem; grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr)); }
+    .case { display: flex; flex-direction: column; gap: 0.35rem; }
+    .case h3 { margin: 0; display: flex; gap: 0.5rem; align-items: baseline; justify-content: space-between; }
+    .case pre { font-size: 0.76rem; margin: 0; }
+    .case .expect { font-size: 0.8rem; color: var(--muted); }
+    .case .error-box, .case .ok-box { font-size: 0.76rem; }
+    .group-title { margin: 1.6rem 0 0.6rem; }
+    .scoreboard { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+    .scoreboard .num { font-size: 1.8rem; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <a class="home" href="./index.html">web-module-graph</a>
+    <span class="crumb">Error cases</span>
+    <span class="spacer"></span>
+    <button class="theme-toggle" type="button">Dark mode</button>
+  </header>
+
+  <!-- Declarative error cases. Each fails on purpose; the script below awaits it and shows the error. -->
+  <module-import id="d-missing-export" from="./errors/ok.html"><module-binding name="Nope"></module-binding></module-import>
+  <module-import id="d-non-element" from="./errors/notelement.js"><module-binding name="Plain" element="plain-thing"></module-binding></module-import>
+  <module-import id="d-non-constructor" from="./errors/ok.html" name="data" element="data-thing"></module-import>
+  <module-import id="d-bad-name" from="./errors/ok.html" name="Card" element="NotAValidName"></module-import>
+  <module-import id="d-redefine" from="./errors/notelement.js">
+    <module-binding name="Widget" element="err-widget"></module-binding>
+    <module-binding name="Other" element="err-widget"></module-binding>
+  </module-import>
+  <module-import id="d-dup-1" from="./errors/ok.html" name="Card" as="Thing"></module-import>
+  <module-import id="d-dup-2" from="./errors/notelement.js" name="Widget" as="Thing"></module-import>
+  <module-import id="d-default" from="./errors/ok.html" name="default"></module-import>
+  <module-import id="d-no-from"></module-import>
+  <module-import id="d-shorthand" from="./errors/ok.html" element="x-y"></module-import>
+  <module-import id="d-binding-name" from="./errors/ok.html"><module-binding as="X"></module-binding></module-import>
+  <module-import id="d-adopt" from="./errors/ok.html" name="data" as="notASheet" adopt></module-import>
+  <module-import id="d-missing-html" from="./errors/does-not-exist.html"></module-import>
+  <module-import id="d-missing-js" from="./errors/does-not-exist.js"></module-import>
+  <define-element id="d-define-attrs" name="x-a"></define-element>
+  <module-import from="./errors/ok.html" name="data" as="ErrData"></module-import>
+  <define-element id="d-define-value" name="err-data" component="ErrData"></define-element>
+  <define-element id="d-never" name="never-defined" component="NoSuchBinding"></define-element>
+
+  <main class="page">
+    <h1>Error cases</h1>
+    <p class="lede">
+      Every error path, triggered on purpose. Declarative failures reject <code>el.module</code> / <code>el.defined</code> and fire an
+      <code>error</code> event; programmatic ones reject or throw. Nothing here fails silently: each card shows the error it caught.
+      The two missing-module cases also make the browser log a 404 in the console, which is expected.
+    </p>
+    <div class="covers" data-page="errors"></div>
+
+    <section class="card scoreboard">
+      <div><span class="num" id="score">…</span> <span class="muted">cases produced the expected error</span></div>
+      <div id="score-status"></div>
+    </section>
+
+    <h2 class="group-title">Declarative imports and registration</h2>
+    <div class="cases" id="declarative"></div>
+
+    <h2 class="group-title">HTML modules and re-exports</h2>
+    <div class="cases" id="modules"></div>
+
+    <h2 class="group-title">Resolution and routing</h2>
+    <div class="cases" id="routing"></div>
+  </main>
+
+  <script type="module">
+    import {
+      createLoader, defineModuleElements, parseHTMLModule, resolveImportMap, basicRouter, mportRouter,
+      compileImportMap, toRouter,
+    } from '../src/index.js';
+    import { esc, errorText } from './shared/site.js';
+
+    const loader = createLoader();
+    defineModuleElements({ loader });
+    const fresh = () => createLoader();
+    const $ = (id) => document.getElementById(id);
+
+    // Capture error events from every declarative case before they settle.
+    const errorEvents = new Map();
+    for (const el of document.querySelectorAll('module-import[id], define-element[id]')) {
+      el.addEventListener('error', (e) => errorEvents.set(el.id, e.detail.error));
+    }
+
+    /**
+     * A case: `run` must reject/throw. `expect` is [ErrorClass, /message/].
+     * `code` is shown on the card.
+     */
+    const cases = {
+      declarative: [
+        { title: 'Missing export', items: 'err.missing-export', code: '<module-import from="./errors/ok.html">\n  <module-binding name="Nope"></module-binding>\n</module-import>', expect: [SyntaxError, /does not provide an export named 'Nope'/], el: 'd-missing-export' },
+        { title: 'Registering a non-HTMLElement class', items: 'err.non-element', code: '<module-binding name="Plain" element="plain-thing">\n// export class Plain {}', expect: [TypeError, /does not extend HTMLElement/], el: 'd-non-element' },
+        { title: 'Registering a non-constructor', items: 'err.non-constructor', code: '<module-import from="./errors/ok.html"\n  name="data" element="data-thing">', expect: [TypeError, /Cannot register \[object Object\]/], el: 'd-non-constructor' },
+        { title: 'Invalid custom element name', items: 'err.bad-name', code: '<module-import … name="Card" element="NotAValidName">', expect: [SyntaxError, /not a valid custom element name/], el: 'd-bad-name' },
+        { title: 'Tag already defined by another constructor', items: 'err.redefine', code: '<module-binding name="Widget" element="err-widget">\n<module-binding name="Other" element="err-widget">', expect: [Error, /already defined by a different constructor/], el: 'd-redefine' },
+        { title: 'Duplicate local binding', items: 'err.dup-identifier', code: '<module-import from="./errors/ok.html" name="Card" as="Thing">\n<module-import from="./errors/notelement.js" name="Widget" as="Thing">', expect: [SyntaxError, /Identifier 'Thing' has already been declared/], run: async () => {
+          const results = await Promise.allSettled([$('d-dup-1').module, $('d-dup-2').module]);
+          const failed = results.filter((r) => r.status === 'rejected');
+          if (failed.length !== 1) return `expected exactly one of the two imports to fail, got ${failed.length}`;
+          throw failed[0].reason;
+        } },
+        { title: 'Importing "default" without as=', items: 'err.default-alias', code: '<module-import from="./errors/ok.html" name="default">', expect: [SyntaxError, /requires an "as" alias/], el: 'd-default' },
+        { title: '<module-import> without from', items: 'err.decl', code: '<module-import></module-import>', expect: [SyntaxError, /requires a "from" attribute/], el: 'd-no-from' },
+        { title: 'Shorthand element= without name', items: 'err.decl', code: '<module-import from="./errors/ok.html" element="x-y">', expect: [SyntaxError, /shorthand requires "name"/], el: 'd-shorthand' },
+        { title: '<module-binding> without name', items: 'err.decl', code: '<module-binding as="X"></module-binding>', expect: [SyntaxError, /requires a "name" attribute/], el: 'd-binding-name' },
+        { title: 'adopt on a non-stylesheet', items: 'err.adopt', code: '<module-import from="./errors/ok.html"\n  name="data" as="notASheet" adopt>', expect: [TypeError, /`adopt` requires a stylesheet export/], el: 'd-adopt' },
+        { title: 'Missing HTML module (404)', items: 'err.missing-html', code: '<module-import from="./errors/does-not-exist.html">', expect: [Error, /Failed to fetch HTML module .*does-not-exist\.html: 404/], el: 'd-missing-html' },
+        { title: 'Missing JS module', items: 'err.missing-js', code: '<module-import from="./errors/does-not-exist.js">', expect: [TypeError, /dynamically imported module|Failed to fetch|Importing a module script failed/], el: 'd-missing-js' },
+        { title: '<define-element> without component', items: 'err.define-attrs', code: '<define-element name="x-a"></define-element>', expect: [SyntaxError, /requires "name" and "component"/], el: 'd-define-attrs', defined: true },
+        { title: '<define-element> whose component is data', items: 'err.non-constructor', code: '<module-import … name="data" as="ErrData">\n<define-element name="err-data" component="ErrData">', expect: [TypeError, /Cannot register/], el: 'd-define-value', defined: true },
+      ],
+      modules: [
+        { title: 'Missing re-exported name', items: 'err.missing-reexport', code: '<!-- errors/missing-reexport.html -->\n<module-export from="./ok.html" name="Nope">', expect: [SyntaxError, /does not provide an export named 'Nope' \(re-exported by/], run: () => loader.load('./errors/missing-reexport.html') },
+        { title: 'Cyclic re-export', items: 'err.cycle re.cycle', code: '<!-- cycle-a.html --> <module-export from="./cycle-b.html" all>\n<!-- cycle-b.html --> <module-export from="./cycle-a.html" all>', expect: [Error, /Circular HTML module re-export: .*cycle-b\.html -> .*cycle-a\.html -> .*cycle-b\.html/], run: () => fresh().load('./errors/cycle-a.html') },
+        { title: 'Self re-export', items: 'err.cycle re.cycle', code: '<!-- cycle-self.html -->\n<module-export from="./cycle-self.html" namespace="me">', expect: [Error, /Circular HTML module re-export: .*cycle-self\.html -> .*cycle-self\.html/], run: () => fresh().load('./errors/cycle-self.html') },
+        { title: 'Cycle loaded concurrently', items: 're.cycle-concurrent', code: 'const l = createLoader();\nawait Promise.allSettled([l.load(a), l.load(b)]); // both reject, no deadlock', expect: [Error, /Circular HTML module re-export/], run: async () => {
+          const l = fresh();
+          const timeout = new Promise((r) => setTimeout(() => r('timeout'), 3000));
+          const settled = await Promise.race([Promise.allSettled([l.load('./errors/cycle-a.html'), l.load('./errors/cycle-b.html')]), timeout]);
+          if (settled === 'timeout') return 'deadlocked';
+          if (!settled.every((s) => s.status === 'rejected')) return 'a load succeeded';
+          throw settled[1].reason;
+        } },
+        { title: 'Duplicate export name', items: 'err.dup-export', code: '<template export="Thing"></template>\n<style export="Thing"></style>', expect: [SyntaxError, /Duplicate export "Thing"/], run: () => loader.load('./errors/dup-export.html') },
+        { title: 'Empty export name', items: 'err.dup-export', code: '<template export="  "></template>', expect: [SyntaxError, /Empty export name/], run: () => loader.load('./errors/empty-export.html') },
+        { title: 'Namespace re-export collides with a local', items: 'err.dup-export', code: '<template export="ok"></template>\n<module-export from="./ok.html" namespace="ok">', expect: [SyntaxError, /Duplicate export "ok"/], run: () => loader.load('./errors/ns-collision.html') },
+        { title: 'Re-export of nothing', items: 'err.reexport-shape', code: '<module-export from="./ok.html"></module-export>', expect: [SyntaxError, /must have `all`, `namespace`, or at least one binding/], run: () => loader.load('./errors/reexport-shape.html') },
+        { title: 'Unsupported exported script', items: 'err.script-type', code: '<script type="text/plain" export="notes">', expect: [TypeError, /Unsupported exported <script type="text\/plain">/], run: () => loader.load('./errors/script-type.html') },
+        { title: 'Re-export without a loader', items: 'err.no-loader', code: 'parseHTMLModule(doc, { url }) // no load()', expect: [TypeError, /requires a loader/], run: () => parseHTMLModule(new DOMParser().parseFromString('<module-export from="./x.html" all></module-export>', 'text/html'), { url: location.href }) },
+      ],
+      routing: [
+        { title: 'Unresolvable bare specifier', items: 'err.unresolved', code: 'createLoader().load("left-pad")', expect: [TypeError, /Unable to resolve bare specifier "left-pad"/], run: () => fresh().load('left-pad') },
+        { title: 'Prefix target without "/"', items: 'err.prefix-target', code: 'resolveImportMap({ imports: { "a/": "https://x.example/a" } }, "a/b")', expect: [TypeError, /must map to a URL ending in "\/"/], run: () => resolveImportMap({ imports: { 'a/': 'https://x.example/a' } }, 'a/b', { referrer: location.href }) },
+        { title: 'No candidate passes the probe', items: 'err.probe', code: 'basicRouter({ routes: { "*": [a, b] }, probe: () => false })', expect: [AggregateError, /No candidate for "react" passed the probe/], run: () => basicRouter({ routes: { '*': ['https://a.example/', 'https://b.example/'] }, probe: () => false }).resolve('react') },
+        { title: 'Every CDN fails in mport', items: 'err.mport', code: 'mportRouter({ MPortURL: () => async () => { throw … } })', expect: [Error, /mport could not load "react" from any CDN/], run: () => mportRouter({ MPortURL: () => async () => { throw new Error('all CDNs are down'); } }).resolve('react'), cause: true },
+        { title: 'compileImportMap: nothing resolves', items: 'err.compile', code: 'compileImportMap({ resolve: () => null }, ["x"])', expect: [Error, /Router could not resolve "x"/], run: () => compileImportMap({ resolve: () => null }, ['x']) },
+        { title: 'toRouter(non-router)', items: 'err.to-router', code: 'toRouter(42)', expect: [TypeError, /Expected a Router/], run: () => toRouter(42) },
+      ],
+    };
+
+    const card = (c, state, body) => `
+      <article class="card case">
+        <h3><span>${esc(c.title)}</span><span class="status ${state === true ? 'pass' : state === 'pending' ? 'pending' : 'fail'}">${state === true ? 'caught' : state === 'pending' ? 'pending' : 'unexpected'}</span></h3>
+        <pre><code>${esc(c.code)}</code></pre>
+        <div class="expect">Expected <code>${esc(c.expect[0].name)}</code> matching <code>${esc(String(c.expect[1]))}</code> · <span class="chip">${esc(c.items)}</span></div>
+        ${body}
+      </article>`;
+
+    let passed = 0, total = 0;
+    async function runCase(c) {
+      total++;
+      let error, returned;
+      try {
+        if (c.el) {
+          const el = $(c.el);
+          returned = await (c.defined ? el.defined : el.module);
+        } else {
+          returned = await c.run();
+        }
+      } catch (e) {
+        error = e;
+      }
+      if (!error) return card(c, false, `<div class="error-box">No error. Returned: ${esc(String(returned))}</div>`);
+      const [Type, pattern] = c.expect;
+      let ok = error instanceof Type && pattern.test(error.message);
+      let extra = '';
+      if (c.el) {
+        const evented = errorEvents.get(c.el) === error;
+        ok &&= evented;
+        extra = `<div class="small">${evented ? '✓ same error delivered by the element\'s <code>error</code> event' : '✗ no matching <code>error</code> event'}</div>`;
+      }
+      if (c.cause) ok &&= !!error.cause;
+      if (ok) passed++;
+      return card(c, ok, `<div class="error-box">${esc(errorText(error))}</div>${extra}`);
+    }
+
+    for (const group of Object.keys(cases)) {
+      const html = [];
+      for (const c of cases[group]) html.push(await runCase(c));
+      $(group).innerHTML = html.join('');
+    }
+
+    // The misspelled component never settles.
+    const never = { title: 'Misspelled component waits forever', items: 'err.never', code: '<define-element name="never-defined"\n  component="NoSuchBinding">', expect: [{ name: '(no error: stays pending)' }, 'never settles, never times out'] };
+    let settled = false;
+    $('d-never').defined.then(() => (settled = true), () => (settled = true));
+    const neverCard = document.createElement('div');
+    $('declarative').append(neverCard);
+    const started = performance.now();
+    const renderNever = () => {
+      const secs = ((performance.now() - started) / 1000).toFixed(0);
+      neverCard.innerHTML = card(never, settled ? false : 'pending', `<div class="ok-box">${settled ? 'settled unexpectedly' : `.defined still pending after ${secs}s; customElements.get("never-defined") = ${customElements.get('never-defined')}`}</div>`);
+    };
+    renderNever();
+    setInterval(renderNever, 1000);
+
+    $('score').textContent = `${passed} / ${total}`;
+    $('score-status').innerHTML = passed === total ? '<span class="status pass">all expected</span>' : '<span class="status fail">some cases did not fail as expected</span>';
+  </script>
+  <script type="module" src="./shared/site.js"></script>
+</body>
+</html>

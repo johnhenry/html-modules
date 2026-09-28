@@ -1,0 +1,25 @@
+<!doctype html>
+<!-- The library's public entry point: a barrel of barrels. -->
+
+<!-- export { default as Card } from "./card.html" -->
+<module-export from="./card.html" name="default" as="Card"></module-export>
+
+<!-- export { Badge } from "./badge.html" -->
+<module-export from="./badge.html">
+  <module-binding name="Badge"></module-binding>
+</module-export>
+
+<!-- Native-looking spelling: export { Callout } from "./callout.html" -->
+<export from="./callout.html"><binding name="Callout"></binding></export>
+
+<!-- export * from "./widgets.html"  (Stat, Tabs, tabsModule) -->
+<module-export from="./widgets.html" all></module-export>
+
+<!-- export * from "./tokens.html"  (tokens, config, meta) -->
+<module-export from="./tokens.html" all></module-export>
+
+<!-- export * as icons from "./icons.html" -->
+<module-export from="./icons.html" namespace="icons"></module-export>
+
+<!-- export { format } from "./format.html" -->
+<module-export from="./format.html" name="format"></module-export>

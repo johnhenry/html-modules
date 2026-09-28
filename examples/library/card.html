@@ -1,0 +1,16 @@
+<!doctype html>
+<!-- A card: the module's default export. Slots for icon, title, badge, body and footer. -->
+<template id="draft"><p>An unexported draft layout: private to this module.</p></template>
+
+<template export="default">
+  <style>
+    :host { display: block; background: var(--lib-surface); color: var(--lib-text); border: 1px solid var(--lib-border);
+            border-radius: var(--lib-radius); padding: 1rem 1.1rem; box-shadow: var(--lib-shadow); font-family: var(--lib-font); }
+    header { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.35rem; color: var(--lib-accent); }
+    header ::slotted([slot="title"]) { margin: 0; font-size: 1rem; color: var(--lib-text); flex: 1; }
+    footer { margin-top: 0.7rem; padding-top: 0.6rem; border-top: 1px dashed var(--lib-border); color: var(--lib-muted); font-size: 0.85rem; }
+  </style>
+  <header part="header"><slot name="icon"></slot><slot name="title"></slot><slot name="badge"></slot></header>
+  <div part="body"><slot></slot></div>
+  <footer part="footer"><slot name="footer">tiny-ui card</slot></footer>
+</template>

@@ -1,0 +1,9 @@
+<!doctype html>
+<!-- Loaded by loaders that cannot (or choose not to) build CSSStyleSheet objects. -->
+<style export="box">
+  #fallback { border: 2px dashed var(--accent); background: var(--accent-soft); }
+</style>
+<style export="label">
+  #fallback p { margin: 0; font-weight: 600; color: var(--accent); }
+  #fallback p::after { content: " (a <style> element appended by adoptStyleSheet)"; font-weight: 400; color: var(--muted); }
+</style>

@@ -1,28 +1,42 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>web-module-graph demo</title>
-  <script type="module">
-    import { createLoader, defineModuleElements, chainRouters, mportRouter } from '../src/index.js';
-    // Relative/absolute URLs load directly; bare npm specifiers race CDNs via mport.
-    // mport's published 1.0.0 tarball is missing files; import it from source/CDN you trust.
-    const { MPortURL } = await import('https://cdn.jsdelivr.net/gh/johnhenry/mport/src/index.mjs');
-    const loader = createLoader({
-      router: chainRouters(mportRouter({ MPortURL })),
-      onEvent: (e) => console.debug('[modules]', e.type, e.specifier ?? '', e.resolution?.provider ?? e.provider ?? ''),
-    });
-    defineModuleElements({ loader });
+  <!-- Bare specifiers in declarative imports resolve through the page's import map. -->
+  <script type="importmap">
+    { "imports": { "@demo/ui": "./components/barrel.html" } }
   </script>
+  <script type="module" src="../src/browser.js"></script>
 </head>
 <body>
-  <module-import from="./components/ui.html" namespace="UI">
-    <module-binding name="Card" element="ui-card"></module-binding>
+  <!-- import { Panel, theme, Counter, Counter as Counter2 } from "@demo/ui", then register/adopt -->
+  <module-import from="@demo/ui">
+    <module-binding name="Panel" element="demo-panel"></module-binding>
     <module-binding name="theme" adopt></module-binding>
+    <module-binding name="Counter" element="demo-counter"></module-binding>
+    <module-binding name="Counter" as="Counter2" element="other-counter"></module-binding>
   </module-import>
 
-  <module-import from="lodash-es@4.17.21" name="default" as="_"></module-import>
+  <!-- Registration as a separate step. It may come before the import that declares the binding. -->
+  <define-element name="demo-strong" component="Strong"></define-element>
+  <!-- import Strong from "./components/ui.html" -->
+  <module-import from="./components/ui.html" default="Strong"></module-import>
 
-  <ui-card>Hello from an HTML module export.</ui-card>
+  <!-- import * as UI from "./components/ui.html" -->
+  <module-import id="ns" from="./components/ui.html" namespace="UI"></module-import>
+
+  <h1>HTML modules</h1>
+  <demo-panel>A <code>&lt;template export="Card"&gt;</code> re-exported as <code>Panel</code> by a barrel.</demo-panel>
+  <demo-panel><demo-strong>Default export</demo-strong> registered with <code>&lt;define-element&gt;</code>.</demo-panel>
+  <demo-counter label="JS component"></demo-counter>
+  <other-counter label="same class, second tag"></other-counter>
+  <p id="out"></p>
+
+  <script type="module">
+    const ns = await document.getElementById('ns').module;
+    document.getElementById('out').textContent = `${ns.controller.greet('HTML modules')} (brand: ${ns.config.brand})`;
+  </script>
 </body>
 </html>

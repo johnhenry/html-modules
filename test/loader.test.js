@@ -33,7 +33,36 @@ test('HTML barrels re-export from HTML and JS', async () => {
 });
 
 test('circular HTML re-exports are detected', async () => {
-  await assert.rejects(make().load('./cycle-a.html'), /Circular HTML module re-export/);
+  await assert.rejects(make().load('./cycle-a.html'), /Circular HTML module re-export: .*cycle-b\.html -> .*cycle-a\.html -> .*cycle-b\.html/);
+  await assert.rejects(make().load('./cycle-self.html'), /Circular HTML module re-export: .*cycle-self\.html -> .*cycle-self\.html/);
+});
+
+test('circular HTML re-exports loaded concurrently reject instead of deadlocking', async () => {
+  const loader = make();
+  const settled = Promise.allSettled([loader.load('./cycle-a.html'), loader.load('./cycle-b.html')]);
+  const timeout = new Promise((r) => setTimeout(() => r('timeout'), 1000).unref());
+  const result = await Promise.race([settled, timeout]);
+  assert.notEqual(result, 'timeout', 'loads must settle');
+  for (const r of result) {
+    assert.equal(r.status, 'rejected');
+    assert.match(r.reason.message, /Circular HTML module re-export/);
+  }
+  // Failed loads are evicted, so a later attempt reports the cycle again rather than hanging.
+  await assert.rejects(loader.load('./cycle-b.html'), /Circular/);
+});
+
+test('shared dependencies (diamonds) are not cycles, even when loaded concurrently', async () => {
+  const loader = make();
+  const [diamond, barrel, ui] = await Promise.all(['./diamond.html', './barrel.html', './ui.html'].map((s) => loader.load(s)));
+  assert.equal(diamond.ui, ui, 'export * as ui');
+  assert.equal(diamond.Panel, barrel.Panel);
+  assert.equal(diamond.Panel, ui.Card);
+});
+
+test('HTML modules without a doctype or <html> wrapper', async () => {
+  const ns = await make().load('./card.html');
+  assert.deepEqual(exportNames(ns), ['default']);
+  assert.equal(ns.default.localName, 'template');
 });
 
 test('explicit type overrides extension detection', async () => {

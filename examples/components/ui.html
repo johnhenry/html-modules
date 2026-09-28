@@ -1,8 +1,23 @@
 <!doctype html>
 <!-- An HTML module: exported nodes form its namespace; everything else is private. -->
+<template id="helper"><p>Private: not exported.</p></template>
+
 <template export="Card">
-  <style>article { border: 1px solid #8884; border-radius: 8px; padding: 1rem; }</style>
+  <style>article { border: 2px solid rebeccapurple; border-radius: 8px; padding: 1rem; margin: .5rem 0; }</style>
   <article><slot></slot></article>
 </template>
-<style export="theme">body { font-family: system-ui, sans-serif; }</style>
+
+<template export="default">
+  <strong style="color: teal"><slot></slot></strong>
+</template>
+
+<style export="theme">
+  body { font-family: system-ui, sans-serif; margin: 2rem; }
+  h1 { color: rebeccapurple; }
+</style>
+
 <script type="application/json" export="config">{ "brand": "demo" }</script>
+
+<script type="module" export="controller">
+  export const greet = (name) => `Hello, ${name}!`;
+</script>

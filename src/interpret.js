@@ -25,11 +25,17 @@ export function templateElementClass(template, win = globalThis) {
 
 /**
  * Turn an exported value into a custom element constructor.
- * - constructor functions are used as-is
+ * - HTMLElement subclasses are used as-is
  * - templates become template-stamping elements
  */
 export function toElementConstructor(value, win = globalThis) {
-  if (typeof value === 'function') return value;
+  if (typeof value === 'function') {
+    // Fail at registration with a clear message, not later with "Illegal constructor".
+    if (win.HTMLElement && !(value.prototype instanceof win.HTMLElement)) {
+      throw new TypeError(`Cannot register ${value.name || 'function'} as a custom element: it does not extend HTMLElement`);
+    }
+    return value;
+  }
   if (isTemplate(value)) return templateElementClass(value, win);
   throw new TypeError(`Cannot register ${Object.prototype.toString.call(value)} as a custom element`);
 }

@@ -84,6 +84,7 @@ test('element registration: classes, templates, same export under two names', ()
   assert.throws(() => defineElement(r, 'blog-card', class extends win.HTMLElement {}, win), /already defined/);
   assert.throws(() => defineElement(r, 'nohyphen', Card, win), /not a valid custom element name/);
   assert.throws(() => defineElement(r, 'x-num', 42, win), /Cannot register/);
+  assert.throws(() => defineElement(r, 'x-plain', class Plain {}, win), /Cannot register Plain as a custom element: it does not extend HTMLElement/);
 
   const tpl = win.document.createElement('template');
   tpl.innerHTML = '<article><slot></slot></article>';

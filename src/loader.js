@@ -67,7 +67,32 @@ export function createLoader({
     throw new TypeError(`Unable to resolve bare specifier "${specifier}"${referrer ? ` from ${referrer}` : ''}`);
   }
 
-  async function loadHTML(url, chain) {
+  /**
+   * Re-export wait graph: HTML module URL -> URLs whose namespaces it is
+   * currently awaiting. An HTML module's namespace cannot exist until every
+   * module it re-exports from has loaded, so an edge that closes a loop would
+   * deadlock. This catches cycles whether the modules are loaded one after
+   * another or concurrently (where a cached in-flight promise hides the loop).
+   * @type {Map<string, Set<string>>}
+   */
+  const waitsFor = new Map();
+
+  /** Path of awaited URLs from `start` to `goal`, or null. */
+  function waitPath(start, goal) {
+    const stack = [[start]];
+    const seen = new Set();
+    while (stack.length) {
+      const path = stack.pop();
+      const at = path.at(-1);
+      if (at === goal) return path;
+      if (seen.has(at)) continue;
+      seen.add(at);
+      for (const next of waitsFor.get(at) ?? []) stack.push([...path, next]);
+    }
+    return null;
+  }
+
+  async function loadHTML(url) {
     const res = await fetchImpl(url);
     if (!res.ok) throw new Error(`Failed to fetch HTML module ${url}: ${res.status}`);
     const doc = parse(await res.text(), url);
@@ -77,28 +102,16 @@ export function createLoader({
       importModule,
       scriptURL,
       interpret,
-      load: (spec, ref) => load(spec, ref, { chain }),
+      load: (spec, ref) => loadFrom(url, spec, ref),
     });
   }
 
-  /**
-   * Load a module namespace.
-   * @param {string} specifier
-   * @param {string} [referrer]
-   * @param {{ type?: 'js'|'html', chain?: string[] }} [options]
-   */
-  async function load(specifier, referrer, { type, chain = [] } = {}) {
-    referrer ||= baseURL;
-    const resolution = await resolve(specifier, referrer);
+  function start(specifier, resolution, type) {
     const { url } = resolution;
-    onEvent({ type: 'resolve', specifier, referrer, resolution });
-    if (chain.includes(url)) {
-      throw new Error(`Circular HTML module re-export: ${[...chain, url].join(' -> ')}`);
-    }
     if (!cache.has(url)) {
       const kind = type ?? detectType(url, resolution);
       const promise = (async () => {
-        if (kind === 'html') return loadHTML(url, [...chain, url]);
+        if (kind === 'html') return loadHTML(url);
         return resolution.module ?? importModule(url);
       })();
       cache.set(url, promise);
@@ -111,6 +124,37 @@ export function createLoader({
       );
     }
     return cache.get(url);
+  }
+
+  /** Load a module that HTML module `importer` re-exports from. */
+  async function loadFrom(importer, specifier, referrer) {
+    const resolution = await resolve(specifier, referrer);
+    const { url } = resolution;
+    onEvent({ type: 'resolve', specifier, referrer, resolution });
+    // Check, record and start synchronously so no other load can interleave.
+    const cycle = waitPath(url, importer);
+    if (cycle) throw new Error(`Circular HTML module re-export: ${[importer, ...cycle].join(' -> ')}`);
+    if (!waitsFor.has(importer)) waitsFor.set(importer, new Set());
+    waitsFor.get(importer).add(url);
+    try {
+      return await start(specifier, resolution);
+    } finally {
+      waitsFor.get(importer)?.delete(url);
+      if (!waitsFor.get(importer)?.size) waitsFor.delete(importer);
+    }
+  }
+
+  /**
+   * Load a module namespace.
+   * @param {string} specifier
+   * @param {string} [referrer]
+   * @param {{ type?: 'js'|'html' }} [options]
+   */
+  async function load(specifier, referrer, { type } = {}) {
+    referrer ||= baseURL;
+    const resolution = await resolve(specifier, referrer);
+    onEvent({ type: 'resolve', specifier, referrer, resolution });
+    return start(specifier, resolution, type);
   }
 
   return { load, resolve, cache, router: routerImpl, importMap };

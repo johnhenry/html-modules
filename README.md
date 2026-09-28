@@ -4,7 +4,7 @@ One module graph for JavaScript **and** HTML in the browser.
 
 - **HTML modules**: an `.html` file exports named/default values (`<template export="Card">`, `<style export="theme">`, …), just like an ES module.
 - **Declarative imports**: `<module-import>` / `<module-binding>` Web Components import from JS *or* HTML modules, with named, aliased, default, namespace, and side-effect imports.
-- **Importing is separate from using**: `as` is only a local alias. Registering a custom element (`element="ui-card"`) and adopting a stylesheet (`adopt`) are explicit, separate steps.
+- **Importing is separate from using**: `as` is only a local alias. Registering a custom element (`element="ui-card"` or `<define-element>`) and adopting a stylesheet (`adopt`) are explicit, separate steps.
 - **Routing underneath**: bare specifiers resolve through an import map, a pluggable **Router** (multi-CDN via [`mport`](https://github.com/johnhenry/mport)), or the host's `import.meta.resolve`.
 - **Import maps as the compile target**: a CLI resolves specifiers ahead of time and emits a standard import map and a lockfile.
 
@@ -57,9 +57,10 @@ You can override this per loader with `interpret(element, ctx)`.
 </module-export>
 <module-export from="./dialogs.js" name="Dialog"></module-export>  <!-- export { Dialog } from … -->
 <module-export from="./icons.js" all></module-export>          <!-- export * from … -->
+<module-export from="./icons.html" namespace="icons"></module-export> <!-- export * as icons from … -->
 ```
 
-The semantics follow ESM: `export *` skips `default`, local exports shadow star exports, names that conflict between star exports are dropped, duplicate exports are a `SyntaxError`, and circular HTML re-exports are detected.
+The semantics follow ESM: `export *` skips `default`, local exports shadow star exports, names that conflict between star exports are dropped, and duplicate exports (including a `namespace` name) are a `SyntaxError`. An HTML module's namespace is built only after every module it re-exports from has loaded, so a circular re-export chain between HTML modules can never complete. The loader rejects it with `Circular HTML module re-export: a.html -> b.html -> a.html`, whether the modules are loaded one after another or concurrently. (ESM itself tolerates some `export *` cycles; this implementation does not.) Modules that share a dependency (diamonds) are not cycles.
 
 ## Declarative imports
 
@@ -78,10 +79,22 @@ The semantics follow ESM: `export *` skips `default`, local exports shadow star 
 ```
 
 - A `<template>` export registered with `element=` becomes an element that stamps the template into an open shadow root.
-- A constructor export registers as-is. You can register the same export under several names, and each extra name gets a subclass.
+- A constructor export registers as-is. It must extend `HTMLElement`; anything else fails at registration with a clear `TypeError`. You can register the same export under several names, and each extra name gets a subclass.
 - Bindings go into a per-document `ModuleScope` (`scopeFor(document)`), with `get`, `has`, and `whenDeclared(name)`. Declaring the same name again with a different value throws, as a duplicate `import` would.
 - `el.module` is a promise of the namespace, and `el.bindings` holds the created locals. The element fires `load` and `error` events.
-- Use `defineModuleElements({ prefix: 'esm' })` to get `<esm-import>`/`<esm-binding>`.
+- Use `defineModuleElements({ prefix: 'esm' })` to get `<esm-import>`/`<esm-binding>`/`<esm-define>`.
+
+### Registering as a separate step: `<define-element>`
+
+`element=` is shorthand. The long form registers a binding that some import declared:
+
+```html
+<!-- import { Card } from "./ui.js"; customElements.define("ui-card", Card) -->
+<module-import from="./ui.js"><module-binding name="Card"></module-binding></module-import>
+<define-element name="ui-card" component="Card"></define-element>
+```
+
+`component` names a local binding in the document's `ModuleScope`, not an export. So it can be an alias (`as`), a `default=` local, or a binding from any import on the page. The binding can come from an import before or after the `<define-element>`, including one inserted later: the element waits on `scope.whenDeclared(component)`. It never times out, so a misspelled `component` just never registers. `el.defined` is a promise of the registered constructor. The element fires `load` (`detail: { name, constructor }`) or `error`.
 
 ## Loader
 
@@ -145,10 +158,15 @@ web-module-graph resolve react lit
 
 `mportRouter` resolves by importing from https CDNs, which Node can't do, so use it at runtime in the browser. For build-time compilation, use `basicRouter` with a probe.
 
+## Examples
+
+- `examples/index.html` runs offline. It uses an import map, a barrel that re-exports from HTML and JS, a JS component registered under two tag names, `<define-element>` placed before its import, `adopt`, and a namespace import. Serve the package root (for example `python3 -m http.server`) and open `/examples/index.html`.
+- `examples/cdn.html` routes bare npm specifiers through `mportRouter`, so it needs network access.
+
 ## Development
 
 ```bash
-npm test        # node:test (linkedom provides the DOM)
+npm test        # node:test (linkedom provides the DOM; HTML modules need no doctype or <html> wrapper)
 npm run build   # syntax-check all sources + import entry points (no compile step)
 ```
 
@@ -164,6 +182,7 @@ These parts of the design are deferred:
 - Runtime fallback after the browser's native loader has already picked a URL. There is no standard hook for this.
 - JS importing `.html` natively (`import { Card } from "./ui.html"`). This needs a bundler plugin or future platform support. For now, use `loader.load()`.
 - HTML expressions that use namespace bindings (`UI.Card`), and SSR.
+- Cyclic `export *` between HTML modules (rejected; see Re-exports).
 
 ## License
 

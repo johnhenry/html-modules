@@ -77,3 +77,76 @@ test('defineModuleElements is idempotent and supports a prefix', () => {
   assert.equal(win.customElements.get('esm-import'), esm.ModuleImport);
   assert.ok(win.customElements.get('esm-binding'));
 });
+
+test('importing a binding registers nothing unless asked', async () => {
+  const { win, scope, mount } = setup();
+  await mount('<module-import from="./ui.html"><module-binding name="Card"></module-binding></module-import>').module;
+  assert.equal(scope.get('Card').localName, 'template');
+  assert.equal(win.customElements.get('ui-card'), undefined);
+});
+
+test('<define-element> registers a binding declared by an earlier import', async () => {
+  const { win } = setup();
+  win.document.body.innerHTML = `
+    <module-import from="./ui.html"><module-binding name="Card"></module-binding></module-import>
+    <define-element name="ui-card" component="Card"></define-element>`;
+  const def = win.document.querySelector('define-element');
+  const loaded = new Promise((r) => def.addEventListener('load', (e) => r(e.detail)));
+  const ctor = await def.defined;
+  assert.equal(win.customElements.get('ui-card'), ctor);
+  assert.equal((await loaded).name, 'ui-card');
+  win.document.body.insertAdjacentHTML('beforeend', '<ui-card>hi</ui-card>');
+  assert.equal(win.document.querySelector('ui-card').shadowRoot.firstChild.localName, 'article');
+});
+
+test('<define-element> waits for an import that comes later', async () => {
+  const { win, scope } = setup();
+  win.document.body.innerHTML = '<define-element name="late-card" component="Late"></define-element>';
+  const def = win.document.body.firstElementChild;
+  let done = false;
+  def.defined.then(() => (done = true));
+  await new Promise((r) => setImmediate(r));
+  assert.equal(done, false, 'still waiting for the binding');
+  win.document.body.insertAdjacentHTML('beforeend', '<module-import from="./ui.html" default="Late"></module-import>');
+  await def.defined;
+  assert.ok(win.customElements.get('late-card'));
+  assert.equal(win.customElements.get('late-card').template, scope.get('Late'));
+});
+
+test('<define-element> registers one JS component under several names', async () => {
+  const win = makeWindow();
+  class Counter extends win.HTMLElement {}
+  const scope = new ModuleScope();
+  defineModuleElements({ window: win, loader: { load: async () => ({ Counter }) }, scope });
+  win.document.body.innerHTML = `
+    <module-import from="./counter.js"><module-binding name="Counter"></module-binding></module-import>
+    <define-element name="blog-counter" component="Counter"></define-element>
+    <define-element name="store-counter" component="Counter"></define-element>`;
+  const [a, b] = await Promise.all([...win.document.querySelectorAll('define-element')].map((d) => d.defined));
+  assert.equal(a, Counter);
+  assert.ok(b.prototype instanceof Counter, 'second name gets a subclass');
+  assert.equal(win.customElements.get('store-counter'), b);
+});
+
+test('<define-element> errors: missing attributes, non-component value', async () => {
+  const { win } = setup();
+  const errorOf = (el) => new Promise((r) => el.addEventListener('error', (e) => r(e.detail.error)));
+
+  win.document.body.innerHTML = '<define-element name="x-a"></define-element>';
+  const noComponent = win.document.body.firstElementChild;
+  const firstError = errorOf(noComponent);
+  await assert.rejects(noComponent.defined, /requires "name" and "component"/);
+  assert.ok((await firstError) instanceof SyntaxError);
+
+  win.document.body.innerHTML = `
+    <module-import from="./ui.html"><module-binding name="config"></module-binding></module-import>
+    <define-element name="x-c" component="config"></define-element>`;
+  await assert.rejects(win.document.querySelector('define-element').defined, /Cannot register/);
+});
+
+test('custom prefix names the define element <prefix-define>', () => {
+  const win = makeWindow();
+  const esm = defineModuleElements({ window: win, loader: {}, prefix: 'esm' });
+  assert.equal(win.customElements.get('esm-define'), esm.DefineElement);
+  assert.equal(win.customElements.get('define-element'), undefined);
+});

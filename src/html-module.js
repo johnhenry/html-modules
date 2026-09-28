@@ -13,6 +13,7 @@
  *     <module-binding name="Card" as="Panel"></module-binding>
  *   </module-export>
  *   <module-export from="./controls.js" all></module-export>   (export * from)
+ *   <module-export from="./icons.html" namespace="icons">     (export * as icons from)
  *
  * Elements without `export` are private to the module.
  */
@@ -47,7 +48,9 @@ export async function defaultExportValue(el, ctx) {
     const type = (el.getAttribute('type') ?? '').trim().toLowerCase();
     if (type === 'module') {
       const src = el.getAttribute('src');
-      const url = src ? new URL(src, ctx.url).href : ctx.scriptURL(el.textContent ?? '', ctx.url);
+      const url = src
+        ? new URL(src, ctx.url).href
+        : ctx.scriptURL(el.textContent ?? '', `${ctx.url}#${el.getAttribute('export')}`);
       return ctx.importModule(url);
     }
     if (type === 'application/json' || type.endsWith('+json')) {
@@ -58,9 +61,13 @@ export async function defaultExportValue(el, ctx) {
   return el;
 }
 
-/** Inline module source as a data: URL. Relative imports inside it will not resolve. */
-export function dataScriptURL(source) {
-  return `data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`;
+/**
+ * Inline module source as a data: URL. Relative imports inside it will not resolve.
+ * `url` (the HTML module URL plus `#exportName`) is recorded as the sourceURL for devtools.
+ */
+export function dataScriptURL(source, url) {
+  const code = url ? `${source}\n//# sourceURL=${url}` : source;
+  return `data:text/javascript;charset=utf-8,${encodeURIComponent(code)}`;
 }
 
 function readReexport(node) {
@@ -71,10 +78,11 @@ function readReexport(node) {
     as: b.getAttribute('as') ?? undefined,
   }));
   if (node.hasAttribute('name')) bindings.push({ name: node.getAttribute('name'), as: node.getAttribute('as') ?? undefined });
-  if (!all && bindings.length === 0) {
-    throw new SyntaxError(`<${node.localName} from="${from}"> must have \`all\` or at least one binding`);
+  const namespace = node.hasAttribute('namespace') ? requireAttr(node, 'namespace') : undefined;
+  if (!all && !namespace && bindings.length === 0) {
+    throw new SyntaxError(`<${node.localName} from="${from}"> must have \`all\`, \`namespace\`, or at least one binding`);
   }
-  return { from, all, bindings };
+  return { from, all, namespace, bindings };
 }
 
 function requireAttr(el, name) {
@@ -118,9 +126,13 @@ export async function parseHTMLModule(doc, {
   const star = new Map(); // name -> value | AMBIGUOUS
   const AMBIGUOUS = Symbol('ambiguous');
   for (const node of doc.querySelectorAll(REEXPORT_SELECTOR)) {
-    const { from, all, bindings } = readReexport(node);
+    const { from, all, namespace, bindings } = readReexport(node);
     if (!load) throw new TypeError(`Re-export from "${from}" in ${url} requires a loader`);
     const ns = await load(from, url);
+    if (namespace) {
+      if (local.has(namespace) || explicit.has(namespace)) throw new SyntaxError(`Duplicate export "${namespace}" in ${url}`);
+      explicit.set(namespace, ns);
+    }
     for (const { name, as } of bindings) {
       if (!hasExport(ns, name)) {
         throw new SyntaxError(`The requested module '${from}' does not provide an export named '${name}' (re-exported by ${url})`);

@@ -11,4 +11,4 @@ import { defineModuleElements } from './elements.js';
 export const loader = createLoader({
   hostResolve: (specifier) => import.meta.resolve(specifier),
 });
-export const { scope, ModuleImport, ModuleBinding } = defineModuleElements({ loader });
+export const { scope, ModuleImport, ModuleBinding, DefineElement } = defineModuleElements({ loader });

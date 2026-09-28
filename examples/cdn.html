@@ -1,0 +1,29 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>web-module-graph: CDN routing demo</title>
+  <script type="module">
+    import { createLoader, defineModuleElements, chainRouters, mportRouter } from '../src/index.js';
+    // Relative/absolute URLs load directly; bare npm specifiers race CDNs via mport.
+    // mport's published 1.0.0 tarball is missing files; import it from source/CDN you trust.
+    const { MPortURL } = await import('https://cdn.jsdelivr.net/gh/johnhenry/mport/src/index.mjs');
+    const loader = createLoader({
+      router: chainRouters(mportRouter({ MPortURL })),
+      onEvent: (e) => console.debug('[modules]', e.type, e.specifier ?? '', e.resolution?.provider ?? e.provider ?? ''),
+    });
+    defineModuleElements({ loader });
+  </script>
+</head>
+<body>
+  <!-- Needs network access: bare npm specifiers race public CDNs through mport. -->
+  <module-import from="./components/ui.html" namespace="UI">
+    <module-binding name="Card" element="ui-card"></module-binding>
+    <module-binding name="theme" adopt></module-binding>
+  </module-import>
+
+  <module-import from="lodash-es@4.17.21" name="default" as="_"></module-import>
+
+  <ui-card>Hello from an HTML module export.</ui-card>
+</body>
+</html>

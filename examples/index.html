@@ -30,7 +30,9 @@
     <p class="lede">
       One module graph for JavaScript and HTML. Each page below exercises part of the library; together they cover
       every item on the capability checklist further down. Everything except the live CDN page works offline:
-      serve the package root (for example <code>python3 -m http.server</code>) and open <code>/examples/</code>.
+      run <code>npm install</code> (which links <code>node_modules/mport</code> to the local mport checkout), serve the package root
+      (for example <code>python3 -m http.server</code>) and open <code>/examples/</code>. Pages that route packages load mport v2 from
+      <code>/node_modules/mport/</code> through a page import map.
     </p>
     <div class="summary-row" id="summary"></div>
 

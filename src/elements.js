@@ -8,7 +8,7 @@
  *
  * The elements are a control plane only. Module loading is ordinary ESM
  * (`import()`) or the HTML-module loader; resolution goes through the loader's
- * import map / router (mport) / host resolution.
+ * import map / router (e.g. mport v2 via fromMport) / host resolution.
  */
 import { createLoader } from './loader.js';
 import { readImportDeclaration, applyImport } from './declarations.js';

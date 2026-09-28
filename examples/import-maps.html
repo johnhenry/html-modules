@@ -6,9 +6,10 @@
   <title>Import-map playground · web-module-graph</title>
   <script>try { const t = localStorage.getItem('wmg-examples-theme'); if (t) document.documentElement.dataset.theme = t; } catch {}</script>
   <link rel="stylesheet" href="./shared/site.css">
-  <!-- The page's own import map. The loader below reaches it only through hostResolve. -->
+  <!-- The page's own import map. The loader below reaches "@acme/host" only through hostResolve.
+       "mport" is mport v2 from the local checkout (node_modules/mport is a symlink to it). -->
   <script type="importmap">
-    { "imports": { "@acme/host": "./import-maps/host.html" } }
+    { "imports": { "@acme/host": "./import-maps/host.html", "mport": "../node_modules/mport/src/index.mjs" } }
   </script>
   <style>
     .result { font-family: var(--mono); font-size: 0.88rem; padding: 0.6rem 0.75rem; border-radius: 8px; background: var(--surface-2); margin: 0.5rem 0; }
@@ -76,7 +77,10 @@
 
     <section class="card">
       <h2>Compile a map ahead of time</h2>
-      <p class="small"><code>compileImportMap(router, specifiers, { scopes })</code> asks a router once and emits a standard map plus lock entries. This is what the CLI's <code>build</code> command does.</p>
+      <p class="small"><code>compileImportMap(router, specifiers, { scopes })</code> asks a router once and emits a standard map plus an mport-format lockfile. This is what the CLI's <code>build</code> command does. The router is mport v2 as a static mapping (<code>probe: "none"</code>, no registry lookups), so this runs offline; package keys drop the version.</p>
+<pre><code>const router = fromMport(createRouter({ '*': esmSh(), '@std/*': jsr() }, { probe: 'none', resolveVersions: false }));
+await compileImportMap(router, ['react@19.2.0', 'jsr:@std/fs@1.0.0', '@std/path', 'lit/'],
+  { scopes: { 'https://app.example/legacy/': { react: 'react@18.3.1' } } });</code></pre>
       <pre id="compiled"></pre>
     </section>
 
@@ -90,9 +94,10 @@
   </main>
 
   <script type="module">
+    import { createRouter, esmSh, jsr } from 'mport';
     import {
       resolveImportMap, mergeImportMaps, importMapScript, parseURLLikeSpecifier, compileImportMap,
-      createLoader, basicRouter,
+      createLoader, fromMport,
     } from '../src/index.js';
     import { esc, errorText, renderChecks } from './shared/site.js';
 
@@ -205,8 +210,8 @@
     }).join('') + '</tbody>';
 
     // --- compile ---
-    const router = basicRouter({ routes: { '@std/*': 'https://jsr.example/', '*': 'https://esm.sh/' } });
-    const compiled = await compileImportMap(router, ['react@19.2.0', '@std/path', 'lit/'], { scopes: { 'https://app.example/legacy/': ['react@18.3.1'] } });
+    const router = fromMport(createRouter({ '*': esmSh(), '@std/*': jsr() }, { probe: 'none', resolveVersions: false }));
+    const compiled = await compileImportMap(router, ['react@19.2.0', 'jsr:@std/fs@1.0.0', '@std/path', 'lit/'], { scopes: { 'https://app.example/legacy/': { react: 'react@18.3.1' } } });
     $('compiled').textContent = JSON.stringify(compiled, null, 2);
 
     // --- loader ---

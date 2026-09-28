@@ -4,8 +4,10 @@
  * - resolveImportMap(): resolve a specifier against an import map the way a
  *   browser does (exact + trailing-slash prefix matches, scopes).
  * - compileImportMap(): ask a router to resolve a list of specifiers ahead of
- *   time and emit a standard import map (plus lock entries).
+ *   time and emit a standard import map plus an mport-format lockfile.
  */
+
+import { toRouter } from './routers/interface.js';
 
 const isRelative = (s) => s.startsWith('/') || s.startsWith('./') || s.startsWith('../');
 
@@ -82,55 +84,115 @@ export function resolveImportMap(map, specifier, { referrer, mapBaseURL = referr
 }
 
 /**
- * Merge import maps; later maps win.
- * @param {...{imports?: object, scopes?: object}} maps
+ * Merge import maps; later maps win. Scopes merge entry by entry, and
+ * `integrity` maps merge too (the same result as mport's `mergeImportMaps`).
+ * @param {...{imports?: object, scopes?: object, integrity?: object}} maps
  */
 export function mergeImportMaps(...maps) {
-  const out = { imports: {}, scopes: {} };
+  const out = { imports: {}, scopes: {}, integrity: {} };
   for (const m of maps) {
     Object.assign(out.imports, m?.imports);
     for (const [scope, entries] of Object.entries(m?.scopes ?? {})) {
       out.scopes[scope] = { ...out.scopes[scope], ...entries };
     }
+    Object.assign(out.integrity, m?.integrity);
   }
-  if (!Object.keys(out.scopes).length) delete out.scopes;
+  for (const k of ['scopes', 'integrity']) if (!Object.keys(out[k]).length) delete out[k];
   return out;
 }
 
+// mport's lockfile fields and key (see mport/src/lock.mjs).
+const LOCK_FIELDS = ['specifier', 'registry', 'name', 'range', 'version', 'path', 'entry', 'build', 'provider', 'url', 'integrity'];
+const lockKeyOf = (res, specifier, scope) => res.registry && res.name
+  ? `${res.registry}:${res.name}@${res.range ?? ''}${res.path ? `/${res.path}` : ''}`
+  : scope ? `${scope} ${specifier}` : specifier;
+
+function lockEntry(res, specifier) {
+  const rec = {};
+  for (const f of LOCK_FIELDS) {
+    const v = f === 'specifier' ? specifier : res[f];
+    if (v !== undefined && v !== '') rec[f] = v;
+  }
+  return rec;
+}
+
 /**
- * Resolve `specifiers` through `router` and emit an import map + lock data.
- *
- * Resolution happens once, ahead of time ("resolution-time fallback"), so the
- * browser only ever sees a plain import map.
- *
- * @param {import('./routers/interface.js').Router} router
- * @param {string[]} specifiers top-level specifiers (a trailing "/" makes a prefix entry)
- * @param {{ scopes?: Record<string, string[]>, signal?: AbortSignal }} [options]
- * @returns {Promise<{ importMap: {imports: Record<string,string>, scopes?: object}, lock: Record<string, object> }>}
+ * The import-map compiler mport uses (`compileImportMap(resolved, scoped)`):
+ * each resolution goes under its `key`; prefix keys ("lit/") map to `base`;
+ * `integrity` entries are collected by URL.
  */
-export async function compileImportMap(router, specifiers, { scopes = {}, signal } = {}) {
-  const lock = {};
-  const resolveAll = async (list, referrer) => {
-    const imports = {};
-    for (const specifier of list) {
-      const res = await router.resolve(specifier, { referrer, signal });
+export function compileResolutions(resolved, scoped = {}) {
+  const map = { imports: {} };
+  const integrity = {};
+  const put = (target, r) => {
+    target[r.key] = r.key.endsWith('/') ? r.base ?? r.url.replace(/[^/]*$/, '') : r.url;
+  };
+  for (const r of resolved) {
+    put(map.imports, r);
+    if (r.integrity && !r.key.endsWith('/')) integrity[r.url] = r.integrity;
+  }
+  const scopes = {};
+  for (const [scope, list] of Object.entries(scoped)) {
+    scopes[scope] = {};
+    for (const r of list) {
+      put(scopes[scope], r);
+      if (r.integrity) integrity[r.url] = r.integrity;
+    }
+  }
+  if (Object.keys(scopes).length) map.scopes = scopes;
+  if (Object.keys(integrity).length) map.integrity = integrity;
+  return map;
+}
+
+/**
+ * Resolve `specifiers` through `router` and emit an import map plus a lockfile.
+ *
+ * Resolution happens once, ahead of time, so the browser only sees a plain
+ * import map. Any Router works: an mport router wrapped with `fromMport()`,
+ * a chain that puts static aliases in front of it, or a function.
+ *
+ * - Import-map keys: a resolution's `key` when it has one (mport drops the
+ *   version: `react@^19` → `react`), else the specifier as written.
+ * - The lockfile uses mport's format, `{ lockfileVersion: 1, packages }`, so
+ *   `createRouter(routes, { lock })` can pin from it. Package entries use
+ *   mport's keys (`npm:react@^19`); entries from other routers are keyed by
+ *   the specifier (`"<scope> <specifier>"` inside scopes).
+ *
+ * @param {import('./routers/interface.js').Router | Function} router
+ * @param {string[]} specifiers top-level specifiers (a trailing "/" makes a prefix entry)
+ * @param {object} [options]
+ * @param {Record<string, string[] | Record<string, string>>} [options.scopes]
+ *   scope URL → specifiers, or (mport's form) → { key: specifier }
+ * @param {AbortSignal} [options.signal]
+ * @param {(resolved: object[], scoped: Record<string, object[]>) => object} [options.compile]
+ *   the compiler; pass mport's `compileImportMap` to use mport's own
+ * @returns {Promise<{ importMap: {imports: Record<string,string>, scopes?: object, integrity?: object}, lock: { lockfileVersion: 1, packages: Record<string, object> } }>}
+ */
+export async function compileImportMap(router, specifiers, { scopes = {}, signal, compile = compileResolutions } = {}) {
+  router = toRouter(router);
+  const packages = {};
+  const resolveAll = async (entries, scope) => {
+    const out = [];
+    for (const [explicitKey, specifier] of entries) {
+      const res = await router.resolve(specifier, { referrer: scope, signal });
       if (!res?.url) throw new Error(`Router could not resolve "${specifier}"`);
-      if (specifier.endsWith('/') && !res.url.endsWith('/')) {
+      const key = explicitKey ?? res.key ?? specifier;
+      if (key.endsWith('/') && !(res.base ?? res.url).endsWith('/')) {
         throw new TypeError(`Prefix specifier "${specifier}" resolved to "${res.url}", which does not end in "/"`);
       }
-      imports[specifier] = res.url;
-      const { module: _module, ...rest } = res;
-      lock[referrer ? `${referrer} ${specifier}` : specifier] = { specifier, ...rest };
+      out.push({ ...res, key });
+      packages[lockKeyOf(res, specifier, scope)] = lockEntry(res, specifier);
     }
-    return imports;
+    return out;
   };
-  const importMap = { imports: await resolveAll(specifiers) };
-  const scopeEntries = Object.entries(scopes);
-  if (scopeEntries.length) {
-    importMap.scopes = {};
-    for (const [scope, list] of scopeEntries) importMap.scopes[scope] = await resolveAll(list, scope);
+  const resolved = await resolveAll(specifiers.map((s) => [undefined, s]));
+  const scoped = {};
+  for (const [scope, list] of Object.entries(scopes)) {
+    scoped[scope] = await resolveAll(Array.isArray(list) ? list.map((s) => [undefined, s]) : Object.entries(list), scope);
   }
-  return { importMap, lock };
+  const importMap = compile(resolved, scoped);
+  const sorted = Object.fromEntries(Object.entries(packages).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+  return { importMap, lock: { lockfileVersion: 1, packages: sorted } };
 }
 
 /**

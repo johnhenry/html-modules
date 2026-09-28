@@ -3,8 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Router chaining · web-module-graph</title>
+  <title>Routing with mport · web-module-graph</title>
   <script>try { const t = localStorage.getItem('wmg-examples-theme'); if (t) document.documentElement.dataset.theme = t; } catch {}</script>
+  <!-- mport v2 from the local checkout (node_modules/mport is a symlink to it; see the README). -->
+  <script type="importmap">
+    { "imports": { "mport": "../node_modules/mport/src/index.mjs" } }
+  </script>
   <link rel="stylesheet" href="./shared/site.css">
   <style>
     td.url { font-family: var(--mono); font-size: 0.8rem; }
@@ -13,55 +17,79 @@
     .chain i { color: var(--muted); font-style: normal; }
     .hit { color: var(--ok); font-weight: 600; }
     .miss { color: var(--muted); }
+    .runs { display: grid; gap: 0.8rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); }
+    .runs > div { border: 1px solid var(--border); border-radius: 8px; padding: 0.6rem; background: var(--surface-2); }
+    .runs h3 { margin: 0 0 0.4rem; font-size: 0.9rem; }
   </style>
 </head>
 <body>
   <header class="site-header">
     <a class="home" href="./index.html">web-module-graph</a>
-    <span class="crumb">Router chaining</span>
+    <span class="crumb">Routing with mport</span>
     <span class="spacer"></span>
     <button class="theme-toggle" type="button">Dark mode</button>
   </header>
 
   <main class="page">
-    <h1>Router chaining</h1>
+    <h1>Routing with mport v2</h1>
     <p class="lede">
-      A Router answers one question: where does this bare specifier live? It returns a resolution, or <code>null</code> for
-      "not mine". <code>chainRouters()</code> asks each in turn. Everything here runs offline: the mport adapter is fed an
-      mport-compatible stand-in that races two local "CDN" mirrors.
+      A Router answers one question: where does this specifier live? web-module-graph keeps the order (import map, then
+      router, then the host) and the non-package routes: static aliases, HTML-module paths, app schemes. Packages go to
+      <a href="https://github.com/johnhenry/mport">mport v2</a> through <code>fromMport(createRouter(...))</code>: version
+      ranges, <code>npm:</code>/<code>jsr:</code>, mirrors, strategies, health, traces and lockfiles. Everything here runs
+      offline: two local "mirrors" serve the packages, a local registry answers version lookups, and outages and latency are simulated.
     </p>
     <div class="covers" data-page="routers"></div>
 
     <section class="card">
       <h2>A chain, traced</h2>
-      <div class="chain"><span>importMapRouter(pins)</span><i>→</i><span>basicRouter(@internal/*)</span><i>→</i><span>toRouter(partials)</span><i>→</i><span>mportRouter(local mirrors)</span></div>
-      <p class="small">Each specifier is loaded through <code>createLoader({ router: chain })</code>. The trace shows which routers were asked and which one answered. <code>importModule</code> calls are counted: mport already evaluated the module, so the loader reuses it.</p>
-      <div class="row"><button class="primary" id="rerun">Run again (the mport race may pick a different mirror)</button></div>
+      <div class="chain"><span>importMapRouter(pins)</span><i>→</i><span>basicRouter(@internal/*)</span><i>→</i><span>toRouter(partials)</span><i>→</i><span>fromMport(fallback(down, race(primary, backup)))</span></div>
+<pre><code>const packages = createRouter({
+  '*': fallback(mirror('down'), race(mirror('primary'), mirror('backup'))),
+}, { fetch: localRegistry, probe: simulatedProbe });   // the probe imports the module
+const loader = createLoader({ router: chainRouters(pins, internal, partials, fromMport(packages)) });</code></pre>
+      <p class="small">Each specifier is loaded through the chain. "Routers asked" shows which routers were asked and which answered; the mport trace shows the registry lookup and every probe. <code>importModule</code> calls are counted: mport's probe already evaluated the module, so the loader reuses it. Run it a few times: the race winner is whichever mirror gets the short simulated latency (the other would take over 2 s and is aborted), and after three failures the "down" mirror's circuit opens and it is skipped.</p>
+      <div class="row"><button class="primary" id="rerun">Run again with new latencies</button></div>
       <div class="table-wrap"><table id="chain-table"></table></div>
       <ul id="chain-checks"></ul>
     </section>
 
     <section class="card">
-      <h2>basicRouter patterns</h2>
+      <h2>Strategies</h2>
+      <p class="small">The same request, <code>greet@^1</code>, through three strategy trees. Simulated network: <code>primary</code> is down (it fails after 5 ms), <code>backup</code> answers in 30 ms, <code>slow</code> (another copy of backup) would take 2 s.</p>
+      <div class="runs" id="strategies"></div>
+      <ul id="strategy-checks"></ul>
+    </section>
+
+    <section class="card">
+      <h2>Health and the circuit breaker</h2>
+      <p class="small"><code>createRouter(routes, { circuitBreaker: { failures: 2, reset: '30s' } })</code> with <code>fallback(primary, backup)</code> and <code>primary</code> down. After two failures in a row the circuit opens and <code>primary</code> is skipped without a request. A second router created with <code>{ health: first.health }</code> shares that state.</p>
+      <div class="runs" id="health-runs"></div>
+      <div id="health-table"></div>
+      <ul id="health-checks"></ul>
+    </section>
+
+    <section class="card">
+      <h2>Lockfile pinning and integrity</h2>
+      <p class="small">A first router resolves ranges through the registry and records version, build and (with <code>verified()</code>) an SRI hash. A second router gets that lockfile: it asks the registry nothing, skips a provider that serves a different build, and rejects a mirror whose bytes do not match the pinned hash.</p>
+<pre><code>const first = createRouter({ '*': fallback(verified(mirror('primary')), verified(mirror('backup'))) }, { fetch });
+const { importMap, lock } = await first.build(['greet@^1', 'jsr:@demo/scoped@^2']);
+const pinned = createRouter({ '*': fallback(transformCdn, verified(mirror('backup')), verified(mirror('primary'))) }, { fetch, lock });</code></pre>
+      <div class="grid-2">
+        <div><h3>lock</h3><pre class="small-pre" id="lock"></pre></div>
+        <div><h3>pinned resolution of <code>greet@^1</code></h3><div id="pinned-trace"></div><h3>import map</h3><pre class="small-pre" id="lock-map"></pre></div>
+      </div>
+      <ul id="lock-checks"></ul>
+    </section>
+
+    <section class="card">
+      <h2>Static aliases: <code>basicRouter</code> patterns</h2>
+      <p class="small">What stays in web-module-graph: names that are not packages. Exact keys beat globs, longer globs beat shorter ones, <code>'*'</code> is last; a function target gets the specifier and <code>{ referrer }</code>.</p>
 <pre><code>basicRouter({ routes: {
-  '*': 'https://esm.sh/', '@std/*': 'https://jsr.example/', 'react*': 'https://react-cdn.example',
-  'jsr:': (rest) => `https://jsr.example/${rest}/mod.js`, exact: 'https://exact.example/',
+  '*': 'https://modules.example/', '@internal/*': 'https://internal.example/', 'app*': 'https://app.example',
+  'partial:': (rest) => `/partials/${rest}.html`, exact: 'https://exact.example/',
 } })</code></pre>
       <div class="table-wrap"><table id="patterns"></table></div>
-    </section>
-
-    <section class="card">
-      <h2>Ordered fallback with <code>httpProbe()</code></h2>
-      <p class="small">Array routes list candidates in order; a probe checks each until one passes. <code>httpProbe</code> sends <code>HEAD</code> and retries with <code>GET</code> on 405. The "down" mirror is simulated with a 503 by the probe's <code>fetch</code>; the backup mirror answers 405 to <code>HEAD</code>.</p>
-      <div id="probe-results"></div>
-    </section>
-
-    <section class="card">
-      <h2>The mport adapter</h2>
-      <p class="small"><code>mportRouter({ MPortURL, mport: { cdns }, match })</code>. The stand-in has mport's contract: <code>MPortURL(options)</code> returns <code>(pkg) =&gt; [module, url]</code>.</p>
-      <ul id="mport-checks"></ul>
-      <h3>parsePackageSpecifier()</h3>
-      <div class="table-wrap"><table id="parse"></table></div>
     </section>
 
     <section class="card">
@@ -71,44 +99,63 @@
 
     <section class="card">
       <h2>Compile the chain to an import map</h2>
+      <p class="small"><code>compileImportMap(chain, specifiers)</code> resolves once and emits a standard import map and a lockfile in mport's format. Package keys drop the version (<code>greet@^1</code> → <code>greet</code>), as <code>router.build()</code> does.</p>
       <pre id="compiled"></pre>
+    </section>
+
+    <section class="card">
+      <h2>Deprecated APIs</h2>
+      <ul id="deprecated-checks"></ul>
     </section>
   </main>
 
   <script type="module">
+    import * as mport from 'mport';
     import {
-      createLoader, chainRouters, toRouter, isRouter, basicRouter, httpProbe, importMapRouter, mportRouter,
-      parsePackageSpecifier, compileImportMap,
+      createLoader, chainRouters, toRouter, isRouter, basicRouter, importMapRouter, fromMport, isPackageSpecifier,
+      mportRouter, compileImportMap,
     } from '../src/index.js';
-    import { esc, errorText, renderChecks, describe } from './shared/site.js';
+    import { esc, errorText, renderChecks, traceHTML, healthHTML } from './shared/site.js';
+    import { browserRegistry } from './routers/registry.js';
 
+    const { createRouter, fallback, race, adaptive, weighted, verified, custom } = mport;
     const $ = (id) => document.getElementById(id);
     const here = (path) => new URL(path, location.href).href;
-    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const short = (url) => String(url).replace(location.origin, '');
 
-    // --- an mport-compatible stand-in racing local mirrors ---
-    const factoryCalls = [];
-    const mportInputs = [];
-    function localMPortURL({ cdns = [] } = {}) {
-      factoryCalls.push(cdns);
-      return async (pkg) => {
-        mportInputs.push(pkg);
-        const path = `${pkg.name}@${pkg.version ?? 'latest'}/${pkg.path ?? 'index.js'}`;
-        return Promise.any(cdns.map(async (mirror) => {
-          await sleep(10 + Math.random() * 40);
-          const url = here(`./routers/mirrors/${mirror}/${path}`);
-          return [await import(url), url];
-        }));
-      };
-    }
+    // Two mirrors of the same artifact share a build, so either may serve a locked package.
+    const mirror = (dir, { name = dir, build = 'mirror' } = {}) =>
+      custom(`${here(`./routers/mirrors/${dir}/`)}{name}@{version}/index.js`, { name, build, registries: ['npm', 'jsr'] });
 
-    // --- the chain ---
-    let trace = [];
+    // A simulated network: per-provider latency and outages. `evaluate` imports the module (mport's "import" probe).
+    // With `clock`, latency is virtual: the probe advances the clock that the router reads through its `now`
+    // option, so health scores do not depend on timer throttling. Races need real time to order their probes.
+    const sleep = (ms, signal) => new Promise((resolve, reject) => {
+      const t = setTimeout(resolve, ms);
+      signal?.addEventListener('abort', () => { clearTimeout(t); reject(signal.reason); }, { once: true });
+    });
+    const simulated = (net) => async (url, { provider, signal }) => {
+      const ms = net.latency[provider.name] ?? 0;
+      if (net.clock) net.clock.t += ms;
+      else await sleep(ms, signal);
+      if (net.outage.has(provider.name)) throw new Error(`${provider.name} responded 503 (simulated)`);
+      return net.evaluate ? { module: await import(url) } : {};
+    };
+
+    // --- 1. the chain ---
+    const net = { latency: {}, outage: new Set(['down']), evaluate: true };
+    const randomize = () => {
+      const [fast, slow] = [5 + Math.round(Math.random() * 40), 2000 + Math.round(Math.random() * 500)];
+      Object.assign(net.latency, { down: 5 }, Math.random() < 0.5 ? { primary: fast, backup: slow } : { primary: slow, backup: fast });
+    };
+    const packages = createRouter({ '*': fallback(mirror('down'), race(mirror('primary'), mirror('backup'))) }, { fetch: browserRegistry(), probe: simulated(net) });
+
+    let asked = [];
     const traced = (name, router) => {
       const r = toRouter(router);
       return { name, async resolve(specifier, ctx) {
         const res = await r.resolve(specifier, ctx);
-        trace.push({ specifier, name, hit: !!res });
+        asked.push({ specifier, name, hit: !!res });
         return res;
       } };
     };
@@ -119,12 +166,13 @@
       traced('partials', function partials(s) {
         return s.startsWith('partial:') ? { url: here(`./routers/partials/${s.slice('partial:'.length)}`), type: 'html', provider: 'partials' } : null;
       }),
-      traced('mport', mportRouter({ MPortURL: localMPortURL, mport: { cdns: ['primary', 'backup'] }, match: (s) => !s.startsWith('@internal/') })),
+      traced('mport', fromMport(packages)),
     );
-    const specifiers = ['app/pinned', '@internal/flags', 'partial:card', 'greet@1.0.0', '@demo/scoped@2.0.0'];
+    const specifiers = ['app/pinned', '@internal/flags', 'partial:card', 'greet@^1', 'npm:@demo/scoped@2', 'jsr:@demo/scoped@^2'];
 
     async function runChain() {
-      trace = [];
+      randomize();
+      asked = [];
       const imported = [];
       const events = [];
       const loader = createLoader({
@@ -136,94 +184,122 @@
       for (const s of specifiers) {
         const ns = await loader.load(s);
         const res = events.find((e) => e.type === 'resolve' && e.specifier === s).resolution;
-        const load = events.find((e) => e.type === 'load' && e.specifier === s);
-        const asked = trace.filter((t) => t.specifier === s).map((t) => `<span class="${t.hit ? 'hit' : 'miss'}">${t.name}${t.hit ? ' ✓' : ''}</span>`).join(' → ');
-        rows.push({ s, ns, res, load, asked, imported: imported.includes(res.url) });
+        await new Promise((r) => setTimeout(r));
+        const load = events.find((e) => e.type === 'load' && e.url === res.url);
+        const who = asked.filter((t) => t.specifier === s).map((t) => `<span class="${t.hit ? 'hit' : 'miss'}">${t.name}${t.hit ? ' ✓' : ''}</span>`).join(' → ');
+        rows.push({ s, ns, res, load, who, imported: imported.includes(res.url) });
       }
-      $('chain-table').innerHTML = '<thead><tr><th>specifier</th><th>routers asked</th><th>resolution</th><th>loaded as</th><th>importModule()</th></tr></thead><tbody>' +
-        rows.map((r) => `<tr><td><code>${esc(r.s)}</code></td><td class="small">${r.asked}</td><td class="url">${esc(r.res.url.replace(location.origin, ''))}<div class="muted">provider: ${esc(r.res.provider ?? '—')}${r.res.type ? ` · type: ${esc(r.res.type)}` : ''}${r.res.version ? ` · version: ${esc(r.res.version)}` : ''}</div></td><td>${esc(r.load.kind)}</td><td>${r.load.kind === 'html' ? '<span class="muted">n/a (HTML is fetched)</span>' : r.imported ? 'called' : '<strong>skipped</strong> (module reused)'}</td></tr>`).join('') + '</tbody>';
-      return { rows, imported, loader };
+      $('chain-table').innerHTML = '<thead><tr><th>specifier</th><th>routers asked</th><th>resolution</th><th>mport trace</th><th>loaded as</th><th>importModule()</th></tr></thead><tbody>' +
+        rows.map((r) => `<tr><td><code>${esc(r.s)}</code></td><td class="small">${r.who}</td><td class="url">${esc(short(r.res.url))}<div class="muted">provider: ${esc(r.res.provider ?? '—')}${r.res.version ? ` · version: ${esc(r.res.version)}` : ''}${r.res.build ? ` · build: ${esc(r.res.build)}` : ''}${r.res.type ? ` · type: ${esc(r.res.type)}` : ''}</div></td><td>${r.res.trace ? traceHTML(r.res.trace) : '<span class="muted">—</span>'}</td><td>${esc(r.load?.kind ?? 'js')}</td><td>${r.load?.kind === 'html' ? '<span class="muted">n/a (HTML is fetched)</span>' : r.imported ? 'called' : '<strong>skipped</strong> (module reused)'}</td></tr>`).join('') + '</tbody>';
+      return { rows, loader };
     }
 
-    const { rows } = await runChain();
+    const { rows, loader: chainLoader } = await runChain();
     $('rerun').addEventListener('click', runChain);
     const by = (s) => rows.find((r) => r.s === s);
+    const greet = by('greet@^1');
+    let aborted;
+    try { await chainLoader.load('npm:greet@1.0.0', undefined, { signal: AbortSignal.abort() }); } catch (error) { aborted = error; }
     renderChecks($('chain-checks'), [
       ['<code>importMapRouter</code> claimed only the pinned specifier', by('app/pinned').res.provider === 'import-map' && by('app/pinned').ns.pinned === true],
       ['<code>basicRouter</code> routed <code>@internal/*</code> to a private path', by('@internal/flags').ns.flags.newDashboard === true],
       ['A plain function router returned <code>type: "html"</code>, so an extensionless file loaded as an HTML module', by('partial:card').load.kind === 'html' && by('partial:card').ns.info.loadedAs === 'html'],
-      ['<code>mportRouter</code> returned the winning mirror\'s URL and the evaluated module', ['primary', 'backup'].includes(by('greet@1.0.0').ns.mirror) && by('greet@1.0.0').res.url.includes(`/${by('greet@1.0.0').ns.mirror}/`)],
-      ['The loader reused mport\'s module: <code>importModule()</code> was not called for it', !by('greet@1.0.0').imported && !by('@demo/scoped@2.0.0').imported && by('app/pinned').imported],
-      ['Scoped names reach mport in object form: ' + `<code>${esc(JSON.stringify(mportInputs.find((i) => i.name === '@demo/scoped')))}</code>`, mportInputs.some((i) => i.name === '@demo/scoped' && i.version === '2.0.0')],
-      ['Routers after the one that answered were never asked', trace.filter((t) => t.specifier === 'app/pinned').length === 1],
+      ['<code>fromMport</code> left <code>partial:card</code> alone (unknown schemes are not packages)', !isPackageSpecifier('partial:card') && isPackageSpecifier('jsr:@demo/scoped')],
+      [`mport resolved the range <code>greet@^1</code> to <code>${esc(greet.res.version)}</code> through the registry`, greet.res.version === '1.0.0' && greet.res.trace.some((e) => e.type === 'resolved' && e.version === '1.0.0')],
+      ['The <code>down</code> mirror failed (or its circuit was already open), then the race picked a live mirror', greet.res.trace.some((e) => e.provider === 'down' && (e.type === 'fail' || e.reason === 'circuit open')) && greet.res.url.includes(`/${greet.ns.mirror}/`)],
+      ['The race\'s loser was aborted', greet.res.trace.some((e) => e.type === 'aborted')],
+      ['<code>npm:</code> and <code>jsr:</code> specifiers route through mport (<code>jsr:</code> uses JSR metadata; the yanked 2.1.0 is skipped)', by('npm:@demo/scoped@2').res.registry === 'npm' && by('jsr:@demo/scoped@^2').res.registry === 'jsr' && by('jsr:@demo/scoped@^2').res.version === '2.0.0'],
+      ['The loader reused mport\'s evaluated module: <code>importModule()</code> was not called for packages', !greet.imported && !by('npm:@demo/scoped@2').imported && by('app/pinned').imported],
+      ['Routers after the one that answered were never asked', asked.filter((t) => t.specifier === 'app/pinned').length === 1],
+      [`An aborted <code>signal</code> passed to <code>loader.load()</code> reaches the router: <code>${esc(aborted?.name)}</code>`, aborted?.name === 'AbortError'],
     ]);
 
-    // --- patterns ---
-    const patternRouter = basicRouter({ routes: {
-      '*': 'https://esm.sh/', '@std/*': 'https://jsr.example/', 'react*': 'https://react-cdn.example',
-      'jsr:': (rest) => `https://jsr.example/${rest}/mod.js`, exact: 'https://exact.example/',
-    } });
-    const patternSpecs = ['lit', '@std/path', 'react-dom', 'jsr:@std/fs', 'exact', './local.js', 'https://x.example/a.js'];
-    const patternRows = await Promise.all(patternSpecs.map(async (s) => [s, await patternRouter.resolve(s)]));
-    $('patterns').innerHTML = '<thead><tr><th>specifier</th><th>url</th><th>route</th><th>provider</th></tr></thead><tbody>' +
-      patternRows.map(([s, r]) => `<tr><td><code>${esc(s)}</code></td><td class="url">${r ? esc(r.url) : '<span class="muted">null (not bare)</span>'}</td><td><code>${esc(r?.route ?? '—')}</code></td><td>${esc(r?.provider ?? '—')}</td></tr>`).join('') + '</tbody>';
-
-    // --- probes ---
-    const probeLog = [];
-    const probeFetch = async (url, init) => {
-      const short = url.replace(here('./routers/mirrors/'), '');
-      if (url.includes('/down/')) {
-        probeLog.push(`${init.method} ${short} → 503 (simulated)`);
-        return new Response(null, { status: 503 });
-      }
-      if (url.includes('/backup/') && init.method === 'HEAD') {
-        probeLog.push(`${init.method} ${short} → 405 (simulated)`);
-        return new Response(null, { status: 405 });
-      }
-      const res = await fetch(url, init);
-      probeLog.push(`${init.method} ${short} → ${res.status}`);
-      return res;
-    };
-    const mirror = (name) => (rest) => here(`./routers/mirrors/${name}/${rest}/index.js`);
-    const probeCases = [
-      ['down → primary → backup', ['down', 'primary', 'backup']],
-      ['down → backup (HEAD 405, then GET)', ['down', 'backup']],
-      ['down only', ['down']],
+    // --- 2. strategies ---
+    const latency = { primary: 5, backup: 30, slow: 2000 };
+    const slow = mirror('backup', { name: 'slow' });
+    const strategies = [
+      ['fallback(primary, backup, slow)', fallback(mirror('primary'), mirror('backup'), slow), 1, true],
+      ['race(primary, backup, slow)', race(mirror('primary'), mirror('backup'), slow), 1, false],
+      ['adaptive(weighted(primary, 2), backup) × 3', adaptive(weighted(mirror('primary'), 2), mirror('backup')), 3, true],
     ];
-    const probeHTML = [];
-    for (const [label, order] of probeCases) {
-      probeLog.length = 0;
-      const r = basicRouter({ routes: [{ match: '*', use: order.map(mirror) }], probe: httpProbe({ fetch: probeFetch }) });
-      let out;
-      try {
-        const res = await r.resolve('greet@1.0.0');
-        out = `<div class="ok-box">${esc(res.url.replace(location.origin, ''))}</div>`;
-      } catch (error) {
-        out = `<div class="error-box">${esc(errorText(error))}</div>`;
-      }
-      probeHTML.push(`<h3>${esc(label)}</h3><div class="log">${probeLog.map(esc).join('<br>')}</div>${out}`);
+    const strategyResults = [];
+    for (const [label, node, runs, virtual] of strategies) {
+      const clock = virtual ? { t: 0 } : undefined;
+      const strategyNet = { latency, outage: new Set(['primary']), evaluate: false, clock };
+      const router = createRouter({ '*': node }, { fetch: browserRegistry(), probe: simulated(strategyNet), ...(clock && { now: () => clock.t }) });
+      const results = [];
+      for (let i = 0; i < runs; i++) results.push(await router.resolve('greet@^1'));
+      strategyResults.push(results);
+      $('strategies').insertAdjacentHTML('beforeend', `<div><h3><code>${esc(label)}</code></h3>${results.map((r, i) => `${runs > 1 ? `<div class="small muted">run ${i + 1} → ${esc(r.provider)}</div>` : `<div class="small">→ <strong>${esc(r.provider)}</strong></div>`}${traceHTML(r.trace)}`).join('')}</div>`);
     }
-    $('probe-results').innerHTML = probeHTML.join('');
-
-    // --- mport adapter ---
-    const plain = mportRouter({ MPortURL: localMPortURL, mport: { cdns: ['primary'] } });
-    const filtered = mportRouter({ MPortURL: localMPortURL, mport: { cdns: ['primary'] }, match: (s) => s.startsWith('npm:') });
-    const failing = mportRouter({ MPortURL: () => async () => { throw new AggregateError([new Error('primary: timeout'), new Error('backup: 503')], 'every CDN failed'); } });
-    const direct = await plain.resolve('npm:greet@1.0.0');
-    let failure;
-    try { await failing.resolve('greet@1.0.0'); } catch (error) { failure = error; }
-    renderChecks($('mport-checks'), [
-      [`The factory received the <code>mport</code> options: <code>${esc(JSON.stringify(factoryCalls[0]))}</code>`, JSON.stringify(factoryCalls[0]) === '["primary","backup"]'],
-      ['<code>npm:</code> prefixes are understood; the resolution has <code>provider</code>, <code>type: "js"</code>, <code>version</code> and <code>module</code>', direct.provider === location.host && direct.type === 'js' && direct.version === '1.0.0' && direct.module.greet('you').includes('primary')],
-      ['<code>match</code> filters specifiers: with <code>npm:</code>-only matching, <code>greet@1.0.0</code> is "not mine"', (await filtered.resolve('greet@1.0.0')) === null && (await filtered.resolve('npm:greet@1.0.0')) !== null],
-      ['Relative and URL specifiers are never routed', (await plain.resolve('./x.js')) === null && (await plain.resolve('https://cdn.example/x.js')) === null],
-      [`When every CDN fails, the error names the specifier and keeps the cause:<div class="error-box" style="margin-top:0.3rem">${esc(errorText(failure))}</div>`, /mport could not load "greet@1.0.0"/.test(failure?.message) && failure.cause instanceof AggregateError],
+    const [[fb], [rc], adapt] = strategyResults;
+    const probed = (r) => r.trace.filter((e) => e.type === 'probe').map((e) => e.provider);
+    renderChecks($('strategy-checks'), [
+      ['<code>fallback</code> tried <code>primary</code>, then stopped at <code>backup</code>', fb.provider === 'backup' && probed(fb).join() === 'primary,backup'],
+      ['<code>race</code> probed all three; <code>primary</code>\'s fast failure did not sink it, and <code>slow</code> was aborted', rc.provider === 'backup' && probed(rc).length === 3 && rc.trace.some((e) => e.type === 'aborted' && e.provider === 'slow')],
+      ['<code>adaptive</code> preferred the heavier <code>primary</code> until its failures outweighed the weight, then tried <code>backup</code> first', probed(adapt[0])[0] === 'primary' && probed(adapt[1])[0] === 'primary' && probed(adapt[2])[0] === 'backup'],
     ]);
-    const parseSpecs = ['react', 'react@19.2.0', 'npm:lodash-es@4/debounce.js', '@std/path@1.0.0/posix.js', '@scope/pkg', './x.js', 'https://e.example/x.js', 'jsr:@std/path'];
-    $('parse').innerHTML = '<thead><tr><th>specifier</th><th>parsed</th></tr></thead><tbody>' +
-      parseSpecs.map((s) => `<tr><td><code>${esc(s)}</code></td><td class="url">${esc(JSON.stringify(parsePackageSpecifier(s)))}</td></tr>`).join('') + '</tbody>';
 
-    // --- interface helpers ---
+    // --- 3. health ---
+    const healthClock = { t: 0 };
+    const healthNet = { latency: { primary: 5, backup: 20 }, outage: new Set(['primary']), evaluate: false, clock: healthClock };
+    const healthRoutes = { '*': fallback(mirror('primary'), mirror('backup')) };
+    const now = () => healthClock.t;
+    const first = createRouter(healthRoutes, { fetch: browserRegistry(), probe: simulated(healthNet), now, circuitBreaker: { failures: 2, reset: '30s' } });
+    const healthRuns = [];
+    for (let i = 0; i < 3; i++) healthRuns.push(await first.resolve('greet@^1'));
+    const snapshot = first.health.snapshot();
+    const second = createRouter(healthRoutes, { fetch: browserRegistry(), probe: simulated(healthNet), now, health: first.health });
+    const shared = await second.resolve('greet@^1');
+    $('health-runs').innerHTML = [...healthRuns.map((r, i) => [`first router, run ${i + 1}`, r]), ['second router (shared health)', shared]]
+      .map(([label, r]) => `<div><h3>${esc(label)}</h3>${traceHTML(r.trace)}</div>`).join('');
+    $('health-table').innerHTML = `<h3><code>first.health.snapshot()</code> after run 3</h3>${healthHTML(snapshot)}`;
+    const skippedOpen = (r) => r.trace.some((e) => e.provider === 'primary' && e.type === 'skip' && e.reason === 'circuit open');
+    renderChecks($('health-checks'), [
+      ['Runs 1 and 2 probed <code>primary</code> and failed over to <code>backup</code>', healthRuns.slice(0, 2).every((r) => r.provider === 'backup' && probed(r)[0] === 'primary')],
+      ['Run 3 skipped <code>primary</code>: <code>circuit open</code>', skippedOpen(healthRuns[2]) && probed(healthRuns[2]).join() === 'backup'],
+      ['The snapshot shows the open circuit and the failure streak', snapshot.primary.healthy === false && snapshot.primary.streak === 2 && snapshot.backup.ok === 3 && Math.round(snapshot.backup.latency) === 20],
+      ['A router created with <code>{ health: first.health }</code> skipped <code>primary</code> on its first request', skippedOpen(shared) && second.health === first.health],
+    ]);
+
+    // --- 4. lockfile pinning and integrity ---
+    const lockNet = { latency: {}, outage: new Set(), evaluate: false };
+    const firstFetch = browserRegistry();
+    const locking = createRouter({ '*': fallback(verified(mirror('primary')), verified(mirror('backup'))) }, { fetch: firstFetch, probe: simulated(lockNet) });
+    const built = await locking.build(['greet@^1', 'jsr:@demo/scoped@^2']);
+    const pinnedFetch = browserRegistry();
+    const transformCdn = mirror('primary', { name: 'transform-cdn', build: 'esm.sh' });
+    const pinnedNet = { latency: {}, outage: new Set(['primary']), evaluate: false };
+    const pinnedRouter = createRouter({ '*': fallback(transformCdn, verified(mirror('backup')), verified(mirror('primary'))) }, { fetch: pinnedFetch, probe: simulated(pinnedNet), lock: built.lock });
+    let pinnedError;
+    try { await pinnedRouter.resolve('greet@^1'); } catch (error) { pinnedError = error; }
+    pinnedNet.outage.clear();
+    const pinned = await createRouter({ '*': fallback(transformCdn, verified(mirror('backup')), verified(mirror('primary'))) }, { fetch: pinnedFetch, probe: simulated(pinnedNet), lock: built.lock }).resolve('greet@^1');
+    $('lock').textContent = JSON.stringify(built.lock, null, 2).replaceAll(location.origin, '');
+    $('lock-map').textContent = JSON.stringify(built.importMap, null, 2).replaceAll(location.origin, '');
+    $('pinned-trace').innerHTML = `<p class="small">with <code>primary</code> down:</p><div class="error-box">${esc(errorText(pinnedError).replaceAll(location.origin, ''))}</div>${traceHTML(pinnedError?.trace)}<p class="small">with <code>primary</code> back:</p>${traceHTML(pinned.trace)}`;
+    const entry = built.lock.packages['npm:greet@^1'];
+    renderChecks($('lock-checks'), [
+      [`The lock pins <code>greet@^1</code> to <code>${esc(entry.version)}</code>, build <code>${esc(entry.build)}</code>, with an SRI hash`, entry.version === '1.0.0' && entry.build === 'mirror' && entry.integrity?.startsWith('sha384-')],
+      ['The import map carries the <code>integrity</code> map', built.importMap.integrity?.[entry.url] === entry.integrity],
+      ['The first router asked the npm and JSR registries', firstFetch.log.some((u) => u.includes('registry.npmjs.org')) && firstFetch.log.some((u) => u.includes('jsr.io'))],
+      ['The pinned routers asked no registry, and their traces have no <code>lookup</code>', pinnedFetch.log.length === 0 && !pinned.trace.some((e) => e.type === 'lookup')],
+      ['<code>transform-cdn</code> was skipped: it serves a different build', pinned.trace.some((e) => e.provider === 'transform-cdn' && e.type === 'skip' && /locked to "mirror"/.test(e.reason))],
+      ['<code>backup</code> serves different bytes, so <code>verified()</code> rejected it; with <code>primary</code> down nothing matched', /integrity mismatch/.test(errorText(pinnedError))],
+      ['With <code>primary</code> back, the pinned router served exactly the locked URL', pinned.url === entry.url && pinned.integrity === entry.integrity],
+    ]);
+
+    // --- basicRouter patterns ---
+    const patternRouter = basicRouter({ routes: {
+      '*': 'https://modules.example/', '@internal/*': 'https://internal.example/', 'app*': 'https://app.example',
+      'partial:': (rest) => `/partials/${rest}.html`, exact: 'https://exact.example/',
+    } });
+    const patternSpecs = ['lit', '@internal/flags', 'app-shell', 'partial:card', 'exact', './local.js', 'https://x.example/a.js'];
+    const patternRows = await Promise.all(patternSpecs.map(async (s) => [s, await patternRouter.resolve(s)]));
+    $('patterns').innerHTML = '<thead><tr><th>specifier</th><th>url</th><th>route</th></tr></thead><tbody>' +
+      patternRows.map(([s, r]) => `<tr><td><code>${esc(s)}</code></td><td class="url">${r ? esc(r.url) : '<span class="muted">null (not bare)</span>'}</td><td><code>${esc(r?.route ?? '—')}</code></td></tr>`).join('') + '</tbody>';
+
+    // --- 5. interface helpers ---
     const fromString = toRouter((s) => (s === 'a' ? 'https://a.example/a.js' : null));
     let toRouterError;
     try { toRouter(42); } catch (error) { toRouterError = error; }
@@ -235,9 +311,19 @@
       [`<code>chainRouters()</code> names itself after its parts: <code>${esc(chain.name)}</code>`, chain.name === 'chain(import-map,basic,partials,mport)'],
     ]);
 
-    // --- compile ---
-    const { importMap, lock } = await compileImportMap(chain, ['app/pinned', '@internal/flags', 'partial:card', 'greet@1.0.0']);
-    $('compiled').textContent = `// compileImportMap(chain, [...]) — module objects are left out of the lock\n${JSON.stringify({ importMap, lock }, null, 2).replaceAll(location.origin, '')}`;
+    // --- 6. compile ---
+    const { importMap, lock } = await compileImportMap(chain, ['app/pinned', '@internal/flags', 'partial:card', 'greet@^1', 'jsr:@demo/scoped@^2']);
+    $('compiled').textContent = `// compileImportMap(chain, [...])\n${JSON.stringify({ importMap, lock }, null, 2).replaceAll(location.origin, '')}`;
+
+    // --- 7. deprecated ---
+    const legacy = mportRouter({ module: mport, routes: { '*': mirror('primary') }, fetch: browserRegistry() });
+    const legacyRes = await legacy.resolve('greet@^1');
+    let basicError;
+    try { basicRouter({ routes: { '*': ['https://a.example/', 'https://b.example/'] } }); } catch (error) { basicError = error; }
+    renderChecks($('deprecated-checks'), [
+      ['<code>mportRouter({ module, routes, ...options })</code> is a thin wrapper: it builds an mport router (default <code>probe: "import"</code>) and wraps it with <code>fromMport</code>', legacyRes.module?.mirror === 'primary' && legacyRes.type === 'js' && legacyRes.version === '1.0.0'],
+      [`<code>basicRouter</code> no longer probes or falls back; several targets throw a migration error:<div class="error-box" style="margin-top:0.3rem">${esc(errorText(basicError))}</div>`, basicError instanceof TypeError],
+    ]);
   </script>
   <script type="module" src="./shared/site.js"></script>
 </body>

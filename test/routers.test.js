@@ -1,20 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { registerHooks } from 'node:module';
+import * as mport from 'mport';
 import {
-  basicRouter, importMapRouter, chainRouters, toRouter, isRouter, mportRouter, parsePackageSpecifier, httpProbe,
+  basicRouter, importMapRouter, chainRouters, toRouter, isRouter,
+  fromMport, isMportRouter, isPackageSpecifier, mportRouter,
 } from '../src/routers/index.js';
+import { compileImportMap } from '../src/index.js';
+import { fakeFetch, registry } from './helpers.js';
 
-test('parsePackageSpecifier', () => {
-  assert.deepEqual(parsePackageSpecifier('react'), { name: 'react' });
-  assert.deepEqual(parsePackageSpecifier('react@19.2.0'), { name: 'react', version: '19.2.0' });
-  assert.deepEqual(parsePackageSpecifier('npm:lodash-es@4/debounce.js'), { name: 'lodash-es', version: '4', path: 'debounce.js' });
-  assert.deepEqual(parsePackageSpecifier('@std/path@1.0.0/posix.js'), { name: '@std/path', version: '1.0.0', path: 'posix.js' });
-  assert.deepEqual(parsePackageSpecifier('@scope/pkg'), { name: '@scope/pkg' });
-  for (const s of ['./x.js', '/x.js', 'https://e.example/x.js', 'jsr:@std/path', '@scope', '']) {
-    assert.equal(parsePackageSpecifier(s), null, s);
-  }
-});
+const { createRouter, esmSh, jsDelivr, unpkg, jsr, fallback, race, custom } = mport;
 
 test('toRouter / isRouter / chainRouters', async () => {
   assert.equal(isRouter({ resolve() {} }), true);
@@ -47,38 +41,20 @@ test('basicRouter: pattern specificity, schemes, functions', async () => {
   assert.equal(await r.resolve('https://x.example/a.js'), null);
 });
 
-test('basicRouter: array form preserves order; ordered fallback with probe', async () => {
-  const probed = [];
+test('basicRouter: array form keeps order and passes the context; probing moved to mport', async () => {
   const r = basicRouter({
     routes: [
-      { match: '*', use: ['https://down.example/', 'https://up.example/', 'https://never.example/'] },
+      { match: '@tokens', use: (rest, { referrer } = {}) => (referrer?.includes('/legacy/') ? '/v1.html' : '/v2.html') },
+      { match: '*', use: ['https://only.example/'] },
     ],
-    probe: async (url) => {
-      probed.push(url);
-      return url.startsWith('https://up.');
-    },
   });
-  const res = await r.resolve('react');
-  assert.equal(res.url, 'https://up.example/react');
-  assert.deepEqual(probed, ['https://down.example/react', 'https://up.example/react']);
-  const none = basicRouter({ routes: { '*': ['https://a.example/'] }, probe: () => false });
-  await assert.rejects(none.resolve('x'), AggregateError);
+  assert.equal((await r.resolve('@tokens')).url, '/v2.html');
+  assert.equal((await r.resolve('@tokens', { referrer: 'https://app.example/legacy/' })).url, '/v1.html');
+  assert.equal((await r.resolve('x')).url, 'https://only.example/x');
+  assert.throws(() => basicRouter({ routes: { '*': ['https://a.example/', 'https://b.example/'] } }), /no longer probes or falls back.*fallback\(custom/);
+  assert.throws(() => basicRouter({ routes: { '*': 'https://a.example/' }, probe: () => true }), /no longer probes/);
   const unmatched = basicRouter({ routes: { '@x/*': 'https://x.example/' } });
   assert.equal(await unmatched.resolve('y'), null);
-});
-
-test('httpProbe uses HEAD and falls back to GET on 405', async () => {
-  const calls = [];
-  const probe = httpProbe({
-    fetch: async (url, { method }) => {
-      calls.push(method);
-      return method === 'HEAD' ? { status: 405, ok: false } : { status: 200, ok: true };
-    },
-  });
-  assert.equal(await probe('https://x.example/'), true);
-  assert.deepEqual(calls, ['HEAD', 'GET']);
-  const failing = httpProbe({ fetch: async () => { throw new Error('net'); } });
-  assert.equal(await failing('https://x.example/'), false);
 });
 
 test('importMapRouter claims only mapped specifiers', async () => {
@@ -88,66 +64,133 @@ test('importMapRouter claims only mapped specifiers', async () => {
   assert.equal(await r.resolve('./x.js', { referrer: 'https://app.example/' }), null);
 });
 
-test('mportRouter with an injected MPortURL', async () => {
+test('isPackageSpecifier / isMportRouter', () => {
+  for (const s of ['react', 'react@^19/jsx-runtime', '@scope/pkg@1', 'npm:lodash-es@4', 'jsr:@std/path@^1', 'github:user/repo@v1/a.js', 'gh:user/repo']) {
+    assert.equal(isPackageSpecifier(s), true, s);
+  }
+  for (const s of ['./x.js', '../x.js', '/x.js', 'https://e.example/x.js', 'partial:card', 'node:fs', 'data:text/javascript,', '']) {
+    assert.equal(isPackageSpecifier(s), false, s);
+  }
+  assert.equal(isMportRouter(createRouter({ '*': esmSh() })), true);
+  assert.equal(isMportRouter({ resolve() {} }), false);
+  assert.throws(() => fromMport({ resolve() {} }), /expects a router from mport v2/);
+});
+
+test('fromMport: resolves npm:, jsr: and bare specifiers with mport, passing the trace through', async () => {
+  const fetch = fakeFetch({ ...registry, 'https://esm.sh/*': 200 });
+  const router = fromMport(createRouter({ '*': esmSh(), '@std/*': jsr() }, { fetch }));
+  assert.equal(router.name, 'mport');
+  assert.ok(isMportRouter(router.mport));
+
+  const react = await router.resolve('npm:react@^19');
+  assert.equal(react.url, 'https://esm.sh/react@19.2.0');
+  assert.equal(react.provider, 'esm.sh');
+  assert.equal(react.version, '19.2.0');
+  assert.equal(react.build, 'esm.sh');
+  assert.equal(react.key, 'npm:react');
+  assert.equal(react.type, undefined, 'no type unless mport evaluated the module');
+  assert.deepEqual(react.trace.map((e) => e.type), ['lookup', 'resolved', 'probe', 'ok']);
+
+  const path = await router.resolve('jsr:@std/path@^1');
+  assert.equal(path.url, 'https://esm.sh/jsr/@std/path@1.1.0', 'yanked 1.2.0 is skipped');
+  assert.equal(path.registry, 'jsr');
+  assert.equal((await router.resolve('@std/path')).registry, 'jsr', 'a bare scoped name reaching jsr() is a JSR package');
+
+  for (const s of ['./x.js', 'https://cdn.example/x.js', 'partial:card']) assert.equal(await router.resolve(s), null, s);
+  assert.ok(fetch.log.every((r) => !r.url.includes('partial')), 'unknown schemes never reach mport');
+});
+
+test('fromMport: signal, onEvent, match, type and resolveOptions', async () => {
+  const fetch = fakeFetch({ ...registry, 'https://slow.example/*': 200, 'https://esm.sh/*': 200 }, { delays: { 'https://slow.example/': 1000 } });
+  const slow = custom('https://slow.example/{name}@{version}/{path}', { name: 'slow' });
+  const router = createRouter({ '*': fallback(slow, esmSh()) }, { fetch });
+
+  const ac = new AbortController();
+  const seen = [];
+  const pending = fromMport(router).resolve('react@19.2.0', { signal: ac.signal, onEvent: (e) => seen.push(`${e.type}:${e.provider}`) });
+  setTimeout(() => ac.abort(), 10);
+  await assert.rejects(pending, (e) => e.name === 'AbortError');
+  await new Promise((r) => setTimeout(r, 5));
+  assert.deepEqual(seen, ['probe:slow', 'aborted:slow'], 'the signal reached mport, which aborted the probe');
+
+  const events = [];
+  const onlyNpm = fromMport(router, { match: (s) => s.startsWith('npm:'), resolveOptions: { exclude: ['slow'] }, onEvent: (e) => events.push(e) });
+  assert.equal(await onlyNpm.resolve('react'), null);
+  const res = await onlyNpm.resolve('npm:react@19.2.0');
+  assert.equal(res.provider, 'esm.sh', 'resolveOptions reach mport (slow is excluded)');
+  assert.deepEqual(events.map((e) => `${e.type}:${e.provider}`), ['skip:slow', 'probe:esm.sh', 'ok:esm.sh']);
+  const perCall = [];
+  await onlyNpm.resolve('npm:react@19.2.0', { onEvent: (e) => perCall.push(e.type) });
+  assert.deepEqual(perCall, ['skip', 'probe', 'ok'], 'a per-call onEvent wins');
+
+  const imported = [];
+  const evaluating = fromMport(createRouter({ '*': esmSh() }, { fetch, probe: 'import', importer: async (url) => (imported.push(url), { url }) }));
+  const mod = await evaluating.resolve('lit@3.3.1');
+  assert.equal(mod.type, 'js');
+  assert.deepEqual(mod.module, { url: 'https://esm.sh/lit@3.3.1' });
+  assert.equal((await fromMport(router, { type: 'html', resolveOptions: { exclude: ['slow'] } }).resolve('react@19.2.0')).type, 'html');
+});
+
+test('fromMport: failures carry the trace; health is shared with the mport router', async () => {
+  const fetch = fakeFetch({ ...registry, 'https://esm.sh/*': 503, 'https://cdn.jsdelivr.net/*': 503 });
+  const router = createRouter({ '*': race(esmSh(), jsDelivr({ esm: true })) }, { fetch, circuitBreaker: { failures: 1, reset: '1m' } });
+  const wmg = fromMport(router);
+  await assert.rejects(wmg.resolve('react@19.2.0'), (e) => e instanceof mport.RoutingError && e.trace.filter((t) => t.type === 'fail').length === 2);
+  assert.equal(router.health.isOpen('esm.sh'), true);
+  await assert.rejects(wmg.resolve('react@19.2.0'), (e) => e.trace.every((t) => t.type === 'skip' && t.reason === 'circuit open'));
+});
+
+test('compileImportMap over fromMport matches mport router.build(), and its lock pins a new router', async () => {
+  const fetch = fakeFetch({ ...registry, 'https://esm.sh/*': 200 });
+  const routes = { '*': esmSh(), '@std/*': jsr() };
+  const specs = ['react@^19', 'lit/', 'jsr:@std/path@^1'];
+  const scopes = { 'https://legacy.example/': { react: 'react@18' } };
+  const built = await createRouter(routes, { fetch }).build(specs, { scopes });
+  const ours = await compileImportMap(fromMport(createRouter(routes, { fetch })), specs, { scopes });
+  assert.deepEqual(ours.importMap, built.importMap);
+  assert.deepEqual(ours.lock, built.lock);
+  assert.deepEqual(ours.importMap, mport.compileImportMap(
+    await Promise.all(specs.map((s) => createRouter(routes, { fetch }).resolve(s))),
+    { 'https://legacy.example/': [{ ...(await createRouter(routes, { fetch }).resolve('react@18')), key: 'react' }] },
+  ));
+
+  const before = fetch.log.length;
+  const pinned = fromMport(createRouter(routes, { fetch, lock: ours.lock }));
+  const r = await pinned.resolve('react@^19');
+  assert.equal(r.version, '19.2.0');
+  assert.ok(!r.trace.some((e) => e.type === 'lookup'), 'no registry lookup for a locked specifier');
+  assert.ok(fetch.log.slice(before).every((q) => !q.url.startsWith('https://registry.npmjs.org/')));
+});
+
+test('mportRouter (deprecated) builds and wraps an mport v2 router', async () => {
+  const fetch = fakeFetch({ ...registry, 'https://unpkg.com/*': 200 });
+  const r = mportRouter({ module: mport, routes: { '*': unpkg() }, fetch, probe: 'head' });
+  assert.equal(await r.resolve('./x.js'), null);
+  const res = await r.resolve('@scope/pkg@^1/dist/pkg.mjs');
+  assert.equal(res.url, 'https://unpkg.com/@scope/pkg@1.2.3/dist/pkg.mjs');
+  const imported = [];
+  const defaults = mportRouter({ module: mport, fetch: fakeFetch({ ...registry, 'https://esm.sh/*': 200 }), importer: async (u) => (imported.push(u), { ok: true }) });
+  const lit = await defaults.resolve('lit');
+  assert.equal(lit.provider, 'esm.sh', 'defaults to esm.sh, then jsDelivr, then unpkg');
+  assert.deepEqual(lit.module, { ok: true }, 'defaults to probe: "import"');
+  assert.equal(lit.type, 'js');
+});
+
+test('mportRouter (deprecated) 1.x form with an injected MPortURL', async () => {
   const seen = [];
   const MPortURL = (opts) => {
     seen.push(['factory', opts]);
     return async (input) => {
       seen.push(['import', input]);
-      return [{ ok: true }, `https://cdn.jsdelivr.net/npm/${input.name}@${input.version ?? 'latest'}/index.js`];
+      return [{ ok: true }, `https://cdn.jsdelivr.net/npm/${input}/index.js`, { version: '2', trace: [] }];
     };
   };
   const r = mportRouter({ MPortURL, mport: { cdns: ['cdn.jsdelivr.net/npm/'] } });
-  const res = await r.resolve('@scope/pkg@2');
-  assert.deepEqual(res, {
-    url: 'https://cdn.jsdelivr.net/npm/@scope/pkg@2/index.js',
-    provider: 'cdn.jsdelivr.net',
-    type: 'js',
-    module: { ok: true },
-    version: '2',
-  });
-  assert.deepEqual(seen[0], ['factory', { cdns: ['cdn.jsdelivr.net/npm/'] }]);
-  assert.deepEqual(seen[1], ['import', { name: '@scope/pkg', version: '2' }], 'object form keeps scoped names intact');
+  const res = await r.resolve('npm:@scope/pkg@2');
+  assert.deepEqual(res, { url: 'https://cdn.jsdelivr.net/npm/@scope/pkg@2/index.js', provider: 'cdn.jsdelivr.net', type: 'js', module: { ok: true }, version: '2', trace: [] });
+  assert.deepEqual(seen, [['factory', { cdns: ['cdn.jsdelivr.net/npm/'] }], ['import', '@scope/pkg@2']]);
   assert.equal(await r.resolve('./x.js'), null);
-  const filtered = mportRouter({ MPortURL, match: (s) => s.startsWith('npm:') });
-  assert.equal(await filtered.resolve('react'), null);
-});
-
-test('mportRouter wraps CDN failures', async () => {
-  const r = mportRouter({ MPortURL: () => async () => { throw new Error('all down'); } });
-  await assert.rejects(r.resolve('react'), (err) => /mport could not load "react"/.test(err.message) && err.cause.message === 'all down');
-});
-
-test('mportRouter end-to-end with the real mport package (https imports served by a loader hook)', async () => {
-  // Serve https://cdn.test/npm/... from memory so the real mport can race "CDNs" offline.
-  const files = {
-    'https://cdn.test/npm/demo-pkg@1.0.0/package.json': JSON.stringify({ main: './lib/main.js' }),
-    'https://cdn.test/npm/demo-pkg@1.0.0/lib/main.js': 'export const answer = 42;',
-    'https://cdn.test/npm/@demo/scoped@2.0.0/util.js': 'export default "scoped";',
-  };
-  const hooks = registerHooks({
-    resolve(specifier, context, next) {
-      if (specifier.startsWith('https://cdn.test/')) return { url: specifier, shortCircuit: true };
-      return next(specifier, context);
-    },
-    load(url, context, next) {
-      if (url.startsWith('https://cdn.test/')) {
-        if (!(url in files)) throw new Error(`404 ${url}`);
-        return { format: url.endsWith('.json') ? 'json' : 'module', source: files[url], shortCircuit: true };
-      }
-      return next(url, context);
-    },
-  });
-  try {
-    const r = mportRouter({ mport: { cdns: ['cdn.test/npm/'] } }); // uses real `import('mport')`
-    const res = await r.resolve('demo-pkg@1.0.0');
-    assert.equal(res.url, 'https://cdn.test/npm/demo-pkg@1.0.0/lib/main.js');
-    assert.equal(res.provider, 'cdn.test');
-    assert.equal(res.module.answer, 42);
-    const scoped = await r.resolve('@demo/scoped@2.0.0/util.js');
-    assert.equal(scoped.module.default, 'scoped');
-    assert.equal(scoped.url, 'https://cdn.test/npm/@demo/scoped@2.0.0/util.js');
-  } finally {
-    hooks.deregister();
-  }
+  assert.equal(await r.resolve('jsr:@std/path'), null, 'the 1.x API has no JSR support');
+  const failing = mportRouter({ MPortURL: () => async () => { throw new Error('all down'); } });
+  await assert.rejects(failing.resolve('react'), (err) => /mport could not load "react"/.test(err.message) && err.cause.message === 'all down');
 });

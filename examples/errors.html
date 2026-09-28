@@ -5,6 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Error cases · web-module-graph</title>
   <script>try { const t = localStorage.getItem('wmg-examples-theme'); if (t) document.documentElement.dataset.theme = t; } catch {}</script>
+  <!-- mport v2 from the local checkout (node_modules/mport is a symlink to it). -->
+  <script type="importmap">
+    { "imports": { "mport": "../node_modules/mport/src/index.mjs" } }
+  </script>
   <link rel="stylesheet" href="./shared/site.css">
   <style>
     .cases { display: grid; gap: 0.8rem; grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr)); }
@@ -74,11 +78,13 @@
   </main>
 
   <script type="module">
+    import { createRouter, fallback, custom, RoutingError, ResolutionError } from 'mport';
     import {
-      createLoader, defineModuleElements, parseHTMLModule, resolveImportMap, basicRouter, mportRouter,
+      createLoader, defineModuleElements, parseHTMLModule, resolveImportMap, basicRouter, fromMport,
       compileImportMap, toRouter,
     } from '../src/index.js';
     import { esc, errorText } from './shared/site.js';
+    import { browserRegistry } from './routers/registry.js';
 
     const loader = createLoader();
     defineModuleElements({ loader });
@@ -140,8 +146,15 @@
       routing: [
         { title: 'Unresolvable bare specifier', items: 'err.unresolved', code: 'createLoader().load("left-pad")', expect: [TypeError, /Unable to resolve bare specifier "left-pad"/], run: () => fresh().load('left-pad') },
         { title: 'Prefix target without "/"', items: 'err.prefix-target', code: 'resolveImportMap({ imports: { "a/": "https://x.example/a" } }, "a/b")', expect: [TypeError, /must map to a URL ending in "\/"/], run: () => resolveImportMap({ imports: { 'a/': 'https://x.example/a' } }, 'a/b', { referrer: location.href }) },
-        { title: 'No candidate passes the probe', items: 'err.probe', code: 'basicRouter({ routes: { "*": [a, b] }, probe: () => false })', expect: [AggregateError, /No candidate for "react" passed the probe/], run: () => basicRouter({ routes: { '*': ['https://a.example/', 'https://b.example/'] }, probe: () => false }).resolve('react') },
-        { title: 'Every CDN fails in mport', items: 'err.mport', code: 'mportRouter({ MPortURL: () => async () => { throw … } })', expect: [Error, /mport could not load "react" from any CDN/], run: () => mportRouter({ MPortURL: () => async () => { throw new Error('all CDNs are down'); } }).resolve('react'), cause: true },
+        { title: 'basicRouter with a probe', items: 'err.basic-probe', code: 'basicRouter({ routes: { "*": [a, b] }, probe })', expect: [TypeError, /no longer probes or falls back.*fromMport/], run: () => basicRouter({ routes: { '*': ['https://a.example/', 'https://b.example/'] }, probe: () => false }) },
+        { title: 'Every provider fails in mport', items: 'err.mport', code: 'fromMport(createRouter(\n  { "*": fallback(custom(a), custom(b)) },\n  { probe: () => { throw new Error("503") } },\n)).resolve("react")', expect: [RoutingError, /mport: no provider could serve react/], check: (e) => e.trace?.filter((t) => t.type === 'fail').length === 2, run: () => fromMport(createRouter(
+          { '*': fallback(custom('https://a.example/{name}', { name: 'a' }), custom('https://b.example/{name}', { name: 'b' })) },
+          { probe: () => { throw new Error('503 (simulated)'); } },
+        )).resolve('react') },
+        { title: 'No version satisfies the range', items: 'err.mport-resolution', code: 'fromMport(createRouter({ "*": custom(".../{name}@{version}/") },\n  { fetch: localRegistry })).resolve("greet@^7")', expect: [ResolutionError, /no version of greet satisfies "\^7"/], check: (e) => e.trace?.some((t) => t.type === 'fail' && t.provider === 'npm registry'), run: () => fromMport(createRouter(
+          { '*': custom('https://mirror.example/{name}@{version}/', { name: 'mirror' }) },
+          { fetch: browserRegistry() },
+        )).resolve('greet@^7') },
         { title: 'compileImportMap: nothing resolves', items: 'err.compile', code: 'compileImportMap({ resolve: () => null }, ["x"])', expect: [Error, /Router could not resolve "x"/], run: () => compileImportMap({ resolve: () => null }, ['x']) },
         { title: 'toRouter(non-router)', items: 'err.to-router', code: 'toRouter(42)', expect: [TypeError, /Expected a Router/], run: () => toRouter(42) },
       ],
@@ -179,6 +192,11 @@
         extra = `<div class="small">${evented ? '✓ same error delivered by the element\'s <code>error</code> event' : '✗ no matching <code>error</code> event'}</div>`;
       }
       if (c.cause) ok &&= !!error.cause;
+      if (c.check) {
+        const checked = c.check(error);
+        ok &&= checked;
+        extra += `<div class="small">${checked ? '✓' : '✗'} the error carries mport's trace (<code>error.trace</code>, ${error.trace?.length ?? 0} events)</div>`;
+      }
       if (ok) passed++;
       return card(c, ok, `<div class="error-box">${esc(errorText(error))}</div>${extra}`);
     }

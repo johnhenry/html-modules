@@ -2,8 +2,9 @@
  * One-script bootstrap for browsers:
  *   <script type="module" src=".../web-module-graph/src/browser.js"></script>
  * Bare specifiers resolve through the page's import map (import.meta.resolve).
- * For CDN routing, call defineModuleElements({ loader: createLoader({ router: mportRouter() }) })
- * yourself instead of importing this file.
+ * For package/CDN routing, import mport v2 yourself and call
+ *   defineModuleElements({ loader: createLoader({ router: fromMport(createRouter(routes)) }) })
+ * instead of importing this file.
  */
 import { createLoader } from './loader.js';
 import { defineModuleElements } from './elements.js';

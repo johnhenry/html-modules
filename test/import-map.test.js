@@ -56,8 +56,29 @@ test('compileImportMap resolves through a router and returns lock data', async (
     },
     scopes: { 'https://legacy.example/': { 'react@18': 'https://esm.sh/react@18' } },
   });
-  assert.equal(lock['react@19'].provider, 'esm.sh');
-  assert.equal(lock['https://legacy.example/ react@18'].url, 'https://esm.sh/react@18');
+  assert.equal(lock.lockfileVersion, 1, "mport's lockfile format");
+  assert.deepEqual(Object.keys(lock.packages), ['@std/path', 'https://legacy.example/ react@18', 'lit/', 'react@19'], 'sorted keys');
+  assert.deepEqual(lock.packages['react@19'], { specifier: 'react@19', provider: 'esm.sh', url: 'https://esm.sh/react@19' });
+  assert.equal(lock.packages['https://legacy.example/ react@18'].url, 'https://esm.sh/react@18');
+});
+
+test('compileImportMap: resolution keys, mport-style scopes, integrity, custom compile', async () => {
+  const router = (s) => ({
+    'react@^19': { url: 'https://esm.sh/react@19.2.0', key: 'react', registry: 'npm', name: 'react', range: '^19', version: '19.2.0', path: '', integrity: 'sha384-abc' },
+    'lit/': { url: 'https://esm.sh/lit@3.3.1', base: 'https://esm.sh/lit@3.3.1/', key: 'lit/', registry: 'npm', name: 'lit', version: '3.3.1', path: '' },
+    'react@18': { url: 'https://esm.sh/react@18.3.1', key: 'react', registry: 'npm', name: 'react', range: '18', version: '18.3.1', path: '' },
+  })[s] ?? null;
+  const { importMap, lock } = await compileImportMap(router, ['react@^19', 'lit/'], { scopes: { '/legacy/': { react: 'react@18' } } });
+  assert.deepEqual(importMap, {
+    imports: { react: 'https://esm.sh/react@19.2.0', 'lit/': 'https://esm.sh/lit@3.3.1/' },
+    scopes: { '/legacy/': { react: 'https://esm.sh/react@18.3.1' } },
+    integrity: { 'https://esm.sh/react@19.2.0': 'sha384-abc' },
+  });
+  assert.deepEqual(Object.keys(lock.packages), ['npm:lit@', 'npm:react@18', 'npm:react@^19']);
+  assert.equal(lock.packages['npm:react@^19'].integrity, 'sha384-abc');
+  const custom = await compileImportMap(router, ['lit/'], { compile: (resolved) => ({ imports: { n: String(resolved.length) } }) });
+  assert.deepEqual(custom.importMap, { imports: { n: '1' } });
+  await assert.rejects(compileImportMap(() => ({ url: 'https://x.example/a.js' }), ['a/']), /does not end in "\/"/);
 });
 
 test('compileImportMap rejects unresolvable specifiers', async () => {
@@ -68,6 +89,7 @@ test('mergeImportMaps: later wins, scopes merge', () => {
   const merged = mergeImportMaps({ imports: { a: '1', b: '1' }, scopes: { s: { x: '1' } } }, { imports: { b: '2' }, scopes: { s: { y: '2' } } });
   assert.deepEqual(merged, { imports: { a: '1', b: '2' }, scopes: { s: { x: '1', y: '2' } } });
   assert.deepEqual(mergeImportMaps({ imports: { a: '1' } }), { imports: { a: '1' } });
+  assert.deepEqual(mergeImportMaps({ imports: {}, integrity: { u: 'a' } }, { imports: {}, integrity: { u: 'b', v: 'c' } }).integrity, { u: 'b', v: 'c' });
 });
 
 test('importMapScript escapes "<"', () => {

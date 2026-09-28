@@ -184,3 +184,12 @@ th { color: var(--muted); font-weight: 600; }
   .card { padding: 0.85rem; }
 }
 td:first-child code { white-space: nowrap; overflow-wrap: normal; }
+
+/* mport traces */
+.trace { list-style: none; margin: 0; padding: 0; font-family: var(--mono); font-size: 0.78rem; line-height: 1.5; }
+.trace li { padding-left: 0.2rem; overflow-wrap: anywhere; }
+.trace .t-type { display: inline-block; min-width: 4.6rem; font-weight: 600; }
+.trace .t-ok .t-type, .trace .t-resolved .t-type { color: var(--ok); }
+.trace .t-fail .t-type, .trace .t-error { color: var(--bad); }
+.trace .t-skip .t-type, .trace .t-aborted .t-type, .trace .t-lookup .t-type { color: var(--muted); }
+.trace .t-probe .t-type { color: var(--accent); }

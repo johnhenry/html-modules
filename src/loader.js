@@ -3,12 +3,13 @@
  *
  * Resolution order for bare specifiers:
  *   1. `importMap` (explicit pins / a compiled lock)
- *   2. `router`    (e.g. mportRouter → CDN racing)
+ *   2. `router`    (e.g. fromMport(createRouter(...)): mport v2 package/CDN routing)
  *   3. `hostResolve` (e.g. `import.meta.resolve`, which honors the page's import map)
  * Relative and absolute URLs resolve against the referrer (after the import
  * map, which may remap them with URL keys). URL-like specifiers with other
  * schemes ("npm:react", "jsr:@std/path") go to the router and hostResolve, and
- * are used as-is only if nothing claims them.
+ * are used as-is only if nothing claims them. A `signal` passed to load() or
+ * resolve() reaches the router (mport aborts its probes and races with it).
  */
 import { resolveImportMap, parseURLLikeSpecifier } from './import-map.js';
 import { parseHTMLModule, defaultExportValue, dataScriptURL } from './html-module.js';
@@ -54,7 +55,7 @@ export function createLoader({
     return new window.DOMParser().parseFromString(html, 'text/html');
   });
 
-  async function resolve(specifier, referrer) {
+  async function resolve(specifier, referrer, { signal } = {}) {
     referrer ||= baseURL;
     const asURL = parseURLLikeSpecifier(specifier, referrer);
     if (importMap) {
@@ -66,7 +67,7 @@ export function createLoader({
     // URLs but are routing prefixes, so routers and hostResolve see them first.
     if (asURL && FETCHABLE.has(asURL.protocol)) return { url: asURL.href };
     if (routerImpl) {
-      const res = await routerImpl.resolve(specifier, { referrer });
+      const res = await routerImpl.resolve(specifier, { referrer, ...(signal && { signal }) });
       if (res?.url) return res;
     }
     const hosted = hostResolve?.(specifier);
@@ -156,11 +157,11 @@ export function createLoader({
    * Load a module namespace.
    * @param {string} specifier
    * @param {string} [referrer]
-   * @param {{ type?: 'js'|'html' }} [options]
+   * @param {{ type?: 'js'|'html', signal?: AbortSignal }} [options]
    */
-  async function load(specifier, referrer, { type } = {}) {
+  async function load(specifier, referrer, { type, signal } = {}) {
     referrer ||= baseURL;
-    const resolution = await resolve(specifier, referrer);
+    const resolution = await resolve(specifier, referrer, { signal });
     onEvent({ type: 'resolve', specifier, referrer, resolution });
     return start(specifier, resolution, type);
   }

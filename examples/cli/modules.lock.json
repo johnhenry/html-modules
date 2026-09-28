@@ -1,27 +1,41 @@
 {
-  "@lib": {
-    "specifier": "@lib",
-    "url": "/examples/library/all.html",
-    "route": "@lib"
-  },
-  "@lib/": {
-    "specifier": "@lib/",
-    "url": "/examples/library/",
-    "route": "@lib/*"
-  },
-  "@tokens": {
-    "specifier": "@tokens",
-    "url": "/examples/import-maps/tokens-v2.html",
-    "route": "@tokens"
-  },
-  "greet@1.0.0": {
-    "specifier": "greet@1.0.0",
-    "url": "/examples/routers/mirrors/primary/greet@1.0.0/index.js",
-    "route": "*"
-  },
-  "/examples/cli/legacy/ @tokens": {
-    "specifier": "@tokens",
-    "url": "/examples/import-maps/tokens-v1.html",
-    "route": "@tokens"
+  "lockfileVersion": 1,
+  "packages": {
+    "/examples/cli/legacy/ @tokens": {
+      "specifier": "@tokens",
+      "url": "/examples/import-maps/tokens-v1.html"
+    },
+    "@lib": {
+      "specifier": "@lib",
+      "url": "/examples/library/all.html"
+    },
+    "@lib/": {
+      "specifier": "@lib/",
+      "url": "/examples/library/"
+    },
+    "@tokens": {
+      "specifier": "@tokens",
+      "url": "/examples/import-maps/tokens-v2.html"
+    },
+    "jsr:@demo/scoped@^2": {
+      "specifier": "jsr:@demo/scoped@^2",
+      "registry": "jsr",
+      "name": "@demo/scoped",
+      "range": "^2",
+      "version": "2.0.0",
+      "build": "mirror",
+      "provider": "primary",
+      "url": "/examples/routers/mirrors/primary/@demo/scoped@2.0.0/index.js"
+    },
+    "npm:greet@^1": {
+      "specifier": "greet@^1",
+      "registry": "npm",
+      "name": "greet",
+      "range": "^1",
+      "version": "1.0.0",
+      "build": "mirror",
+      "provider": "primary",
+      "url": "/examples/routers/mirrors/primary/greet@1.0.0/index.js"
+    }
   }
 }

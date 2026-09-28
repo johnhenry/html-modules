@@ -181,7 +181,7 @@ test('the committed CLI outputs are up to date', async () => {
   await main(['build', '--config', config, '--out', join(dir, 'importmap.json'), '--lock', join(dir, 'lock.json')], { cwd, stdout: sink() });
   await main(['build', '--config', config, '--html', '--out', join(dir, 'importmap.html')], { cwd, stdout: sink() });
   const resolved = sink();
-  await main(['resolve', '@tokens', 'greet@1.0.0', '@lib/', '--config', config], { cwd, stdout: resolved });
+  await main(['resolve', '@tokens', 'greet@^1', 'jsr:@demo/scoped@^2', '@lib/', '--config', config], { cwd, stdout: resolved });
   const read = (p) => readFile(p, 'utf8');
   const committed = (f) => read(join(examplesDir, 'cli', f));
   assert.equal(await read(join(dir, 'importmap.json')), await committed('importmap.json'));

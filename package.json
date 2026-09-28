@@ -1,7 +1,7 @@
 {
   "name": "@johnhenry/web-module-graph",
   "version": "0.0.0",
-  "description": "A unified JS + HTML module graph for the browser: HTML modules with named/default/namespace exports, declarative <module-import>/<module-binding> Web Components, import-map compilation, and a pluggable router interface for multi-CDN resolution (mport adapter included).",
+  "description": "A unified JS + HTML module graph for the browser: HTML modules with named/default/namespace exports, declarative <module-import>/<module-binding> Web Components, import-map compilation, and a router seam whose package/CDN routing is delegated to mport v2.",
   "author": "John Henry <john@iamjohnhenry.com>",
   "license": "MIT",
   "type": "module",
@@ -30,7 +30,7 @@
     "build": "node scripts/check.js"
   },
   "peerDependencies": {
-    "mport": ">=1.0.0"
+    "mport": "^2.0.0"
   },
   "peerDependenciesMeta": {
     "mport": {

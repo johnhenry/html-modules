@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createLoader, basicRouter, exportNames } from '../src/index.js';
-import { fixtures, fileFetch, makeWindow } from './helpers.js';
+import { createRouter, esmSh, jsDelivr, jsr, fallback } from 'mport';
+import { createLoader, basicRouter, chainRouters, fromMport, exportNames } from '../src/index.js';
+import { fixtures, fileFetch, makeWindow, fakeFetch, registry } from './helpers.js';
 
 const make = (opts = {}) => createLoader({ baseURL: fixtures, fetch: fileFetch, window: makeWindow(), ...opts });
 
@@ -129,4 +130,65 @@ test('URL-like specifiers: import-map URL keys apply, and non-fetchable schemes 
   assert.equal((await loader.resolve('jsr:@std/fs')).url, 'https://jsr.example/@std/fs/mod.js');
   assert.deepEqual(await loader.resolve('npm:nothing-claims-this'), { url: 'npm:nothing-claims-this' }, 'unclaimed schemes are used as-is');
   assert.deepEqual(await make({ router: () => 'https://routed.example/' }).resolve('https://x.example/a.js'), { url: 'https://x.example/a.js' }, 'fetchable URLs never reach the router');
+});
+
+test('npm: and jsr: specifiers resolve through mport v2 (mocked registry and probes)', async () => {
+  const net = fakeFetch({ ...registry, 'https://esm.sh/jsr/*': 200, 'https://esm.sh/*': 503, 'https://cdn.jsdelivr.net/*': 200 });
+  const mport = createRouter({ '*': fallback(esmSh(), jsDelivr({ esm: true })), '@std/*': jsr() }, { fetch: net });
+  const imported = [];
+  const events = [];
+  const loader = make({
+    importMap: { imports: { 'npm:lodash-es': 'https://pinned.example/lodash.js' } },
+    router: chainRouters(
+      basicRouter({ routes: { '@ui': () => new URL('ui.html', fixtures).href } }),
+      fromMport(mport),
+    ),
+    importModule: async (url) => (imported.push(url), { url }),
+    onEvent: (e) => events.push(e),
+  });
+
+  // The import map still wins over the router.
+  assert.deepEqual(await loader.resolve('npm:lodash-es'), { url: 'https://pinned.example/lodash.js', provider: 'import-map' });
+
+  // npm: → esm.sh answers 503, the fallback moves to jsDelivr's +esm build.
+  const ns = await loader.load('npm:lodash-es@^4');
+  assert.deepEqual(ns, { url: 'https://cdn.jsdelivr.net/npm/lodash-es@4.17.21/+esm' });
+  const resolved = events.find((e) => e.type === 'resolve' && e.specifier === 'npm:lodash-es@^4').resolution;
+  assert.equal(resolved.provider, 'jsdelivr-esm');
+  assert.equal(resolved.version, '4.17.21');
+  assert.deepEqual(resolved.trace.map((e) => `${e.type}:${e.provider}`), [
+    'lookup:npm registry', 'resolved:npm registry', 'probe:esm.sh', 'fail:esm.sh', 'probe:jsdelivr-esm', 'ok:jsdelivr-esm',
+  ]);
+  await new Promise((r) => setImmediate(r));
+  assert.equal(events.find((e) => e.type === 'load' && e.specifier === 'npm:lodash-es@^4').provider, 'jsdelivr-esm');
+
+  // jsr: → JSR metadata picks 1.1.0 (1.2.0 is yanked); jsr() serves it through esm.sh.
+  assert.equal((await loader.resolve('jsr:@std/path@^1')).url, 'https://esm.sh/jsr/@std/path@1.1.0');
+
+  // Static aliases in front of mport still load HTML modules; unknown schemes skip mport.
+  assert.ok((await loader.load('@ui')).Card);
+  assert.deepEqual(await loader.resolve('partial:x'), { url: 'partial:x' });
+  assert.ok(!net.log.some((r) => r.url.includes('partial') || r.url.includes('@ui')));
+  assert.deepEqual(imported.filter((u) => u.startsWith('https:')), ['https://cdn.jsdelivr.net/npm/lodash-es@4.17.21/+esm']);
+});
+
+test('mport probe "import": the loader reuses the evaluated module; a signal aborts routing', async () => {
+  const net = fakeFetch(registry, { delays: { 'https://registry.npmjs.org/': 1000 } });
+  let evaluated = 0;
+  const router = fromMport(createRouter({ '*': esmSh() }, {
+    fetch: net,
+    probe: 'import',
+    importer: async (url) => (evaluated++, { from: url }),
+  }));
+  let imports = 0;
+  const loader = make({ router, importModule: async () => (imports++, {}) });
+  const ns = await loader.load('npm:react@19.2.0');
+  assert.deepEqual(ns, { from: 'https://esm.sh/react@19.2.0' });
+  assert.equal(evaluated, 1);
+  assert.equal(imports, 0, 'importModule is not called for a module mport already evaluated');
+
+  const ac = new AbortController();
+  const pending = loader.load('react@^19', undefined, { signal: ac.signal });
+  setTimeout(() => ac.abort(), 10);
+  await assert.rejects(pending, /abort/i);
 });

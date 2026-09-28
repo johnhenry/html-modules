@@ -5,6 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Live CDN routing · web-module-graph</title>
   <script>try { const t = localStorage.getItem('wmg-examples-theme'); if (t) document.documentElement.dataset.theme = t; } catch {}</script>
+  <!-- mport v2 from the local checkout (node_modules/mport is a symlink to it; see the README). -->
+  <script type="importmap">
+    { "imports": { "mport": "../node_modules/mport/src/index.mjs" } }
+  </script>
   <link rel="stylesheet" href="./shared/site.css">
 </head>
 <body>
@@ -15,48 +19,101 @@
     <button class="theme-toggle" type="button">Dark mode</button>
   </header>
 
-  <!-- Relative URLs load directly; bare npm specifiers race public CDNs through mport. -->
+  <!-- Relative URLs load directly; npm: and jsr: specifiers go through mport v2 to public CDNs. -->
   <module-import from="./components/ui.html" namespace="UI">
     <module-binding name="Card" element="ui-card"></module-binding>
   </module-import>
-  <module-import id="lodash" from="lodash-es@4.17.21" name="default" as="_"></module-import>
+  <module-import id="lodash" from="npm:lodash-es@^4" name="default" as="_"></module-import>
+  <module-import id="std" from="jsr:@std/text@^1" name="toCamelCase"></module-import>
 
   <main class="page">
-    <h1>Live CDN routing with mport</h1>
+    <h1>Live CDN routing with mport v2</h1>
     <p class="lede">
-      This page needs network access. Bare npm specifiers go through <code>chainRouters(mportRouter({ MPortURL }))</code>, which
-      races jsDelivr, JSPM and unpkg with the real <a href="https://github.com/johnhenry/mport">mport</a> package (v1 API) and returns
-      the winning URL with the already-evaluated module. For an offline version with a stand-in, see <a href="./routers.html">Router chaining</a>.
+      This page needs network access. Declarative imports of <code>npm:</code> and <code>jsr:</code> specifiers go through
+      <code>fromMport(createRouter(...))</code>: mport looks the range up in the npm or JSR registry, then races esm.sh against
+      jsDelivr's <code>+esm</code> build with <code>HEAD</code> probes, falling back to unpkg. For an offline version with local mirrors, see <a href="./routers.html">Routing with mport</a>.
     </p>
     <div class="covers" data-page="cdn"></div>
 
+<pre><code>import { createRouter, fallback, race, esmSh, jsDelivr, unpkg, jsr } from 'mport';
+const router = createRouter({
+  '*': fallback(race(esmSh(), jsDelivr({ esm: true })), unpkg()),
+  '@std/*': jsr(),
+});
+defineModuleElements({ loader: createLoader({ router: fromMport(router) }) });
+
+&lt;module-import from="npm:lodash-es@^4" name="default" as="_"&gt;&lt;/module-import&gt;
+&lt;module-import from="jsr:@std/text@^1" name="toCamelCase"&gt;&lt;/module-import&gt;</code></pre>
+
     <section class="card">
-      <ui-card>Hello from an HTML module export, next to a module that came from whichever CDN answered first.</ui-card>
-      <p id="result" class="muted">Racing CDNs…</p>
+      <ui-card>Hello from an HTML module export, next to modules that came from whichever CDN answered first.</ui-card>
+      <p id="result" class="muted">Routing…</p>
+      <div class="table-wrap"><table id="resolutions"></table></div>
+      <div class="row"><button class="primary" id="again" disabled>Resolve again (registry lookups are memoized; the race runs again)</button></div>
+    </section>
+
+    <section class="card">
+      <h2>Provider health</h2>
+      <p class="small"><code>router.health.snapshot()</code>: successes, failures, the failure streak, a smoothed latency, and whether the circuit is open.</p>
+      <div id="health"><p class="muted small">(after the first resolutions)</p></div>
+    </section>
+
+    <section class="card">
+      <h2>Lockfile</h2>
+      <p class="small"><code>router.lock.toJSON()</code>: what this page resolved, in the format the CLI writes. Pass it back with <code>createRouter(routes, { lock })</code> to pin these versions and builds.</p>
+      <pre class="small-pre" id="lock"></pre>
+    </section>
+
+    <section class="card">
+      <h2>Loader events</h2>
       <div class="log" id="events"></div>
     </section>
   </main>
 
   <script type="module">
-    import { createLoader, defineModuleElements, chainRouters, mportRouter } from '../src/index.js';
-    import { esc, errorText } from './shared/site.js';
+    import { createRouter, fallback, race, esmSh, jsDelivr, unpkg, jsr } from 'mport';
+    import { createLoader, defineModuleElements, fromMport } from '../src/index.js';
+    import { esc, errorText, traceHTML, healthHTML } from './shared/site.js';
 
-    const log = (line) => document.getElementById('events').insertAdjacentHTML('beforeend', `<div>${esc(line)}</div>`);
-    const result = document.getElementById('result');
+    const $ = (id) => document.getElementById(id);
+    const log = (line) => $('events').insertAdjacentHTML('beforeend', `<div>${esc(line)}</div>`);
+    const router = createRouter({
+      '*': fallback(race(esmSh(), jsDelivr({ esm: true })), unpkg()),
+      '@std/*': jsr(),
+    });
+    const resolutions = new Map();
+    const loader = createLoader({
+      router: fromMport(router),
+      onEvent: (e) => {
+        if (e.type === 'resolve' && e.resolution.trace) resolutions.set(e.specifier, e.resolution);
+        log(`${e.type} ${e.specifier ?? ''} ${(e.resolution?.url ?? e.url ?? '').replace(location.origin, '')} ${e.resolution?.provider ?? e.provider ?? ''}${e.error ? ` ${e.error.message}` : ''}`);
+      },
+    });
+    defineModuleElements({ loader });
+
+    const render = () => {
+      $('resolutions').innerHTML = '<thead><tr><th>specifier</th><th>resolution</th><th>trace</th></tr></thead><tbody>' +
+        [...resolutions].map(([s, r]) => `<tr><td><code>${esc(s)}</code></td><td class="small"><code>${esc(r.url)}</code><div class="muted">provider: ${esc(r.provider)} · version: ${esc(r.version)} · build: ${esc(r.build)}</div></td><td>${traceHTML(r.trace)}</td></tr>`).join('') + '</tbody>';
+      $('health').innerHTML = healthHTML(router.health.snapshot());
+      $('lock').textContent = JSON.stringify(router.lock.toJSON(), null, 2);
+    };
+
     try {
-      // mport's published 1.0.0 tarball is missing files; import it from source on a CDN you trust.
-      const { MPortURL } = await import('https://cdn.jsdelivr.net/gh/johnhenry/mport/src/index.mjs');
-      const loader = createLoader({
-        router: chainRouters(mportRouter({ MPortURL })),
-        onEvent: (e) => log(`${e.type} ${e.specifier ?? ''} ${e.resolution?.url ?? e.url ?? ''} ${e.resolution?.provider ?? e.provider ?? ''}${e.error ? ` ${e.error.message}` : ''}`),
+      const [lodash, std] = [$('lodash'), $('std')];
+      await Promise.all([lodash.module, std.module]);
+      const { _ } = lodash.bindings;
+      const { toCamelCase } = std.bindings;
+      $('result').innerHTML = `<span class="status pass">loaded</span> lodash-es ${esc(_.VERSION)}: <code>_.chunk([1,2,3,4,5], 2)</code> = <code>${esc(JSON.stringify(_.chunk([1, 2, 3, 4, 5], 2)))}</code>` +
+        `<br><span class="status pass">loaded</span> @std/text: <code>toCamelCase("module graph")</code> = <code>${esc(toCamelCase('module graph'))}</code>`;
+      render();
+      $('again').disabled = false;
+      $('again').addEventListener('click', async () => {
+        for (const s of ['npm:lodash-es@^4', 'jsr:@std/text@^1']) resolutions.set(s, await loader.resolve(s));
+        render();
       });
-      defineModuleElements({ loader });
-      const imp = document.getElementById('lodash');
-      await imp.module;
-      const _ = imp.bindings._;
-      result.innerHTML = `<span class="status pass">loaded</span> lodash-es ${esc(_.VERSION)}: <code>_.chunk([1,2,3,4,5], 2)</code> = <code>${esc(JSON.stringify(_.chunk([1, 2, 3, 4, 5], 2)))}</code>`;
     } catch (error) {
-      result.innerHTML = `<div class="error-box">${esc(errorText(error))}</div><p class="small muted">This page needs network access to public CDNs.</p>`;
+      $('result').innerHTML = `<div class="error-box">${esc(errorText(error))}</div>${error.trace ? traceHTML(error.trace) : ''}<p class="small muted">This page needs network access to public CDNs and registries.</p>`;
+      render();
     }
   </script>
   <script type="module" src="./shared/site.js"></script>

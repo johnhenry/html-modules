@@ -1,22 +1,25 @@
 /**
- * The Router interface: the seam between the module graph and CDN routing.
+ * The Router interface: the seam between the module graph and routing.
  *
- * web-module-graph does NOT implement CDN selection/fallback/racing itself.
- * It asks a Router where a specifier lives. The primary implementation is
- * `mportRouter()` (backed by the `mport` CDN router); `basicRouter()` and
- * `importMapRouter()` exist for static/offline use and tests.
+ * web-module-graph asks a Router where a specifier lives. Package and CDN
+ * routing (versions, registries, mirrors, strategies, health, lockfiles) is
+ * mport v2's job: wrap an mport router with `fromMport()`. `basicRouter()`
+ * (static aliases), `importMapRouter()` and plain functions cover the rest.
  *
  * @typedef {object} Resolution
  * @property {string} url             Absolute URL of the module.
- * @property {string} [provider]      Which origin/CDN served it (e.g. "cdn.jsdelivr.net").
+ * @property {string} [provider]      Which provider or origin served it (e.g. "esm.sh").
  * @property {'js'|'html'} [type]     Module format, if the router knows it.
  * @property {string} [version]       Resolved version, if known.
  * @property {string} [integrity]     SRI hash, if known.
- * @property {object} [module]        Already-evaluated JS namespace (routers that import while resolving, like mport).
+ * @property {object} [module]        Already-evaluated JS namespace (mport with `probe: "import"`).
+ * @property {string} [build]         mport: the artifact build ("esm.sh", "npm", …).
+ * @property {object[]} [trace]       mport: every lookup, probe, skip and failure.
  *
  * @typedef {object} ResolveContext
  * @property {string} [referrer]      URL of the importing module/document.
  * @property {AbortSignal} [signal]
+ * @property {(event: object) => void} [onEvent]  routers that trace (mport) report here.
  *
  * @typedef {object} Router
  * @property {(specifier: string, context?: ResolveContext) => (Resolution|null|Promise<Resolution|null>)} resolve

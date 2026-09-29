@@ -7,8 +7,8 @@
  *     ≈ import { Card } from "./ui.js"; customElements.define("ui-card", Card)
  *
  * The elements are a control plane only. Module loading is ordinary ESM
- * (`import()`) or the HTML-module loader; resolution goes through the loader's
- * import map / router (e.g. mport v2 via fromMport) / host resolution.
+ * (`import()`) or the HTML-module loader; bare specifiers resolve through the
+ * page's import map (host resolution).
  */
 import { createLoader } from './loader.js';
 import { readImportDeclaration, applyImport } from './declarations.js';

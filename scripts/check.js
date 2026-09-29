@@ -4,7 +4,7 @@ import { readdir } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 
-const roots = ['src', 'bin'];
+const roots = ['src'];
 let count = 0;
 for (const root of roots) {
   for (const entry of await readdir(root, { recursive: true })) {
@@ -14,5 +14,5 @@ for (const root of roots) {
   }
 }
 const index = await import('../src/index.js');
-const routers = await import('../src/routers/index.js');
-console.log(`ok: ${count} files parsed; ${Object.keys(index).length} exports from ".", ${Object.keys(routers).length} from "./routers"`);
+
+console.log(`ok: ${count} files parsed; ${Object.keys(index).length} exports from "."`);

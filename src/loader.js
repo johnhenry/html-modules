@@ -1,27 +1,25 @@
 /**
- * The loader: specifier → Resolution → module namespace, for JS and HTML alike.
- *
- * Resolution order for bare specifiers:
- *   1. `importMap` (explicit pins / a compiled lock)
- *   2. `router`    (e.g. fromMport(createRouter(...)): mport v2 package/CDN routing)
- *   3. `hostResolve` (e.g. `import.meta.resolve`, which honors the page's import map)
- * Relative and absolute URLs resolve against the referrer (after the import
- * map, which may remap them with URL keys). URL-like specifiers with other
- * schemes ("npm:react", "jsr:@std/path") go to the router and hostResolve, and
- * are used as-is only if nothing claims them. A `signal` passed to load() or
- * resolve() reaches the router (mport aborts its probes and races with it).
+ * The loader: specifier → URL → module namespace, for JS and HTML alike.
+ * Relative and absolute URLs resolve against the referrer; bare specifiers go
+ * to `hostResolve` (e.g. `import.meta.resolve`, which honors the page's import map).
  */
-import { resolveImportMap, parseURLLikeSpecifier } from './import-map.js';
 import { parseHTMLModule, defaultExportValue, dataScriptURL } from './html-module.js';
-import { toRouter } from './routers/interface.js';
+
+const isRelative = (s) => s.startsWith('/') || s.startsWith('./') || s.startsWith('../');
+function parseURLLikeSpecifier(specifier, baseURL) {
+  if (isRelative(specifier)) return new URL(specifier, baseURL);
+  try {
+    return new URL(specifier);
+  } catch {
+    return null;
+  }
+}
 
 const HTML_EXT = /\.html?(?:[?#]|$)/i;
 const FETCHABLE = new Set(['http:', 'https:', 'file:', 'data:', 'blob:']);
 
 /**
  * @param {object} [options]
- * @param {import('./routers/interface.js').Router | Function} [options.router]
- * @param {{imports?: object, scopes?: object}} [options.importMap]
  * @param {string} [options.baseURL]            default referrer
  * @param {(specifier: string) => string|null|undefined} [options.hostResolve]
  * @param {typeof fetch} [options.fetch]
@@ -34,8 +32,6 @@ const FETCHABLE = new Set(['http:', 'https:', 'file:', 'data:', 'blob:']);
  * @param {(event: {type: string, [k: string]: any}) => void} [options.onEvent]  observability hook
  */
 export function createLoader({
-  router,
-  importMap,
   baseURL = globalThis.document?.baseURI ?? globalThis.location?.href,
   hostResolve,
   fetch: fetchImpl = (...a) => globalThis.fetch(...a),
@@ -47,7 +43,6 @@ export function createLoader({
   window = globalThis.window ?? globalThis,
   onEvent = () => {},
 } = {}) {
-  const routerImpl = router ? toRouter(router) : null;
   /** @type {Map<string, Promise<object>>} */
   const cache = new Map();
   const parse = parseHTML ?? ((html) => {
@@ -55,21 +50,10 @@ export function createLoader({
     return new window.DOMParser().parseFromString(html, 'text/html');
   });
 
-  async function resolve(specifier, referrer, { signal } = {}) {
+  async function resolve(specifier, referrer) {
     referrer ||= baseURL;
     const asURL = parseURLLikeSpecifier(specifier, referrer);
-    if (importMap) {
-      // Import maps also remap URL-like specifiers (URL keys), as in browsers.
-      const url = resolveImportMap(importMap, specifier, { referrer, mapBaseURL: baseURL ?? referrer });
-      if (url && url !== asURL?.href) return { url, provider: 'import-map' };
-    }
-    // Fetchable URLs load directly. Other schemes ("npm:", "jsr:", …) parse as
-    // URLs but are routing prefixes, so routers and hostResolve see them first.
     if (asURL && FETCHABLE.has(asURL.protocol)) return { url: asURL.href };
-    if (routerImpl) {
-      const res = await routerImpl.resolve(specifier, { referrer, ...(signal && { signal }) });
-      if (res?.url) return res;
-    }
     const hosted = hostResolve?.(specifier);
     if (hosted) return { url: String(hosted) };
     if (asURL) return { url: asURL.href };
@@ -157,14 +141,14 @@ export function createLoader({
    * Load a module namespace.
    * @param {string} specifier
    * @param {string} [referrer]
-   * @param {{ type?: 'js'|'html', signal?: AbortSignal }} [options]
+   * @param {{ type?: 'js'|'html' }} [options]
    */
-  async function load(specifier, referrer, { type, signal } = {}) {
+  async function load(specifier, referrer, { type } = {}) {
     referrer ||= baseURL;
-    const resolution = await resolve(specifier, referrer, { signal });
+    const resolution = await resolve(specifier, referrer);
     onEvent({ type: 'resolve', specifier, referrer, resolution });
     return start(specifier, resolution, type);
   }
 
-  return { load, resolve, cache, router: routerImpl, importMap };
+  return { load, resolve, cache };
 }

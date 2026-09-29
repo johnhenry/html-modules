@@ -106,22 +106,3 @@ export function renderChecks(target, checks) {
 export function status(ok, text = ok ? 'pass' : 'fail') {
   return `<span class="status ${ok === 'pending' ? 'pending' : ok ? 'pass' : 'fail'}">${esc(text)}</span>`;
 }
-
-/** An mport resolution trace (lookup / resolved / probe / ok / fail / skip / aborted) as a list. */
-export function traceHTML(trace = []) {
-  const trim = (s) => String(s).replaceAll(location.origin, '');
-  return `<ol class="trace">${trace.map((e) => `<li class="t-${esc(e.type)}"><span class="t-type">${esc(e.type)}</span> <span class="t-provider">${esc(e.provider)}</span>` +
-    `${e.version ? ` → <code>${esc(e.version)}</code>` : ''}` +
-    `${e.cached ? ' <span class="muted">(cached)</span>' : ''}` +
-    `${e.ms != null ? ` <span class="muted">${Math.round(e.ms)} ms</span>` : ''}` +
-    `${e.reason ? ` <span class="muted">${esc(e.reason)}</span>` : ''}` +
-    `${e.error ? ` <span class="t-error">${esc(trim(e.error))}</span>` : ''}</li>`).join('')}</ol>`;
-}
-
-/** mport's router.health.snapshot() as a table. */
-export function healthHTML(snapshot) {
-  const rows = Object.entries(snapshot)
-    .map(([name, s]) => `<tr><td><code>${esc(name)}</code></td><td>${s.ok}</td><td>${s.fail}</td><td>${s.streak}</td><td>${s.latency == null ? '—' : `${Math.round(s.latency)} ms`}</td><td>${s.healthy ? status(true, 'closed') : status(false, 'open')}</td></tr>`)
-    .join('');
-  return `<div class="table-wrap"><table><thead><tr><th>provider</th><th>ok</th><th>fail</th><th>streak</th><th>latency</th><th>circuit</th></tr></thead><tbody>${rows}</tbody></table></div>`;
-}

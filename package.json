@@ -1,7 +1,7 @@
 {
   "name": "html-modules",
   "version": "0.0.0",
-  "description": "A unified JS + HTML module graph for the browser: HTML modules with named/default/namespace exports, declarative <module-import>/<module-binding> Web Components, import-map compilation, and a router seam whose package/CDN routing is delegated to mport v2.",
+  "description": "Declarative HTML modules: export components from ordinary HTML, import them with <html-import src as>, and optionally compile them to ES modules.",
   "author": "John Henry <john@iamjohnhenry.com>",
   "license": "MIT",
   "type": "module",
@@ -14,39 +14,24 @@
   "main": "./src/index.js",
   "exports": {
     ".": "./src/index.js",
-    "./browser": "./src/browser.js",
-    "./routers": "./src/routers/index.js"
-  },
-  "bin": {
-    "html-modules": "./bin/html-modules.js"
+    "./browser": "./src/browser.js"
   },
   "files": [
-    "src",
-    "bin"
+    "src"
   ],
   "scripts": {
     "test": "node --test \"test/*.test.js\"",
     "check": "node scripts/check.js",
     "build": "node scripts/check.js"
   },
-  "peerDependencies": {
-    "mport": "^2.0.0"
-  },
-  "peerDependenciesMeta": {
-    "mport": {
-      "optional": true
-    }
-  },
   "keywords": [
-    "esm",
     "html-modules",
-    "import-maps",
     "web-components",
-    "cdn",
-    "module-router"
+    "custom-elements",
+    "templates",
+    "esm"
   ],
   "devDependencies": {
-    "linkedom": "^0.18.13",
-    "mport": "file:../../mport"
+    "linkedom": "^0.18.13"
   }
 }

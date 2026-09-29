@@ -1,4 +1,0 @@
-@tokens	{"url":"/examples/import-maps/tokens-v2.html","route":"@tokens"}
-greet@^1	{"specifier":"greet@^1","key":"greet","registry":"npm","name":"greet","range":"^1","version":"1.0.0","path":"","build":"mirror","provider":"primary","url":"/examples/routers/mirrors/primary/greet@1.0.0/index.js","cached":false}
-jsr:@demo/scoped@^2	{"specifier":"jsr:@demo/scoped@^2","key":"jsr:@demo/scoped","registry":"jsr","name":"@demo/scoped","range":"^2","version":"2.0.0","path":"","build":"mirror","provider":"primary","url":"/examples/routers/mirrors/primary/@demo/scoped@2.0.0/index.js","cached":false}
-@lib/	{"url":"/examples/library/","route":"@lib/*"}

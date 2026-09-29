@@ -28,7 +28,7 @@ the pages that cover it.
 | --- | --- |
 | [`index.html`](./index.html) | The hub: every page, and a checklist of every capability with the pages that prove it. |
 | [`quickstart.html`](./quickstart.html) | One script and one `<html-import src as>`; namespaced elements written before the import upgrade in place when the module arrives. |
-| [`library.html`](./library.html) | A component library written in HTML (`components/`): templates, styles, slots and parts, a default export, data, stylesheets, a module importing another, and a barrel; one cache entry per URL. |
+| [`library.html`](./library.html) | A component library written in HTML (`components/`): templates, styles, slots and parts, a default export, data, stylesheets, a module importing another, and barrels using every re-export form (list, namespace, default); one cache entry per URL. |
 | [`namespaces.html`](./namespaces.html) | `as="ui"` makes `<ui--card>`, `delimiter="-"` makes `<ui-card>`; one module under several namespaces; a bare specifier resolved through the page's import map; which delimiters the live registry accepts. |
 | [`bindings.html`](./bindings.html) | `<html-binding>`: bind only what the page uses, choose tags, adopt stylesheets, read data, bind a default export, load for side effects, and add bindings after load. |
 | [`identity.html`](./identity.html) | One definition, many tags (`define()`, `element=`, two namespaces), each a subclass of one base element; a default export has no name, so the importer names it. |

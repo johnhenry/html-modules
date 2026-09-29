@@ -1,135 +1,156 @@
 /**
- * Web Components reference implementation of the declarative layer:
- * <module-import>, <module-binding> (prefix configurable) and <define-element>.
+ * The declarative layer: <html-import>, <html-binding> and <html-export>.
  *
- *   <module-import from="./ui.js"><module-binding name="Card"></module-binding></module-import>
- *   <define-element name="ui-card" component="Card"></define-element>
- *     ≈ import { Card } from "./ui.js"; customElements.define("ui-card", Card)
+ *   <html-import src="./ui.html" as="ui"></html-import>             every component as <ui--…>
+ *   <html-import src="./ui.html" as="ui">                           only these:
+ *     <html-binding export="card"></html-binding>                     <ui--card>
+ *     <html-binding export="button" element="brand-button"></html-binding>
+ *     <html-binding export="theme" adopt></html-binding>              a stylesheet, adopted
+ *   </html-import>
+ *   <html-import src="./counter.js">                                a JS-authored class
+ *     <html-binding export="Counter" element="x-counter"></html-binding>
+ *   </html-import>
+ *   <html-import src="./setup.html"></html-import>                  load only (side effects, warm cache)
  *
- * The elements are a control plane only. Module loading is ordinary ESM
- * (`import()`) or the HTML-module loader; bare specifiers resolve through the
- * page's import map (host resolution).
+ * Elements that use a binding may appear anywhere, before or after the import:
+ * they upgrade natively when their tag is defined (PRD §17).
+ *
+ * Events: `load` (detail: { module, elements, bindings }) and `error`
+ * (detail: { error }) on <html-import>; `load` / `error` on each
+ * <html-binding>, where `error` bubbles through its import.
  */
-import { createLoader } from './loader.js';
-import { readImportDeclaration, applyImport } from './declarations.js';
-import { scopeFor } from './scope.js';
-import { defineElement } from './interpret.js';
+import { applyBinding, registerComponents } from './runtime.js';
+import { bindingRecord } from './record.js';
+import { assertNamespace } from './names.js';
+
+const BIND = Symbol('html-modules.bind');
 
 function domReady(doc) {
   if (!doc || doc.readyState !== 'loading') return Promise.resolve();
-  return new Promise((r) => doc.addEventListener('DOMContentLoaded', () => r(), { once: true }));
+  return new Promise((resolve) => doc.addEventListener('DOMContentLoaded', () => resolve(), { once: true }));
 }
 
 /**
- * Define the declarative module elements.
- * @param {object} [options]
- * @param {any} [options.window]          window-like global providing HTMLElement/customElements/document
- * @param {ReturnType<typeof createLoader>} [options.loader]
- * @param {string} [options.prefix]       element prefix; "module" → <module-import>, <module-binding>,
- *                                         <define-element>; "esm" → <esm-import>, <esm-binding>, <esm-define>
- * @param {CustomElementRegistry} [options.registry]   where `element="…"` registrations go
- * @param {import('./scope.js').ModuleScope} [options.scope]
+ * Define <html-import>, <html-binding> and <html-export> over an HTMLModules instance.
+ * @param {{ modules: ReturnType<typeof import('./html-modules.js').createHTMLModules>, window?: any, registry?: CustomElementRegistry }} options
  */
-export function defineModuleElements({
-  window: win = globalThis,
-  loader,
-  prefix = 'module',
-  registry = win.customElements,
-  scope = scopeFor(win.document ?? win),
-} = {}) {
-  const theLoader = loader ?? createLoader({ window: win });
-  const importTag = `${prefix}-import`;
-  const bindingTag = `${prefix}-binding`;
-  const defineTag = prefix === 'module' ? 'define-element' : `${prefix}-define`;
+export function defineHTMLModuleElements({ modules, window: win = globalThis, registry } = {}) {
+  if (!modules) throw new TypeError('defineHTMLModuleElements: pass { modules } (from createHTMLModules())');
+  const reg = () => registry ?? win.customElements;
+  const reported = new WeakSet();
 
-  class ModuleImport extends win.HTMLElement {
-    #promise = null;
-    #bindings = null;
+  class HTMLImport extends win.HTMLElement {
+    #module = null;
+    #ready = null;
+    #state = null; // set once the module is loaded and the document parsed
+    #applied = new WeakSet();
+    #elements = {};
+    #bindings = {};
 
-    /** Promise of the imported module namespace. */
+    /** Promise of the module namespace (loads it if needed). */
     get module() {
-      return this.#start();
+      return this.#load();
     }
 
-    /** Local bindings created by this import (after it loads). */
+    /** Promise that settles once the module is bound: { module, elements, bindings }. */
+    get ready() {
+      this.#start();
+      return this.#ready;
+    }
+
+    /** Registered tags → classes, so far. */
+    get elements() {
+      return { ...this.#elements };
+    }
+
+    /** Bound export names → values (components, stylesheets, data), so far. */
     get bindings() {
-      return this.#bindings;
-    }
-
-    get declaration() {
-      return readImportDeclaration(this, { prefix });
+      return { ...this.#bindings };
     }
 
     connectedCallback() {
-      this.#start().catch(() => {}); // surfaced via the "error" event and `.module`
+      this.#start();
+    }
+
+    #load() {
+      this.#module ??= (async () => {
+        const src = this.getAttribute('src');
+        if (!src) throw new SyntaxError('<html-import> requires a "src" attribute');
+        return modules.load(src, { base: this.ownerDocument?.baseURI, type: this.getAttribute('type') || undefined });
+      })();
+      return this.#module;
     }
 
     #start() {
-      this.#promise ??= (async () => {
+      if (this.#ready) return;
+      this.#ready = (async () => {
         const doc = this.ownerDocument;
-        await domReady(doc);
-        const decl = readImportDeclaration(this, { prefix });
-        const referrer = doc?.baseURI || undefined;
-        const ns = await theLoader.load(decl.from, referrer, decl.type ? { type: decl.type } : {});
-        this.#bindings = applyImport(decl, ns, { scope, registry, document: doc, window: win });
-        this.dispatchEvent(new win.CustomEvent('load', { detail: { module: ns, bindings: this.#bindings } }));
-        return ns;
-      })().catch((error) => {
-        this.dispatchEvent(new win.CustomEvent('error', { detail: { error } }));
-        throw error;
+        // Load while the rest of the document parses; decide what to bind once
+        // this element's children exist.
+        const [module] = await Promise.all([this.#load(), domReady(doc)]);
+        const as = this.getAttribute('as') || undefined;
+        if (as) assertNamespace(as);
+        this.#state = { module, as, from: this.getAttribute('src'), root: this.getRootNode?.() ?? doc };
+        const children = [...this.children].filter((c) => c.localName === 'html-binding');
+        let firstError = null;
+        if (children.length) {
+          for (const child of children) {
+            const error = this.#apply(child);
+            firstError ??= error;
+          }
+        } else if (as) {
+          Object.assign(this.#elements, registerComponents(module, { as, from: this.#state.from, registry: reg(), window: win }));
+        }
+        if (firstError) throw firstError;
+        const detail = { module, elements: this.elements, bindings: this.bindings };
+        this.dispatchEvent(new win.CustomEvent('load', { detail }));
+        return detail;
+      })();
+      this.#ready.catch((error) => {
+        if (reported.has(error)) return; // already announced by its <html-binding>
+        this.dispatchEvent(new win.CustomEvent('error', { bubbles: true, composed: true, detail: { error } }));
       });
-      return this.#promise;
+    }
+
+    /** Called by a child <html-binding> when it connects. */
+    [BIND](binding) {
+      if (this.#state) this.#apply(binding); // otherwise the initial pass picks it up
+      else this.#start();
+    }
+
+    #apply(el) {
+      if (this.#applied.has(el)) return null;
+      this.#applied.add(el);
+      const { module, as, from, root } = this.#state;
+      try {
+        const result = applyBinding(module, bindingRecord(Object.fromEntries([...el.attributes].map((a) => [a.name, a.value]))), {
+          as, from, registry: reg(), window: win, root,
+        });
+        this.#bindings[result.export] = result.value;
+        if (result.tag) this.#elements[result.tag] = result.element;
+        el.dispatchEvent(new win.CustomEvent('load', { detail: result }));
+        return null;
+      } catch (error) {
+        reported.add(error);
+        el.dispatchEvent(new win.CustomEvent('error', { bubbles: true, composed: true, detail: { error, binding: el } }));
+        return error;
+      }
     }
   }
 
-  class ModuleBinding extends win.HTMLElement {}
-
-  /**
-   * <define-element name="ui-card" component="Card">: register a binding that
-   * an import declared, as a separate explicit step. The binding may come from
-   * an import anywhere in the document, before or after this element, including
-   * one inserted later; until then the element waits (`scope.whenDeclared`).
-   */
-  class DefineElement extends win.HTMLElement {
-    #promise = null;
-
-    /** Promise of the registered constructor. */
-    get defined() {
-      return this.#start();
-    }
-
+  class HTMLBinding extends win.HTMLElement {
     connectedCallback() {
-      this.#start().catch(() => {}); // surfaced via the "error" event and `.defined`
-    }
-
-    #start() {
-      this.#promise ??= (async () => {
-        const doc = this.ownerDocument;
-        await domReady(doc);
-        const name = this.getAttribute('name');
-        const component = this.getAttribute('component');
-        if (!name || !component) throw new SyntaxError(`<${defineTag}> requires "name" and "component" attributes`);
-        const value = await scope.whenDeclared(component);
-        const constructor = defineElement(registry, name, value, win);
-        this.dispatchEvent(new win.CustomEvent('load', { detail: { name, constructor } }));
-        return constructor;
-      })().catch((error) => {
-        this.dispatchEvent(new win.CustomEvent('error', { detail: { error } }));
-        throw error;
-      });
-      return this.#promise;
+      const parent = this.parentElement;
+      if (parent?.localName === 'html-import' && typeof parent[BIND] === 'function') parent[BIND](this);
     }
   }
 
-  const reg = win.customElements;
-  if (!reg.get(importTag)) reg.define(importTag, ModuleImport);
-  if (!reg.get(bindingTag)) reg.define(bindingTag, ModuleBinding);
-  if (!reg.get(defineTag)) reg.define(defineTag, DefineElement);
-  return {
-    ModuleImport: reg.get(importTag),
-    ModuleBinding: reg.get(bindingTag),
-    DefineElement: reg.get(defineTag),
-    loader: theLoader,
-    scope,
-  };
+  /** Inert: exports are read from module documents, never executed in place. */
+  class HTMLExport extends win.HTMLElement {}
+
+  const r = win.customElements;
+  if (!r.get('html-import')) r.define('html-import', HTMLImport);
+  if (!r.get('html-binding')) r.define('html-binding', HTMLBinding);
+  if (!r.get('html-export')) r.define('html-export', HTMLExport);
+  return { HTMLImport: r.get('html-import'), HTMLBinding: r.get('html-binding'), HTMLExport: r.get('html-export') };
 }

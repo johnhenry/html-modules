@@ -1,12 +1,19 @@
 /**
  * One-script bootstrap for browsers:
- *   <script type="module" src=".../html-modules/src/browser.js"></script>
- * Bare specifiers resolve through the page's import map (import.meta.resolve).
+ *
+ *   <script type="module" src="/html-modules/src/browser.js"></script>
+ *   <html-import src="./ui.html" as="ui"></html-import>
+ *   <ui--custom-card>Hello!</ui--custom-card>
+ *
+ * Defines <html-import>, <html-binding> and <html-export>, and exposes the
+ * shared programmatic API as `HTMLModules` (also on globalThis). Bare
+ * specifiers resolve through the page's import map (import.meta.resolve).
  */
-import { createLoader } from './loader.js';
-import { defineModuleElements } from './elements.js';
+import { createHTMLModules } from './html-modules.js';
+import { defineHTMLModuleElements } from './elements.js';
 
-export const loader = createLoader({
+export const HTMLModules = createHTMLModules({
   hostResolve: (specifier) => import.meta.resolve(specifier),
 });
-export const { scope, ModuleImport, ModuleBinding, DefineElement } = defineModuleElements({ loader });
+export const { HTMLImport, HTMLBinding, HTMLExport } = defineHTMLModuleElements({ modules: HTMLModules });
+globalThis.HTMLModules ??= HTMLModules;

@@ -1,7 +1,6 @@
-<!doctype html>
-<module-export from="./ui.html">
-  <module-binding name="Card" as="Panel"></module-binding>
-</module-export>
-<export from="./ui.js" name="Button"></export>
-<module-export from="./ui.js" all></module-export>
-<template export="Local"><p>local</p></template>
+<!-- export * from "./ui.html" (components), plus renamed and JS re-exports -->
+<html-export src="./ui.html"></html-export>
+<html-export src="./ui.html" name="button" import="fancy-button"></html-export>
+<html-export src="./ui.html" name="settings" import="config"></html-export>
+<html-export src="./widgets.js" name="counter" import="Counter"></html-export>
+<html-export name="custom-card"><template><div class="local">local card shadows the star export</div></template></html-export>

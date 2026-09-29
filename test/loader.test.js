@@ -1,96 +1,140 @@
+// Runtime loading, the module cache, dependencies and the programmatic API (PRD §15, §16, §20).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createLoader, exportNames } from '../src/index.js';
-import { fixtures, fileFetch, makeWindow } from './helpers.js';
+import { isHTMLComponent, isHTMLStylesheet } from '../src/index.js';
+import { setup, fixtures, tick, ORIGIN } from './helpers.js';
 
-const make = (opts = {}) => createLoader({ baseURL: fixtures, fetch: fileFetch, window: makeWindow(), ...opts });
+const at = (path) => new URL(path, fixtures).href;
 
-test('loads JS modules with native import()', async () => {
-  const loader = make();
-  const ns = await loader.load('./ui.js');
-  assert.equal(typeof ns.Card, 'function');
-  assert.equal(ns.config.theme, 'dark');
+test('HTMLModules.load(): a namespace of definitions shaped like a compiled module', async () => {
+  const { modules } = setup();
+  const ui = await modules.load(at('ui.html'));
+  assert.equal(Object.prototype.toString.call(ui), '[object Module]');
+  assert.ok(Object.isFrozen(ui));
+  assert.deepEqual(Object.keys(ui), ['components', 'config', 'customCard', 'default', 'fancyButton', 'note', 'theme']);
+  const { customCard, fancyButton } = ui; // PRD §20
+  assert.ok(isHTMLComponent(customCard) && isHTMLComponent(fancyButton));
+  assert.equal(customCard.name, 'custom-card');
+  assert.equal(customCard.url, at('ui.html'));
+  assert.ok(isHTMLStylesheet(ui.theme));
+  assert.deepEqual(ui.config, { size: 3, brand: 'Acme' });
+  assert.equal(ui.default, ui.note);
+  assert.deepEqual(Object.keys(ui.components), ['custom-card', 'fancy-button', 'note']);
 });
 
-test('loads HTML modules by extension and caches by URL', async () => {
-  let fetches = 0;
-  const loader = make({ fetch: (u) => (fetches++, fileFetch(u)) });
-  const a = await loader.load('./ui.html');
-  const b = await loader.load(new URL('ui.html', fixtures).href);
+test('the cache: one fetch and parse per resolved URL, shared by concurrent loads (§16)', async () => {
+  const { modules, fetch } = setup();
+  const [a, b] = await Promise.all([modules.load(at('ui.html')), modules.load('./fixtures/ui.html', { base: new URL('../', fixtures).href })]);
+  const c = await modules.load(at('ui.html'));
   assert.equal(a, b);
-  assert.equal(fetches, 1);
-  assert.equal(a.Card.localName, 'template');
+  assert.equal(a, c);
+  assert.equal(fetch.log.filter((u) => u.endsWith('/ui.html')).length, 1);
+  assert.ok(modules.cache.has(at('ui.html')));
+  assert.ok(modules.cache.get(at('ui.html')) instanceof Promise);
 });
 
-test('HTML barrels re-export from HTML and JS', async () => {
-  const loader = make();
-  const barrel = await loader.load('./barrel.html');
-  const ui = await loader.load('./ui.js');
-  assert.deepEqual(exportNames(barrel), ['Button', 'Card', 'Local', 'Panel', 'config']);
-  assert.equal(barrel.Button, ui.Button, 'same binding identity across languages');
-  assert.equal(barrel.Card, ui.Card, 'export * from ui.js');
-  assert.equal(barrel.Panel.localName, 'template', 'Card from ui.html re-exported as Panel');
+test('failed loads are evicted and can be retried; events report fetch, load and error', async () => {
+  const files = { 'flaky.html': 503 };
+  const { modules, events } = setup({ files });
+  await assert.rejects(modules.load('./flaky.html'), /Failed to fetch HTML module http:\/\/modules\.test\/flaky\.html: 503/);
+  await tick();
+  assert.equal(modules.cache.has(`${ORIGIN}flaky.html`), false);
+  files['flaky.html'] = '<html-export name="ok"><template>ok</template></html-export>';
+  const { modules: again } = setup({ files });
+  assert.ok((await again.load('./flaky.html')).ok);
+  assert.deepEqual(events.map((e) => e.type), ['fetch', 'error']);
 });
 
-test('circular HTML re-exports are detected', async () => {
-  await assert.rejects(make().load('./cycle-a.html'), /Circular HTML module re-export: .*cycle-b\.html -> .*cycle-a\.html -> .*cycle-b\.html/);
-  await assert.rejects(make().load('./cycle-self.html'), /Circular HTML module re-export: .*cycle-self\.html -> .*cycle-self\.html/);
+test('resolution: relative to the importer; bare specifiers through hostResolve (the page import map)', async () => {
+  const { modules } = setup({ hostResolve: (s) => (s === '@acme/ui' ? at('ui.html') : null) });
+  assert.equal(modules.resolve('./x.html', 'http://a.test/dir/page.html'), 'http://a.test/dir/x.html');
+  assert.equal(modules.resolve('https://cdn.test/ui.html'), 'https://cdn.test/ui.html');
+  assert.ok((await modules.load('@acme/ui')).customCard);
+  assert.throws(() => modules.resolve('@nope/ui'), /Unable to resolve bare specifier "@nope\/ui"/);
 });
 
-test('circular HTML re-exports loaded concurrently reject instead of deadlocking', async () => {
-  const loader = make();
-  const settled = Promise.allSettled([loader.load('./cycle-a.html'), loader.load('./cycle-b.html')]);
-  const timeout = new Promise((r) => setTimeout(() => r('timeout'), 1000).unref());
-  const result = await Promise.race([settled, timeout]);
-  assert.notEqual(result, 'timeout', 'loads must settle');
-  for (const r of result) {
-    assert.equal(r.status, 'rejected');
-    assert.match(r.reason.message, /Circular HTML module re-export/);
-  }
-  // Failed loads are evicted, so a later attempt reports the cycle again rather than hanging.
-  await assert.rejects(loader.load('./cycle-b.html'), /Circular/);
+test('modules import modules: dependencies resolve relative to the importing module and load first', async () => {
+  const { modules, fetch } = setup();
+  const profile = await modules.load(at('profile.html'));
+  const def = profile.userProfile;
+  assert.deepEqual(def.imports.map((i) => [i.from, i.as, i.bindings]), [['./icons.html', 'icon', []], ['./ui.html', undefined, [{ export: 'theme', adopt: true }]]]);
+  assert.equal(def.imports[0].module, await modules.load(at('icons.html')));
+  assert.deepEqual(fetch.log.map((u) => u.split('/').pop()).sort(), ['icons.html', 'profile.html', 'ui.html']);
 });
 
-test('shared dependencies (diamonds) are not cycles, even when loaded concurrently', async () => {
-  const loader = make();
-  const [diamond, barrel, ui] = await Promise.all(['./diamond.html', './barrel.html', './ui.html'].map((s) => loader.load(s)));
-  assert.equal(diamond.ui, ui, 'export * as ui');
-  assert.equal(diamond.Panel, barrel.Panel);
-  assert.equal(diamond.Panel, ui.Card);
+test('re-exports (barrels): every component, one renamed, from HTML or JS; locals win', async () => {
+  const { modules } = setup();
+  const [barrel, ui, widgets] = await Promise.all([at('barrel.html'), at('ui.html'), at('widgets.js')].map((u) => modules.load(u)));
+  assert.equal(barrel.button, ui.fancyButton, 'identity is preserved: the same definition');
+  assert.equal(barrel.fancyButton, ui.fancyButton);
+  assert.equal(barrel.counter, widgets.Counter);
+  assert.equal(barrel.settings, ui.config);
+  assert.notEqual(barrel.customCard, ui.customCard, 'a local export shadows a star export');
+  assert.equal(barrel.default, undefined, 'star re-exports never include default');
+  assert.deepEqual(Object.keys(barrel.components).sort(), ['button', 'counter', 'custom-card', 'fancy-button', 'note']);
+  assert.equal('theme' in barrel.components, false);
 });
 
-test('HTML modules without a doctype or <html> wrapper', async () => {
-  const ns = await make().load('./card.html');
-  assert.deepEqual(exportNames(ns), ['default']);
-  assert.equal(ns.default.localName, 'template');
-});
-
-test('explicit type overrides extension detection', async () => {
-  const loader = make({ importModule: async (u) => ({ imported: u }) });
-  const ns = await loader.load('./ui.html', undefined, { type: 'js' });
-  assert.match(ns.imported, /ui\.html$/);
-});
-
-test('bare specifiers resolve through hostResolve', async () => {
-  const loader = make({ hostResolve: (s) => (s === 'ui' ? new URL('ui.html', fixtures).href : null) });
-  assert.equal((await loader.resolve('ui')).url, new URL('ui.html', fixtures).href);
-  await assert.rejects(loader.resolve('nope'), /Unable to resolve bare specifier/);
-});
-
-test('failed loads are evicted from the cache and reported', async () => {
-  const events = [];
-  let fail = true;
-  const loader = make({
-    importModule: async () => { if (fail) throw new Error('boom'); return { ok: 1 }; },
-    onEvent: (e) => events.push(e),
+test('star re-exports: names two sources disagree on are left out, like ESM', async () => {
+  const { modules } = setup({
+    files: {
+      'a.html': '<html-export name="config"><script type="application/json">1</script></html-export>',
+      'b.html': '<html-export name="config"><script type="application/json">2</script></html-export>',
+      'both.html': '<html-export src="./a.html"></html-export><html-export src="./b.html"></html-export>',
+      'c1.html': '<html-export name="x-card"><template>1</template></html-export>',
+      'c2.html': '<html-export name="x-card"><template>2</template></html-export>',
+      'clash.html': '<html-export src="./c1.html"></html-export><html-export src="./c2.html"></html-export>',
+    },
   });
-  await assert.rejects(loader.load('./x.js'), /boom/);
-  await new Promise((r) => setImmediate(r));
-  assert.equal(events.at(-1).type, 'error');
-  fail = false;
-  assert.deepEqual(await loader.load('./x.js'), { ok: 1 });
+  assert.equal('config' in (await modules.load('./both.html')), false);
+  await assert.rejects(modules.load('./clash.html'), /Conflicting star exports for 'x-card'/);
 });
 
-test('HTML fetch errors surface', async () => {
-  await assert.rejects(make().load('./missing.html'), /Failed to fetch HTML module .*missing\.html: 404/);
+test('JS modules load with native import(); definitions in the same module share identity', async () => {
+  const { modules } = setup();
+  const widgets = await modules.load(at('widgets.js'));
+  assert.equal(widgets, await import('./fixtures/widgets.js'));
+});
+
+test('dependency errors: missing modules, missing re-exported names, cycles', async () => {
+  const { modules } = setup({
+    files: {
+      'missing-dep.html': '<html-import src="./nowhere.html" as="n"></html-import>',
+      'missing-name.html': '<html-export src="./ui.html" name="nope"></html-export>',
+      'ui.html': '<html-export name="card"><template>x</template></html-export>',
+      'self.html': '<html-export src="./self.html"></html-export>',
+    },
+  });
+  await assert.rejects(modules.load('./missing-dep.html'), /Failed to fetch HTML module .*nowhere\.html: 404/);
+  await assert.rejects(modules.load('./missing-name.html'), { name: 'SyntaxError', message: "The requested module './ui.html' does not provide an export named 'nope'" });
+  await assert.rejects(modules.load('./self.html'), /Circular HTML module dependency: .*self\.html -> .*self\.html/);
+  await assert.rejects(setup().modules.load(at('cycle-a.html')), /Circular HTML module dependency: .*cycle-b\.html -> .*cycle-a\.html -> .*cycle-b\.html/);
+});
+
+test('concurrent loads of a cycle reject instead of deadlocking', async () => {
+  const { modules } = setup();
+  const results = await Promise.allSettled([modules.load(at('cycle-a.html')), modules.load(at('cycle-b.html'))]);
+  assert.ok(results.every((r) => r.status === 'rejected'));
+  assert.ok(results.some((r) => /Circular/.test(r.reason.message)));
+});
+
+test('HTMLModules.import(): load and bind in one step, like <html-import>', async () => {
+  const { modules, window } = setup();
+  const { module, elements } = await modules.import(at('ui.html'), { as: 'api' });
+  assert.deepEqual(Object.keys(elements).sort(), ['api--custom-card', 'api--fancy-button', 'api--note']);
+  assert.equal(window.customElements.get('api--custom-card').component, module.customCard);
+  const picked = await modules.import(at('ui.html'), { as: 'pick', bindings: [{ export: 'fancy-button', element: 'buy-button' }, { export: 'config' }, { export: 'theme', adopt: true }] });
+  assert.deepEqual(Object.keys(picked.elements), ['buy-button']);
+  assert.equal(picked.values.config.brand, 'Acme');
+  assert.equal(window.document.head.querySelectorAll('style[data-html-module="theme"]').length, 1);
+  assert.equal(window.customElements.get('pick--custom-card'), undefined, 'selective bindings register nothing else');
+});
+
+test('HTMLModules.bind() and definition.define() on a loaded module', async () => {
+  const { modules, window } = setup();
+  const ui = await modules.load(at('ui.html'));
+  modules.bind(ui, { as: 'late' });
+  assert.ok(window.customElements.get('late--note'));
+  const Mine = ui.customCard.define('my-custom-card', { window });
+  assert.equal(window.customElements.get('my-custom-card'), Mine);
 });

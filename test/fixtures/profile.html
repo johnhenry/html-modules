@@ -1,0 +1,10 @@
+<html-import src="./icons.html" as="icon"></html-import>
+<html-import src="./ui.html">
+  <html-binding export="theme" adopt></html-binding>
+</html-import>
+
+<html-export name="user-profile">
+  <template>
+    <section><icon--star></icon--star> <slot></slot></section>
+  </template>
+</html-export>

@@ -14,10 +14,13 @@
   "main": "./src/index.js",
   "exports": {
     ".": "./src/index.js",
-    "./browser": "./src/browser.js"
+    "./browser": "./src/browser.js",
+    "./runtime": "./src/runtime.js",
+    "./compiler": "./src/compiler.js"
   },
   "files": [
-    "src"
+    "src",
+    "bin"
   ],
   "scripts": {
     "test": "node --test \"test/*.test.js\"",
@@ -33,5 +36,8 @@
   ],
   "devDependencies": {
     "linkedom": "^0.18.13"
+  },
+  "bin": {
+    "html-module": "./bin/html-module.js"
   }
 }

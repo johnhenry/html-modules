@@ -4,7 +4,7 @@ import { readdir } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 
-const roots = ['src'];
+const roots = ['src', 'bin'];
 let count = 0;
 for (const root of roots) {
   for (const entry of await readdir(root, { recursive: true })) {

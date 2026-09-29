@@ -1,7 +1,15 @@
-export { createNamespace, exportNames, hasExport } from './namespace.js';
-export { parseHTMLModule, defaultExportValue, dataScriptURL } from './html-module.js';
-export { createLoader } from './loader.js';
-export { ModuleScope, scopeFor } from './scope.js';
-export { readImportDeclaration, applyImport } from './declarations.js';
-export { defineElement, adoptStyleSheet, templateElementClass, toElementConstructor } from './interpret.js';
-export { defineModuleElements } from './elements.js';
+// Side-effect free. For the browser bootstrap, import "html-modules/browser".
+export {
+  HTMLComponent, HTMLStylesheet, defineHTMLComponent, defineHTMLStylesheet, isHTMLComponent, isHTMLStylesheet,
+  isStylesheet, isElementLike, toComponent, defineElement, adoptStylesheet, lookupExport, componentsOf,
+  applyBinding, bindModule, registerComponents, manifest,
+} from './runtime.js';
+export {
+  DELIMITER, bindingName, parseBindingName, camelCase, kebabCase, isKebabName, isValidElementName,
+} from './names.js';
+export { readHTMLModule, recordFromRaw } from './record.js';
+export { scanHTMLModule } from './scan.js';
+export { createLoader, linkHTMLModule, createNamespace } from './loader.js';
+export { createHTMLModules } from './html-modules.js';
+export { defineHTMLModuleElements } from './elements.js';
+export { compileHTMLModule, compileRecord, rewriteSpecifier } from './compiler.js';

@@ -1,12 +1,20 @@
 {
-  "name": "html-modules",
+  "name": "@johnhenry/html-modules",
   "version": "0.0.0",
   "description": "Declarative HTML modules: export components from ordinary HTML, import them with <html-import src as>, and optionally compile them to ES modules.",
   "author": "John Henry <john@iamjohnhenry.com>",
   "license": "MIT",
+  "homepage": "https://opensource.johnhenry.me/html-modules/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/johnhenry/html-modules.git"
+  },
+  "bugs": {
+    "url": "https://github.com/johnhenry/html-modules/issues"
+  },
   "type": "module",
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=26.0.0"
   },
   "sideEffects": [
     "./src/browser.js"
@@ -16,7 +24,11 @@
     ".": "./src/index.js",
     "./browser": "./src/browser.js",
     "./runtime": "./src/runtime.js",
-    "./compiler": "./src/compiler.js"
+    "./compiler": "./src/compiler.js",
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "html-module": "./bin/html-module.js"
   },
   "files": [
     "src",
@@ -33,12 +45,16 @@
     "web-components",
     "custom-elements",
     "templates",
-    "esm"
+    "esm",
+    "html-import",
+    "declarative",
+    "shadow-dom",
+    "compiler"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "devDependencies": {
     "linkedom": "^0.18.13"
-  },
-  "bin": {
-    "html-module": "./bin/html-module.js"
   }
 }

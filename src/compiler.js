@@ -61,7 +61,7 @@ export function rebaseSpecifier(src, base) {
  * @param {string} source HTML module source
  * @param {object} [options]
  * @param {string} [options.url]            the module's URL or file name (for messages and the header)
- * @param {string} [options.runtime]        specifier the output imports the runtime from (default "html-modules/runtime")
+ * @param {string} [options.runtime]        specifier the output imports the runtime from (default "@johnhenry/html-modules/runtime")
  * @param {'esm'|'register'} [options.format]
  * @param {string} [options.as]             register format: namespace to register under (default: the export names)
  * @param {string} [options.delimiter]      register format: namespace delimiter (default "--"), e.g. "-" for <ui-card>
@@ -79,7 +79,7 @@ export function compileHTMLModule(source, { url = 'module.html', parse, ...optio
  * Generate an ES module from a module record.
  * @param {import('./record.js').ModuleRecord} record
  */
-export function compileRecord(record, { runtime = 'html-modules/runtime', format = 'esm', as, delimiter = DELIMITER, conflict = 'error', rewrite = rewriteSpecifier } = {}) {
+export function compileRecord(record, { runtime = '@johnhenry/html-modules/runtime', format = 'esm', as, delimiter = DELIMITER, conflict = 'error', rewrite = rewriteSpecifier } = {}) {
   if (format !== 'esm' && format !== 'register') throw new TypeError(`Unknown format "${format}": use "esm" or "register"`);
   if (as != null) assertNamespace(as);
   assertDelimiter(delimiter);

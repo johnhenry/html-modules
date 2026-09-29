@@ -1,7 +1,7 @@
 /**
  * One-script bootstrap for browsers:
  *
- *   <script type="module" src="/html-modules/src/browser.js"></script>
+ *   <script type="module" src="/node_modules/@johnhenry/html-modules/src/browser.js"></script>
  *   <html-import src="./ui.html" as="ui"></html-import>
  *   <ui--custom-card>Hello!</ui--custom-card>
  *

@@ -117,12 +117,21 @@ test('compiler options and errors', async () => {
   const js = compileHTMLModule('<html-import src="./a.html" as="a"></html-import><html-export name="class"><template>x</template></html-export>', { rewrite: (s) => s.replace('.html', '.mjs') });
   assert.match(js, /import \* as \$m0 from "\.\/a\.mjs";/);
   assert.match(js, /\$x_class as class,/, 'reserved words are fine as export names');
-  assert.match(js, /from "html-modules\/runtime"/);
+  assert.match(js, /from "@johnhenry\/html-modules\/runtime"/);
   const viaDOM = compileHTMLModule(await fixture('ui.html'), { url: 'ui.html', parse: (html) => new shared.DOMParser().parseFromString(html, 'text/html') });
   assert.equal(viaDOM, compileHTMLModule(await fixture('ui.html'), { url: 'ui.html' }), 'the DOM reader and the scanner compile identically');
   assert.throws(() => compileHTMLModule('<html-export name="a"></html-export>', { url: 'bad.html' }), /needs a <template>.* in bad\.html/);
   assert.throws(() => compileHTMLModule('', { format: 'bundle' }), /Unknown format "bundle"/);
   assert.throws(() => compileHTMLModule('', { format: 'register', as: 'A' }), /Invalid namespace/);
+});
+
+test('the default runtime specifier is this package\'s own published ./runtime subpath', async () => {
+  // Codegen emits the package name into every compiled module: after a rename,
+  // a stale default would make every compiled file import a package that is
+  // not installed (or, unscoped, someone else's).
+  const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+  assert.equal(pkg.exports['./runtime'], './src/runtime.js');
+  assert.match(compileHTMLModule(''), new RegExp(`from "${pkg.name}/runtime";`));
 });
 
 test('CLI: html-module input.html [-o out] [--format] [--as] [--runtime] [--stdout]', async () => {
@@ -143,6 +152,7 @@ test('CLI: html-module input.html [-o out] [--format] [--as] [--runtime] [--stdo
   stdout = io();
   assert.equal(await main([input, '--stdout'], { stdout, stderr: io() }), 0);
   assert.match(stdout.text, /^\/\/ Compiled from cli\.html/);
+  assert.match(stdout.text, /from "@johnhenry\/html-modules\/runtime";/, 'the CLI default runtime is the published subpath');
   const stderr = io();
   await writeFile(join(dir, 'broken.html'), '<html-export name="x"></html-export>');
   assert.equal(await main([join(dir, 'broken.html')], { stdout: io(), stderr }), 1);

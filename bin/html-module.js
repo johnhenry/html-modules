@@ -26,7 +26,7 @@ Options:
       --as <namespace>    register format: register as <namespace>--<export>
       --delimiter <d>     register format: the namespace delimiter (default: --), e.g. - for <namespace>-<export>
       --conflict <mode>   register format: error (default) or reuse, for tags that are already defined
-      --runtime <spec>    where the output imports the runtime from (default: html-modules/runtime)
+      --runtime <spec>    where the output imports the runtime from (default: @johnhenry/html-modules/runtime)
       --stdout            print instead of writing files
   -h, --help`;
 
@@ -43,7 +43,7 @@ export async function main(argv = process.argv.slice(2), { stdout = process.stdo
         as: { type: 'string' },
         delimiter: { type: 'string' },
         conflict: { type: 'string' },
-        runtime: { type: 'string', default: 'html-modules/runtime' },
+        runtime: { type: 'string', default: '@johnhenry/html-modules/runtime' },
         stdout: { type: 'boolean', default: false },
         help: { type: 'boolean', short: 'h', default: false },
       },

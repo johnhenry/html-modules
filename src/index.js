@@ -1,4 +1,4 @@
-// Side-effect free. For the browser bootstrap, import "html-modules/browser".
+// Side-effect free. For the browser bootstrap, import "@johnhenry/html-modules/browser".
 export {
   HTMLComponent, HTMLStylesheet, defineHTMLComponent, defineHTMLStylesheet, isHTMLComponent, isHTMLStylesheet,
   isStylesheet, isElementLike, toComponent, defineElement, adoptStylesheet, lookupExport, componentsOf,

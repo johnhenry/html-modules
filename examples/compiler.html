@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The compiler · html-modules</title>
+  <script>try { const t = localStorage.getItem('html-modules-examples-theme'); if (t) document.documentElement.dataset.theme = t; } catch {}</script>
+  <link rel="stylesheet" href="./shared/site.css">
+  <style>
+    iframe { width: 100%; height: 310px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+    pre[data-source] { max-height: 26rem; }
+    #source { min-height: 14rem; }
+    #output { max-height: 22rem; }
+  </style>
+  <script type="module" src="../src/browser.js"></script>
+</head>
+<body>
+  <header class="site-header">
+    <a class="home" href="./index.html">html-modules</a>
+    <span class="crumb">Compiler</span>
+    <span class="spacer"></span>
+    <button class="theme-toggle" type="button">Dark mode</button>
+  </header>
+  <main class="page">
+    <nav class="site-nav"></nav>
+    <h1>The compiler</h1>
+    <p class="lede">
+      Browsers cannot <code>import</code> an <code>.html</code> file as a module, and this library does not try to make them. Instead,
+      <code>html-module</code> compiles an HTML module into an ordinary ES module that exports the same HTML Component Definitions the runtime
+      builds. The output imports only the small runtime, registers nothing on import, and needs no loader.
+    </p>
+    <div class="covers" data-page="compiler"></div>
+
+    <section class="card">
+      <h2>Same module, two paths</h2>
+      <p class="small">Both frames contain identical markup. The left one loads the HTML modules at runtime with <code>&lt;html-import&gt;</code>; the right one has no loader at all, only native <code>import</code> of the compiled files and <code>definition.define(tag)</code>.</p>
+      <div class="split">
+        <div><p class="label">Runtime: <a href="./compiler/runtime-frame.html">compiler/runtime-frame.html</a></p><iframe id="rt" src="./compiler/runtime-frame.html" title="Runtime-loaded components"></iframe></div>
+        <div><p class="label">Compiled: <a href="./compiler/compiled-frame.html">compiler/compiled-frame.html</a></p><iframe id="cp" src="./compiler/compiled-frame.html" title="Compiled components"></iframe></div>
+      </div>
+      <ul id="same-checks"></ul>
+    </section>
+
+    <section class="card">
+      <h2>Source and output</h2>
+<pre><code>npx html-module examples/components/rating.html --runtime ../../src/runtime.js -o examples/compiled/rating.js</code></pre>
+      <div class="split">
+        <div><p class="label">components/rating.html</p><pre data-source="./components/rating.html"></pre></div>
+        <div><p class="label">compiled/rating.js</p><pre data-source="./compiled/rating.js"></pre></div>
+      </div>
+      <p class="small">Dependencies become static imports with <code>.html</code> rewritten to <code>.js</code>, so compile them too (the CLI takes several inputs). Here is the larger <code>ui.html</code>:</p>
+      <details><summary class="small">components/ui.html → compiled/ui.js</summary>
+        <div class="split">
+          <div><pre data-source="./components/ui.html"></pre></div>
+          <div><pre data-source="./compiled/ui.js"></pre></div>
+        </div>
+      </details>
+    </section>
+
+    <section class="card">
+      <h2>Using compiled modules</h2>
+      <div class="split">
+        <div>
+          <p class="label">As ES modules: definitions, not registrations</p>
+<pre><code>import { card, components } from './compiled/ui.js';
+
+card.define('esm-card');            <span class="muted">// you choose the tag</span>
+customElements.get('card');         <span class="muted">// undefined: nothing self-registers</span></code></pre>
+          <esm-card><span slot="title">&lt;esm-card&gt;</span>Defined from the compiled module.</esm-card>
+        </div>
+        <div>
+          <p class="label">With <code>&lt;html-import&gt;</code>, through the <code>components</code> manifest</p>
+<pre><code>&lt;html-import src="./compiled/ui.js" as="cui"&gt;&lt;/html-import&gt;</code></pre>
+          <html-import id="cui" src="./compiled/ui.js" as="cui"></html-import>
+          <cui--callout><strong>&lt;cui--callout&gt;</strong> from the compiled file.</cui--callout>
+        </div>
+      </div>
+      <div class="split" style="margin-top:1rem">
+        <div>
+          <p class="label"><code>--format register --as reg</code>: registers on import</p>
+<pre><code>import './compiled/icons.register.js';   <span class="muted">// defines &lt;reg--star&gt;, &lt;reg--heart&gt;, …</span></code></pre>
+          <div class="row" style="font-size:1.4rem"><reg--star></reg--star><reg--heart style="color:var(--bad)"></reg--heart><reg--check style="color:var(--ok)"></reg--check><reg--plus></reg--plus></div>
+        </div>
+        <div><ul id="use-checks"></ul></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Compile in the browser</h2>
+      <p class="small"><code>compileHTMLModule(source)</code> has no dependencies and runs anywhere: Node, a dev server, or this page. Edit the module, compile it, and run the output as a real ES module (a <code>blob:</code> URL).</p>
+      <div class="split">
+        <div>
+          <div class="field"><label for="source">HTML module</label>
+<textarea id="source" spellcheck="false">&lt;html-export name="greeting-card"&gt;
+  &lt;style&gt;
+    :host { display: block; padding: .75rem 1rem; border-radius: 10px;
+            background: var(--accent-soft); color: var(--text); }
+    strong { color: var(--accent); }
+  &lt;/style&gt;
+  &lt;template&gt;
+    &lt;p&gt;Hello, &lt;strong&gt;&lt;slot&gt;world&lt;/slot&gt;&lt;/strong&gt;!&lt;/p&gt;
+  &lt;/template&gt;
+&lt;/html-export&gt;
+
+&lt;html-export name="settings"&gt;
+  &lt;script type="application/json"&gt;{ "compiled": true }&lt;/script&gt;
+&lt;/html-export&gt;</textarea></div>
+          <div class="row"><button id="run" class="primary" type="button">Compile and run</button><span id="run-status" class="small muted"></span></div>
+          <div id="live" class="preview" style="margin-top:.6rem"></div>
+        </div>
+        <div><p class="label">Output</p><pre id="output"><code>(press Compile and run)</code></pre></div>
+      </div>
+    </section>
+
+    <div class="pager"><a href="./errors.html">← Errors</a><a href="./app.html">A small app →</a></div>
+  </main>
+
+  <script type="module">
+    import { compileHTMLModule } from '../src/compiler.js';
+    import { renderChecks, esc, errorText } from './shared/site.js';
+    import { card, components } from './compiled/ui.js';
+    import './compiled/icons.register.js';
+
+    card.define('esm-card');
+    await document.getElementById('cui').ready;
+    renderChecks(document.getElementById('use-checks'), [
+      ['importing compiled/ui.js registered nothing (<code>customElements.get("card")</code> is undefined)', customElements.get('card') === undefined && customElements.get('x--card') === undefined],
+      ['<code>card.define("esm-card")</code> registered the compiled definition', customElements.get('esm-card').component === card],
+      ['<code>&lt;html-import src="./compiled/ui.js" as="cui"&gt;</code> used the same definitions', customElements.get('cui--card').component === components.card],
+      ['the register build defined <code>&lt;reg--star&gt;</code> on import', !!customElements.get('reg--star')],
+    ]);
+
+    // Compare the two frames once both have rendered.
+    const frameReady = (frame) => new Promise((resolve) => {
+      const go = async () => {
+        await frame.contentWindow.rendered;
+        resolve(frame.contentWindow);
+      };
+      if (frame.contentDocument?.readyState === 'complete' && frame.contentWindow.rendered) go();
+      else frame.addEventListener('load', go, { once: true });
+    });
+    const [rt, cp] = await Promise.all([frameReady(document.getElementById('rt')), frameReady(document.getElementById('cp'))]);
+    const snapshot = (win) => [...win.document.querySelectorAll('#out *')].filter((el) => el.shadowRoot)
+      .map((el) => `${el.localName}: ${el.shadowRoot.innerHTML}` + [...el.shadowRoot.querySelectorAll('*')].filter((c) => c.shadowRoot).map((c) => ` [${c.localName}: ${c.shadowRoot.innerHTML}]`).join(''));
+    const a = snapshot(rt);
+    const b = snapshot(cp);
+    const sheets = (win) => [...win.document.querySelectorAll('#out *')].filter((el) => el.shadowRoot).map((el) => el.shadowRoot.adoptedStyleSheets.map((s) => [...s.cssRules].map((r) => r.cssText).join('')).join('|'));
+    renderChecks(document.getElementById('same-checks'), [
+      [`both frames rendered the same ${a.length} shadow roots (including the nested <code>&lt;icon--star&gt;</code>s)`, a.length > 0 && JSON.stringify(a) === JSON.stringify(b)],
+      ['with the same adopted styles', JSON.stringify(sheets(rt)) === JSON.stringify(sheets(cp))],
+      ['the same tags are defined in each', ['x--card', 'x--button', 'x--badge', 'x--callout', 'r--stars', 'icon--star'].every((t) => rt.customElements.get(t) && cp.customElements.get(t))],
+      ['the runtime frame used <code>&lt;html-import&gt;</code>; the compiled frame never loaded the library\'s loader', !!rt.customElements.get('html-import') && !cp.customElements.get('html-import')],
+    ]);
+
+    // The in-browser compiler.
+    const runtime = new URL('../src/runtime.js', location.href).href;
+    let runs = 0;
+    document.getElementById('run').addEventListener('click', async () => {
+      const status = document.getElementById('run-status');
+      const live = document.getElementById('live');
+      try {
+        const js = compileHTMLModule(document.getElementById('source').value, { url: 'playground.html', runtime });
+        document.getElementById('output').innerHTML = `<code>${esc(js)}</code>`;
+        const url = URL.createObjectURL(new Blob([js], { type: 'text/javascript' }));
+        const mod = await import(url);
+        URL.revokeObjectURL(url);
+        const ns = `live${++runs}`;
+        const tags = Object.entries(mod.components).map(([name, def]) => (def.define(`${ns}--${name}`), `${ns}--${name}`));
+        live.innerHTML = tags.map((t) => `<${t}>you</${t}>`).join('') + `<p class="small muted">exports: ${esc(Object.keys(mod).join(', '))}; registered ${tags.map((t) => `&lt;${esc(t)}&gt;`).join(' ') || 'nothing'}</p>`;
+        status.textContent = `run ${runs}: ok`;
+      } catch (error) {
+        live.innerHTML = `<div class="error-box">${esc(errorText(error))}</div>`;
+        status.textContent = `run ${runs}: failed`;
+      }
+    });
+  </script>
+  <script type="module" src="./shared/site.js"></script>
+</body>
+</html>

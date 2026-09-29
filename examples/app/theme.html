@@ -1,0 +1,8 @@
+<!-- The app's brand, as a stylesheet export the page adopts. -->
+<html-export name="brand">
+  <style>
+    :root { --brand: #9c3d54; --brand-soft: #f6e3e8; }
+    :root[data-theme="dark"] { --brand: #f08aa2; --brand-soft: #3a1d25; }
+    @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --brand: #f08aa2; --brand-soft: #3a1d25; } }
+  </style>
+</html-export>

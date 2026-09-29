@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Writing a component library · html-modules</title>
+  <script>try { const t = localStorage.getItem('html-modules-examples-theme'); if (t) document.documentElement.dataset.theme = t; } catch {}</script>
+  <link rel="stylesheet" href="./shared/site.css">
+  <script type="module" src="../src/browser.js"></script>
+  <style>
+    pre[data-source] { max-height: 34rem; }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <a class="home" href="./index.html">html-modules</a>
+    <span class="crumb">Component library</span>
+    <span class="spacer"></span>
+    <button class="theme-toggle" type="button">Dark mode</button>
+  </header>
+  <main class="page">
+    <nav class="site-nav"></nav>
+    <h1>Writing a component library in HTML</h1>
+    <p class="lede">
+      A library is an HTML file of <code>&lt;html-export&gt;</code> elements. A component export holds one
+      <code>&lt;template&gt;</code>; <code>&lt;style&gt;</code> elements next to it become the component's styles, shared by every
+      instance. An export with only <code>&lt;style&gt;</code> is a stylesheet; one with a JSON script is data. Anything not
+      inside an export is private to the file.
+    </p>
+    <div class="covers" data-page="library"></div>
+
+    <html-import src="./components/ui.html" as="ui"></html-import>
+    <html-import id="kit" src="./components/kit.html" as="kit"></html-import>
+
+    <section class="card">
+      <h2>1. The module: <code>components/ui.html</code></h2>
+      <div class="split">
+        <div>
+          <p class="label">Source</p>
+          <pre data-source="./components/ui.html"></pre>
+        </div>
+        <div>
+          <p class="label">Imported with <code>&lt;html-import src="./components/ui.html" as="ui"&gt;</code></p>
+          <div class="preview">
+            <ui--card>
+              <span slot="title"><code>&lt;ui--card&gt;</code></span>
+              Named slots for the title and footer, the default slot for the body.
+              <span slot="footer">A footer, through <code>slot="footer"</code>.</span>
+            </ui--card>
+            <div class="row">
+              <ui--button>Primary</ui--button>
+              <ui--button variant="ghost">Ghost</ui--button>
+              <span class="small muted">(<code>delegates-focus</code>: clicking the host focuses the inner button)</span>
+            </div>
+            <div class="row">
+              <ui--badge>default</ui--badge><ui--badge tone="ok">ok</ui--badge><ui--badge tone="warn">warn</ui--badge><ui--badge tone="bad">bad</ui--badge>
+            </div>
+            <ui--callout><strong>Default export.</strong> <code>callout</code> is also the module's default export.</ui--callout>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>2. What the module exports</h2>
+      <p class="small muted"><code>await HTMLModules.load('./components/ui.html')</code> returns a namespace shaped like an ES module: one HTML Component Definition per component (camelCase), the data, the default, and a <code>components</code> manifest keyed by export name.</p>
+      <div id="ns"></div>
+      <ul id="ns-checks"></ul>
+    </section>
+
+    <section class="card">
+      <h2>3. Modules that import modules</h2>
+      <p class="small">
+        <code>rating.html</code> imports <code>icons.html</code> as <code>icon</code> and uses <code>&lt;icon--star&gt;</code> in its template. That import is the
+        module's own: it is bound when one of the module's components is registered, and the stylesheet it adopts from
+        <code>themes.html</code> applies inside the module's components only.
+      </p>
+      <div class="split">
+        <div>
+          <p class="label">components/rating.html</p>
+          <pre data-source="./components/rating.html"></pre>
+        </div>
+        <div>
+          <p class="label">components/icons.html (excerpt)</p>
+          <pre><code>&lt;html-export name="star"&gt;
+  &lt;style&gt;:host { display: inline-block; width: 1em; … }&lt;/style&gt;
+  &lt;template&gt;&lt;svg viewBox="0 0 24 24" …&gt;…&lt;/svg&gt;&lt;/template&gt;
+&lt;/html-export&gt;</code></pre>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>4. A barrel: <code>components/kit.html</code></h2>
+      <p class="small">
+        <code>&lt;html-export src="…"&gt;</code> re-exports every component of another module, like <code>export * from</code>.
+        <code>&lt;html-export src="…" name="rating" import="stars"&gt;</code> re-exports one, renamed. The source can be a JS module,
+        so a JavaScript component joins the library too. A barrel can have exports of its own.
+      </p>
+      <div class="split">
+        <div>
+          <p class="label">Source</p>
+          <pre data-source="./components/kit.html"></pre>
+        </div>
+        <div>
+          <p class="label">Imported with <code>&lt;html-import src="./components/kit.html" as="kit"&gt;</code></p>
+          <div class="preview">
+            <div class="row"><kit--rating> 4.0</kit--rating> <kit--star></kit--star><kit--heart></kit--heart><kit--check></kit--check><kit--plus></kit--plus></div>
+            <div class="row"><kit--counter>Clicks</kit--counter> <kit--sealed>closed shadow root</kit--sealed></div>
+            <kit--card><span slot="title">&lt;kit--card&gt;</span>The same <code>card</code> definition as <code>&lt;ui--card&gt;</code>, under another name.</kit--card>
+          </div>
+          <p class="label" style="margin-top:.75rem">Registered by this import</p>
+          <p id="kit-tags" class="small"></p>
+        </div>
+      </div>
+      <ul id="kit-checks"></ul>
+    </section>
+
+    <div class="pager"><a href="./quickstart.html">← Quickstart</a><a href="./namespaces.html">Namespaces and the -- delimiter →</a></div>
+  </main>
+
+  <script type="module">
+    import { HTMLModules } from '../src/browser.js';
+    import { namespaceTable, renderChecks, esc } from './shared/site.js';
+
+    const ui = await HTMLModules.load('./components/ui.html');
+    document.getElementById('ns').innerHTML = namespaceTable(ui);
+    const button = document.querySelector('ui--button');
+    await customElements.whenDefined('ui--button');
+    renderChecks(document.getElementById('ns-checks'), [
+      ['<code>ui.card</code> is a definition whose identity is <code>"card"</code>', ui.card?.name === 'card'],
+      ['<code>ui.default</code> is <code>ui.callout</code>', ui.default === ui.callout],
+      ['<code>ui.meta</code> is parsed JSON data', ui.meta?.version === '1.2.0'],
+      ['the unexported paragraph is not in the namespace', !Object.values(ui).some((v) => v?.localName === 'p')],
+      ['<code>&lt;ui--button&gt;</code> delegates focus to its inner button', ui.button.delegatesFocus === true && !!button.shadowRoot.querySelector('button')],
+    ]);
+
+    const { elements } = await document.getElementById('kit').ready;
+    const kit = await document.getElementById('kit').module;
+    document.getElementById('kit-tags').innerHTML = Object.keys(elements).map((t) => `<code>&lt;${esc(t)}&gt;</code>`).join(' ');
+    const rating = document.querySelector('kit--rating');
+    const widgets = await import('./components/widgets.js');
+    renderChecks(document.getElementById('kit-checks'), [
+      ['the barrel re-exports the <em>same</em> definitions: <code>kit.card === ui.card</code>', kit.card === ui.card],
+      ['one cache entry per URL: the page import, the barrel and <code>load()</code> all share one namespace', (await HTMLModules.cache.get(new URL('./components/ui.html', location.href).href)) === ui && (await HTMLModules.load('./components/ui.html')) === ui],
+      ['<code>rating</code> is <code>rating.html</code>\'s <code>stars</code>, renamed', kit.rating?.name === 'stars'],
+      ['rating.html\'s own import registered <code>&lt;icon--star&gt;</code> for its template', !!customElements.get('icon--star') && !!rating.shadowRoot.querySelector('icon--star')?.shadowRoot],
+      ['its adopted <code>gold</code> sheet is inside <code>&lt;kit--rating&gt;</code> only, not the page', rating.shadowRoot.adoptedStyleSheets.length === 2 && document.adoptedStyleSheets.length === 0],
+      ['<code>&lt;kit--counter&gt;</code> is the JS class <code>ClickCounter</code>, re-exported through HTML', customElements.get('kit--counter').prototype instanceof widgets.ClickCounter],
+      ['<code>&lt;kit--sealed&gt;</code> has a closed shadow root', document.querySelector('kit--sealed').shadowRoot === null && kit.sealed.shadow === 'closed'],
+    ]);
+  </script>
+  <script type="module" src="./shared/site.js"></script>
+</body>
+</html>

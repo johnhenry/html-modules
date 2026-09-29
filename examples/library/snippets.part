@@ -1,8 +1,0 @@
-<!-- Not a .html file: importers pass type="html" to load it as an HTML module. -->
-<template export="Footer">
-  <style>
-    :host { display: block; margin-top: 1.5rem; padding: 0.8rem 1rem; border-radius: var(--lib-radius);
-            background: var(--lib-surface-2); color: var(--lib-muted); font: 0.85rem/1.5 var(--lib-font); }
-  </style>
-  <slot>Built with tiny-ui, a component library made of HTML modules.</slot>
-</template>

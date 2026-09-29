@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Identity vs registration name · html-modules</title>
+  <script>try { const t = localStorage.getItem('html-modules-examples-theme'); if (t) document.documentElement.dataset.theme = t; } catch {}</script>
+  <link rel="stylesheet" href="./shared/site.css">
+  <script type="module" src="../src/browser.js"></script>
+</head>
+<body>
+  <header class="site-header">
+    <a class="home" href="./index.html">html-modules</a>
+    <span class="crumb">Identity</span>
+    <span class="spacer"></span>
+    <button class="theme-toggle" type="button">Dark mode</button>
+  </header>
+  <main class="page">
+    <nav class="site-nav"></nav>
+    <h1>Component identity vs registration name</h1>
+    <p class="lede">
+      A component's exported identity is not its tag. <code>ui.html</code> exports a component whose identity is <code>card</code>; each
+      importer decides what to call it, exactly as <code>import { card as profileCard }</code> would in JavaScript. A registry accepts a
+      constructor only once, so every registration is a fresh subclass of the definition's one base element.
+    </p>
+    <div class="covers" data-page="identity"></div>
+
+    <html-import src="./components/ui.html" as="shop"></html-import>
+    <html-import src="./components/ui.html">
+      <html-binding export="card" element="note-card"></html-binding>
+    </html-import>
+
+    <section class="card">
+      <h2>One definition, five tags</h2>
+<pre><code>&lt;html-import src="./components/ui.html" as="shop"&gt;&lt;/html-import&gt;                  <span class="muted">&lt;!-- shop--card --&gt;</span>
+&lt;html-import src="./components/ui.html"&gt;
+  &lt;html-binding export="card" element="note-card"&gt;&lt;/html-binding&gt;              <span class="muted">&lt;!-- note-card --&gt;</span>
+&lt;/html-import&gt;
+
+const ui = await HTMLModules.load('./components/ui.html');
+ui.card.define('profile-card');                                                 <span class="muted">// profile-card</span>
+HTMLModules.bind(ui, { as: 'bound' });                                          <span class="muted">// bound--card, …</span>
+customElements.define('fancy-card', class extends ui.card.element {             <span class="muted">// fancy-card, with behaviour</span>
+  connectedCallback() { this.shadowRoot.querySelector('article').dataset.fancy = ''; }
+});</code></pre>
+      <div class="grid">
+        <shop--card><span slot="title">&lt;shop--card&gt;</span>namespace import</shop--card>
+        <note-card><span slot="title">&lt;note-card&gt;</span>element= in markup</note-card>
+        <profile-card><span slot="title">&lt;profile-card&gt;</span>define() in JS</profile-card>
+        <bound--card><span slot="title">&lt;bound--card&gt;</span>HTMLModules.bind()</bound--card>
+        <fancy-card><span slot="title">&lt;fancy-card&gt;</span>a subclass you write</fancy-card>
+      </div>
+      <p class="label" style="margin-top:1rem">What the registry holds</p>
+      <div class="table-wrap"><table id="tags"></table></div>
+      <ul id="checks"></ul>
+    </section>
+
+    <section class="card">
+      <h2>Definitions from JavaScript</h2>
+      <p class="small">The same representation can be written by hand. <code>defineHTMLComponent()</code> is what both the loader and the compiler call.</p>
+<pre><code>import { defineHTMLComponent } from 'html-modules/runtime';
+
+const priceTag = defineHTMLComponent({
+  name: 'price-tag',
+  template: '&lt;span part="amount"&gt;&lt;slot&gt;&lt;/slot&gt;&lt;/span&gt; &lt;small&gt;USD&lt;/small&gt;',
+  styles: [':host { font-variant-numeric: tabular-nums; font-weight: 650; }'],
+});
+priceTag.define('price-tag');
+priceTag.define('cost-tag');</code></pre>
+      <div class="row"><price-tag>19.99</price-tag> <cost-tag>4.50</cost-tag></div>
+      <ul id="js-checks"></ul>
+    </section>
+
+    <div class="pager"><a href="./bindings.html">← Selective imports</a><a href="./interop.html">Mixing HTML and JS components →</a></div>
+  </main>
+
+  <script type="module">
+    import { HTMLModules } from '../src/browser.js';
+    import { defineHTMLComponent } from '../src/runtime.js';
+    import { renderChecks, esc } from './shared/site.js';
+
+    const ui = await HTMLModules.load('./components/ui.html');
+    ui.card.define('profile-card');
+    HTMLModules.bind(ui, { as: 'bound' });
+    customElements.define('fancy-card', class extends ui.card.element {
+      connectedCallback() {
+        this.shadowRoot.querySelector('article').dataset.fancy = '';
+      }
+    });
+    await Promise.all([...document.querySelectorAll('html-import')].map((i) => i.ready));
+
+    const tags = ['shop--card', 'note-card', 'profile-card', 'bound--card', 'fancy-card'];
+    const classes = tags.map((t) => customElements.get(t));
+    document.getElementById('tags').innerHTML = '<thead><tr><th>tag</th><th>class</th><th>Tag.component</th><th>parent class</th></tr></thead><tbody>' + tags.map((t, i) => {
+      const C = classes[i];
+      const parent = Object.getPrototypeOf(C);
+      return `<tr><td><code>&lt;${t}&gt;</code></td><td><code>${esc(C.name || '(anonymous)')}</code></td><td>${C.component === ui.card ? '<code>ui.card</code>' : '—'}</td><td>${parent === ui.card.element ? '<code>ui.card.element</code>' : Object.getPrototypeOf(parent) === ui.card.element ? 'your class → <code>ui.card.element</code>' : esc(parent.name)}</td></tr>`;
+    }).join('') + '</tbody>';
+
+    renderChecks(document.getElementById('checks'), [
+      ['five tags, five distinct classes', new Set(classes).size === 5],
+      ['all of them render the same template', tags.every((t) => document.querySelector(t).shadowRoot.querySelector('article[part=card]'))],
+      ['<code>ui.card.name</code> is still <code>"card"</code>: the identity never changes', ui.card.name === 'card'],
+      ['<code>define()</code> again with the same tag is a no-op that returns the existing class', ui.card.define('profile-card') === customElements.get('profile-card')],
+      ['your subclass adds behaviour on top of the template', document.querySelector('fancy-card').shadowRoot.querySelector('article').hasAttribute('data-fancy')],
+    ]);
+
+    const priceTag = defineHTMLComponent({
+      name: 'price-tag',
+      template: '<span part="amount"><slot></slot></span> <small>USD</small>',
+      styles: [':host { font-variant-numeric: tabular-nums; font-weight: 650; }'],
+    });
+    priceTag.define('price-tag');
+    priceTag.define('cost-tag');
+    renderChecks(document.getElementById('js-checks'), [
+      ['a hand-written definition registers like a loaded one', customElements.get('price-tag').component === priceTag],
+      ['… under as many tags as you like', customElements.get('cost-tag').component === priceTag],
+      ['defining another component under a taken tag is refused', (() => {
+        try {
+          defineHTMLComponent({ name: 'other', template: 'x' }).define('price-tag');
+          return false;
+        } catch (e) {
+          return /already defined by "price-tag"/.test(e.message);
+        }
+      })()],
+    ]);
+  </script>
+  <script type="module" src="./shared/site.js"></script>
+</body>
+</html>

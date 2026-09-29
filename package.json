@@ -25,7 +25,8 @@
   "scripts": {
     "test": "node --test \"test/*.test.js\"",
     "check": "node scripts/check.js",
-    "build": "node scripts/check.js"
+    "build": "node scripts/check.js",
+    "examples:compile": "node scripts/compile-examples.js"
   },
   "keywords": [
     "html-modules",

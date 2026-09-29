@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Styles and theming · html-modules</title>
+  <script>try { const t = localStorage.getItem('html-modules-examples-theme'); if (t) document.documentElement.dataset.theme = t; } catch {}</script>
+  <link rel="stylesheet" href="./shared/site.css">
+  <style>
+    /* Hide imported elements until they are defined, to avoid a flash of unstyled content. */
+    :is(st--card, st--button, st--badge, st--callout):not(:defined) { visibility: hidden; }
+    /* Theming through inherited custom properties. */
+    #props { --accent: var(--pick, #5b4bd6); --brand: var(--pick, #5b4bd6); }
+    /* Styling internals the component exposes with part="…". */
+    .parts st--card::part(card) { border-left: 6px solid var(--brand, var(--accent)); padding-left: 0.6rem; }
+    .parts st--card::part(title) { text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.8rem; }
+    .parts st--button::part(button) { border-radius: 999px; padding-inline: 1.2rem; }
+    .swatch { display: inline-flex; gap: 0.35rem; align-items: center; }
+  </style>
+  <script type="module" src="../src/browser.js"></script>
+</head>
+<body>
+  <header class="site-header">
+    <a class="home" href="./index.html">html-modules</a>
+    <span class="crumb">Styles</span>
+    <span class="spacer"></span>
+    <button class="theme-toggle" type="button">Dark mode</button>
+  </header>
+  <main class="page">
+    <nav class="site-nav"></nav>
+    <h1>Styles and theming</h1>
+    <p class="lede">
+      Components are encapsulated in shadow roots, and styled with the platform's own tools: <code>&lt;style&gt;</code> in the export,
+      custom properties that inherit through the shadow boundary, <code>::part()</code>, and stylesheets adopted by the page. Toggle
+      dark mode: every component on this page follows the page's colour tokens.
+    </p>
+    <div class="covers" data-page="styles"></div>
+
+    <html-import id="st" src="./components/ui.html" as="st"></html-import>
+    <html-import id="themes" src="./components/themes.html">
+      <html-binding export="sunset" adopt></html-binding>
+    </html-import>
+
+    <section class="card">
+      <h2>Component styles</h2>
+      <p class="small"><code>&lt;style&gt;</code> elements beside an export's <code>&lt;template&gt;</code> become the definition's <code>styles</code>. They are built into one constructed stylesheet per definition and adopted by every instance's shadow root, so a hundred cards share one sheet.</p>
+      <div class="row"><st--badge>one</st--badge><st--badge>two</st--badge><st--badge>three</st--badge></div>
+      <ul id="shared-checks"></ul>
+    </section>
+
+    <section class="card" id="props">
+      <h2>Custom properties</h2>
+      <p class="small">The components read <code>--accent</code>, <code>--brand</code>, <code>--surface</code> and friends from the page. Set them on any ancestor.</p>
+      <div class="row">
+        <label class="swatch" for="pick">--accent / --brand <input id="pick" type="color" value="#5b4bd6"></label>
+      </div>
+      <div class="row" style="margin-top:.5rem"><st--button>Accent button</st--button><st--button variant="ghost">Ghost</st--button><st--callout><strong>Callout</strong> in the chosen colour.</st--callout></div>
+    </section>
+
+    <section class="card parts">
+      <h2><code>::part()</code></h2>
+<pre><code>.parts st--card::part(card)   { border-left: 6px solid var(--brand); }
+.parts st--card::part(title)  { text-transform: uppercase; … }
+.parts st--button::part(button) { border-radius: 999px; }</code></pre>
+      <st--card><span slot="title">Styled from outside</span>The card's template marks its <code>article</code> and <code>header</code> with <code>part</code>, so the page can reach them. <span slot="footer"><st--button>Pill button</st--button></span></st--card>
+    </section>
+
+    <section class="card">
+      <h2>Adopted theme stylesheets</h2>
+      <p class="small"><code>themes.html</code> exports stylesheets. The page adopts <code>sunset</code> declaratively; switch it here with <code>theme.sheetFor(window)</code> and <code>document.adoptedStyleSheets</code>.</p>
+      <div class="row" id="theme-picker" role="radiogroup" aria-label="Brand theme"></div>
+      <div class="row" style="margin-top:.6rem"><st--button>Brand button</st--button><st--badge>brand</st--badge></div>
+      <pre data-source="./components/themes.html"></pre>
+    </section>
+
+    <section class="card">
+      <h2>Adopting into a shadow root</h2>
+      <p class="small">An <code>&lt;html-import&gt;</code> adopts into the root that contains it. Inside a shadow root, the theme stays inside it. Likewise, a stylesheet a <em>module</em> adopts (like <code>rating.html</code>'s <code>gold</code>) applies only inside that module's components.</p>
+      <div class="split">
+        <div><p class="label">Outside (page theme)</p><st--button>Page brand</st--button></div>
+        <div><p class="label">Inside a shadow root that imports <code>forest</code></p><div id="island"></div></div>
+      </div>
+      <ul id="scope-checks"></ul>
+    </section>
+
+    <div class="pager"><a href="./interop.html">← JS interop</a><a href="./errors.html">Errors →</a></div>
+  </main>
+
+  <script type="module">
+    import { HTMLModules } from '../src/browser.js';
+    import { renderChecks, esc } from './shared/site.js';
+
+    await document.getElementById('st').ready;
+    const ui = await HTMLModules.load('./components/ui.html');
+    const badges = [...document.querySelectorAll('st--badge')].slice(0, 3);
+    renderChecks(document.getElementById('shared-checks'), [
+      ['each badge adopted exactly one sheet', badges.every((b) => b.shadowRoot.adoptedStyleSheets.length === 1)],
+      ['it is the same CSSStyleSheet object in every instance', new Set(badges.map((b) => b.shadowRoot.adoptedStyleSheets[0])).size === 1],
+      ['… and it holds the export\'s CSS', badges[0].shadowRoot.adoptedStyleSheets[0].cssRules.length === ui.badge.styles.join('').split('}').filter((r) => r.trim()).length],
+    ]);
+
+    const props = document.getElementById('props');
+    document.getElementById('pick').addEventListener('input', (e) => props.style.setProperty('--pick', e.target.value));
+
+    await document.getElementById('themes').ready;
+    const themes = await HTMLModules.load('./components/themes.html');
+    const names = ['ocean', 'sunset', 'forest'];
+    const sheets = names.map((n) => themes[n].sheetFor(window));
+    const picker = document.getElementById('theme-picker');
+    picker.innerHTML = names.map((n) => `<label class="swatch"><input type="radio" name="theme" value="${n}"${n === 'sunset' ? ' checked' : ''}> ${esc(n)}</label>`).join('');
+    picker.addEventListener('change', (e) => {
+      const chosen = themes[e.target.value].sheetFor(window);
+      document.adoptedStyleSheets = [...document.adoptedStyleSheets.filter((s) => !sheets.includes(s)), chosen];
+    });
+
+    const island = document.getElementById('island').attachShadow({ mode: 'open' });
+    island.innerHTML = `
+      <html-import src="./components/themes.html"><html-binding export="forest" adopt></html-binding></html-import>
+      <html-import src="./components/rating.html" as="r"></html-import>
+      <st--button>Island brand</st--button> <r--stars></r--stars>`;
+    await Promise.all([...island.querySelectorAll('html-import')].map((i) => i.ready));
+    const brandOf = (el) => getComputedStyle(el).getPropertyValue('--brand').trim();
+    const stars = island.querySelector('r--stars');
+    renderChecks(document.getElementById('scope-checks'), [
+      ['the shadow root adopted <code>forest</code>', island.adoptedStyleSheets.includes(themes.forest.sheetFor(window))],
+      ['the page did not: its <code>--brand</code> is still ' + esc(brandOf(document.documentElement)), !document.adoptedStyleSheets.includes(themes.forest.sheetFor(window))],
+      ['inside, <code>--brand</code> is ' + esc(brandOf(island.querySelector('st--button'))), brandOf(island.querySelector('st--button')) === '#2f7d32'],
+      ['<code>gold</code> (adopted by rating.html) is in the stars\' shadow root, not the page or the island', stars.shadowRoot.adoptedStyleSheets.includes(themes.gold.sheetFor(window)) && !island.adoptedStyleSheets.includes(themes.gold.sheetFor(window)) && !document.adoptedStyleSheets.includes(themes.gold.sheetFor(window))],
+    ]);
+  </script>
+  <script type="module" src="./shared/site.js"></script>
+</body>
+</html>

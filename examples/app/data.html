@@ -1,20 +1,19 @@
-<!doctype html>
-<!-- Seed data and the store, as exports of one HTML module. -->
-<script type="application/json" export="seed">
-  {
-    "columns": [
-      { "id": "todo", "title": "To do" },
-      { "id": "doing", "title": "In progress" },
-      { "id": "done", "title": "Done" }
-    ],
-    "tasks": [
-      { "id": "t1", "title": "Write HTML module for the column", "tag": "ui", "status": "done" },
-      { "id": "t2", "title": "Re-export TaskCard through the barrel", "tag": "modules", "status": "done" },
-      { "id": "t3", "title": "Adopt an accent theme", "tag": "styles", "status": "doing" },
-      { "id": "t4", "title": "Persist the board in localStorage", "tag": "data", "status": "doing" },
-      { "id": "t5", "title": "Add keyboard shortcuts", "tag": "ui", "status": "todo" },
-      { "id": "t6", "title": "Compile an import map for production", "tag": "modules", "status": "todo" }
-    ]
-  }
-</script>
-<script type="module" src="./store.js" export="store"></script>
+<!-- Seed data as data exports. The page binds these with <html-binding export="…">. -->
+<html-export name="shelves">
+  <script type="application/json">[
+    { "id": "want", "title": "Want to read" },
+    { "id": "reading", "title": "Reading" },
+    { "id": "done", "title": "Finished" }
+  ]</script>
+</html-export>
+
+<html-export name="books">
+  <script type="application/json">[
+    { "id": 1, "title": "The Left Hand of Darkness", "author": "Ursula K. Le Guin", "shelf": "done", "rating": 5, "cover": "#6d4c9f" },
+    { "id": 2, "title": "Piranesi", "author": "Susanna Clarke", "shelf": "done", "rating": 4, "cover": "#2f7d86" },
+    { "id": 3, "title": "The Dispossessed", "author": "Ursula K. Le Guin", "shelf": "reading", "rating": 0, "cover": "#a0522d" },
+    { "id": 4, "title": "A Memory Called Empire", "author": "Arkady Martine", "shelf": "reading", "rating": 0, "cover": "#8a1c2b" },
+    { "id": 5, "title": "Middlemarch", "author": "George Eliot", "shelf": "want", "rating": 0, "cover": "#3d6b3d" },
+    { "id": 6, "title": "Kindred", "author": "Octavia E. Butler", "shelf": "want", "rating": 0, "cover": "#b5651d" }
+  ]</script>
+</html-export>

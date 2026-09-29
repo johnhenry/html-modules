@@ -1,4 +1,3 @@
-<!doctype html>
-<!-- a.html re-exports b.html, which re-exports a.html: the namespace can never be built. -->
-<module-export from="./cycle-b.html" all></module-export>
-<template export="A"></template>
+<!-- Intentionally circular: cycle-a imports cycle-b, which re-exports cycle-a. -->
+<html-import src="./cycle-b.html" as="b"></html-import>
+<html-export name="a-thing"><template>a</template></html-export>

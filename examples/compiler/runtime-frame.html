@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Runtime-loaded</title>
+  <script>try { const t = localStorage.getItem('html-modules-examples-theme'); if (t) document.documentElement.dataset.theme = t; } catch {}</script>
+  <link rel="stylesheet" href="../shared/site.css">
+  <style>body { background: var(--surface); } .frame { display: grid; gap: .6rem; padding: 12px; }</style>
+  <!-- Runtime path: the library's loader fetches and parses the HTML modules. -->
+  <script type="module" src="../../src/browser.js"></script>
+</head>
+<body>
+  <html-import src="../components/ui.html" as="x"></html-import>
+  <html-import src="../components/rating.html" as="r"></html-import>
+  <div class="frame" id="out">
+    <x--card><span slot="title">A card</span>Rendered from ui.html.<span slot="footer">footer slot</span></x--card>
+    <div class="row"><x--button>Button</x--button><x--badge tone="ok">badge</x--badge></div>
+    <x--callout><strong>Callout</strong>, the default export.</x--callout>
+    <r--stars> 4.5</r--stars>
+  </div>
+  <script type="module">
+    window.rendered = Promise.all([...document.querySelectorAll('html-import')].map((i) => i.ready));
+  </script>
+</body>
+</html>

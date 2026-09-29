@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Namespaces · html-modules</title>
+  <script>try { const t = localStorage.getItem('html-modules-examples-theme'); if (t) document.documentElement.dataset.theme = t; } catch {}</script>
+  <link rel="stylesheet" href="./shared/site.css">
+  <!-- Bare specifiers in src resolve through the page's own import map. -->
+  <script type="importmap">{ "imports": { "@demo/ui": "./components/ui.html" } }</script>
+  <script type="module" src="../src/browser.js"></script>
+</head>
+<body>
+  <header class="site-header">
+    <a class="home" href="./index.html">html-modules</a>
+    <span class="crumb">Namespaces</span>
+    <span class="spacer"></span>
+    <button class="theme-toggle" type="button">Dark mode</button>
+  </header>
+  <main class="page">
+    <nav class="site-nav"></nav>
+    <h1>Namespaces and the <code>--</code> delimiter</h1>
+    <p class="lede">
+      <code>&lt;html-import src="./ui.html" as="ui"&gt;</code> is the HTML counterpart of <code>import * as ui from "./ui.js"</code>.
+      The <code>as</code> attribute names a namespace, not a single element: each export <code>card</code>,
+      <code>button</code>, … is registered as <code>&lt;ui--card&gt;</code>, <code>&lt;ui--button&gt;</code>, …
+      The module's author chooses the export names; the importer chooses the namespace.
+    </p>
+    <div class="covers" data-page="namespaces"></div>
+
+    <html-import id="shop" src="@demo/ui" as="shop"></html-import>
+    <html-import id="admin" src="./components/ui.html" as="admin"></html-import>
+
+    <section class="card">
+      <h2>One module, two namespaces</h2>
+<pre><code>&lt;script type="importmap"&gt;{ "imports": { "@demo/ui": "./components/ui.html" } }&lt;/script&gt;
+
+&lt;html-import src="@demo/ui" as="shop"&gt;&lt;/html-import&gt;              <span class="muted">&lt;!-- bare specifier, via the import map --&gt;</span>
+&lt;html-import src="./components/ui.html" as="admin"&gt;&lt;/html-import&gt;</code></pre>
+      <div class="split">
+        <div class="preview">
+          <shop--card><span slot="title">&lt;shop--card&gt;</span>Registered by the <code>shop</code> import.<span slot="footer"><shop--badge tone="ok">shop--badge</shop--badge></span></shop--card>
+        </div>
+        <div class="preview">
+          <admin--card><span slot="title">&lt;admin--card&gt;</span>Registered by the <code>admin</code> import.<span slot="footer"><admin--badge tone="warn">admin--badge</admin--badge></span></admin--card>
+        </div>
+      </div>
+      <ul id="two-checks"></ul>
+    </section>
+
+    <section class="card">
+      <h2>Why <code>--</code>?</h2>
+      <p class="small">
+        A registered tag must be a valid custom element name, or the browser's native upgrade (which lets elements appear before their
+        definitions) is lost. The table below asks this browser's <code>customElements.define()</code> about each candidate delimiter,
+        for a one-word export (<code>card</code>) and a two-word export (<code>custom-card</code>).
+      </p>
+      <div class="table-wrap"><table id="delims"></table></div>
+      <p class="small muted">
+        <code>.</code> reads well and is even legal inside a name, but <code>ui.card</code> has no hyphen, so one-word exports could never be
+        registered. A single <code>-</code> is always legal but ambiguous: is <code>ui-custom-card</code> the <code>custom-card</code> export of
+        <code>ui</code>, or the <code>card</code> export of <code>ui-custom</code>? Unicode separators such as <code>·</code> are legal but hard to type
+        and easy to misread. <code>--</code> always supplies the required hyphen, and because namespaces and export names are lower-case words
+        joined by single hyphens, neither can contain <code>--</code>: every tag splits exactly one way. It also echoes CSS custom properties
+        (<code>--ui-accent</code>).
+      </p>
+    </section>
+
+    <section class="card">
+      <h2>Read a tag</h2>
+      <div class="field">
+        <label for="tag">Tag name</label>
+        <input id="tag" value="shop--card" autocomplete="off" spellcheck="false">
+      </div>
+      <div id="tag-out" class="ok-box"></div>
+    </section>
+
+    <section class="card">
+      <h2>Namespaces are validated</h2>
+      <p class="small">A namespace is one or more lower-case words joined by single hyphens. These imports fail with an <code>error</code> event:</p>
+      <div id="bad-ns"></div>
+    </section>
+
+    <div class="pager"><a href="./library.html">← Component library</a><a href="./bindings.html">Selective imports and custom tag names →</a></div>
+  </main>
+
+  <script type="module">
+    import { HTMLModules } from '../src/browser.js';
+    import { parseBindingName, isValidElementName } from '../src/names.js';
+    import { renderChecks, esc, errorText, status } from './shared/site.js';
+
+    const [shop, admin] = await Promise.all(['shop', 'admin'].map((id) => document.getElementById(id).ready));
+    const Shop = customElements.get('shop--card');
+    const Admin = customElements.get('admin--card');
+    renderChecks(document.getElementById('two-checks'), [
+      ['<code>@demo/ui</code> and <code>./components/ui.html</code> resolve to one URL: one fetch, one namespace object', shop.module === admin.module],
+      ['<code>&lt;shop--card&gt;</code> and <code>&lt;admin--card&gt;</code> are different classes (a registry accepts a constructor once)', Shop !== Admin],
+      ['… both subclasses of the one <code>card</code> definition', Shop.component === Admin.component && Shop.component === shop.module.card],
+      [`each import registered ${Object.keys(shop.elements).length} tags: <code>${Object.keys(shop.elements).join(' ')}</code>`, Object.keys(shop.elements).length === 4],
+    ]);
+
+    // Ask the registry about each delimiter.
+    const candidates = [['--', 'recommended'], ['-', ''], ['.', ''], ['_', ''], [':', ''], ['·', 'U+00B7']];
+    let n = 0;
+    const accepts = (name) => {
+      try {
+        customElements.define(name, class extends HTMLElement {});
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    const rows = candidates.map(([d, note]) => {
+      const ns = `d${++n}`;
+      const one = `${ns}${d}card`;
+      const two = `${ns}${d}custom-card`;
+      const ambiguous = d === '-';
+      const cell = (name) => {
+        const ok = accepts(name);
+        return `${status(ok, ok ? 'valid' : 'invalid')} <code>${esc(name.replace(ns, 'ui'))}</code>`;
+      };
+      return `<tr><td><code>${esc(d)}</code> ${note ? `<span class="muted small">${esc(note)}</span>` : ''}</td><td>${cell(one)}</td><td>${cell(two)}</td><td>${ambiguous ? status(false, 'ambiguous') : status(true, 'one way')}</td></tr>`;
+    });
+    document.getElementById('delims').innerHTML = `<thead><tr><th>delimiter</th><th>one-word export</th><th>two-word export</th><th>splits</th></tr></thead><tbody>${rows.join('')}</tbody>`;
+
+    const input = document.getElementById('tag');
+    const out = document.getElementById('tag-out');
+    const read = () => {
+      const tag = input.value.trim();
+      const parts = parseBindingName(tag);
+      const Tag = customElements.get(tag);
+      if (!parts) {
+        out.className = 'error-box';
+        out.textContent = `"${tag}" is not <namespace>--<export>${isValidElementName(tag) ? ' (it is still a valid custom element name)' : ''}`;
+        return;
+      }
+      out.className = 'ok-box';
+      out.textContent = `namespace: ${parts.namespace}\nexport:    ${parts.name}\n` + (Tag?.component
+        ? `defined:   yes, component "${Tag.component.name}" from ${Tag.component.url.replace(location.origin, '')}`
+        : 'defined:   not on this page');
+    };
+    input.addEventListener('input', read);
+    read();
+
+    const bad = document.getElementById('bad-ns');
+    for (const as of ['UI', 'ui--kit', 'my_ui']) {
+      const el = document.createElement('html-import');
+      el.setAttribute('src', './components/ui.html');
+      el.setAttribute('as', as);
+      el.addEventListener('error', (e) => {
+        bad.insertAdjacentHTML('beforeend', `<p class="small" style="margin:.4rem 0 .2rem"><code>&lt;html-import src="./components/ui.html" as="${esc(as)}"&gt;</code></p><div class="error-box">${esc(errorText(e.detail.error))}</div>`);
+      });
+      document.body.append(el);
+    }
+  </script>
+  <script type="module" src="./shared/site.js"></script>
+</body>
+</html>

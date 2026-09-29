@@ -1,8 +1,70 @@
-<!doctype html>
-<!-- The board's UI barrel: everything the page needs, from HTML and JS. -->
-<module-export from="./components/shell.html" name="default" as="Shell"></module-export>
-<module-export from="./components/column.html" all></module-export>
-<module-export from="./components/stat.html" all></module-export>
-<module-export from="./components/task-card.js" name="TaskCard"></module-export>
-<module-export from="./icons.html" namespace="icons"></module-export>
-<module-export from="./themes.html" all></module-export>
+<!--
+  The reading list's components. The icons import is private to this module:
+  it binds <icon--…> for these templates only.
+-->
+<html-import src="../components/icons.html" as="icon"></html-import>
+
+<html-export name="app-shell">
+  <style>
+    :host { display: block; }
+    header { display: flex; flex-wrap: wrap; gap: 0.75rem 1.5rem; align-items: end; justify-content: space-between; margin-bottom: 1rem; }
+    h2 { margin: 0; font-size: 1.3rem; display: flex; gap: 0.5rem; align-items: center; }
+    h2 icon--heart { color: var(--brand, var(--accent)); }
+    .stats { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+    .toolbar { margin-bottom: 1rem; }
+    .board { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); align-items: start; }
+  </style>
+  <template>
+    <header part="header">
+      <h2><icon--heart></icon--heart><slot name="title">Reading list</slot></h2>
+      <div class="stats"><slot name="stats"></slot></div>
+    </header>
+    <div class="toolbar" part="toolbar"><slot name="toolbar"></slot></div>
+    <div class="board" part="board"><slot></slot></div>
+  </template>
+</html-export>
+
+<html-export name="shelf">
+  <style>
+    :host { display: block; background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 0.75rem; min-width: 0; }
+    header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.6rem; font-weight: 650; }
+    .count { color: var(--muted); font-weight: 500; font-size: 0.85rem; }
+    .list { display: grid; gap: 0.6rem; }
+    .list ::slotted(p) { margin: 0; color: var(--muted); font-size: 0.86rem; }
+  </style>
+  <template>
+    <header part="header"><slot name="title"></slot><span class="count"><slot name="count"></slot></span></header>
+    <div class="list"><slot></slot></div>
+  </template>
+</html-export>
+
+<html-export name="book-card">
+  <style>
+    :host { display: grid; grid-template-columns: 2.5rem 1fr; gap: 0.7rem; background: var(--surface); color: var(--text);
+      border: 1px solid var(--border); border-radius: 10px; padding: 0.65rem 0.7rem; }
+    .cover { width: 2.5rem; height: 3.4rem; border-radius: 3px 6px 6px 3px; background: var(--cover, var(--brand, var(--accent)));
+      box-shadow: inset 4px 0 0 rgb(0 0 0 / 18%); }
+    .title { font-weight: 650; line-height: 1.25; }
+    .author { color: var(--muted); font-size: 0.86rem; }
+    .meta { margin-top: 0.3rem; font-size: 0.86rem; color: var(--warn, #8a5a00); }
+    .actions { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.45rem; }
+  </style>
+  <template>
+    <div class="cover" part="cover"></div>
+    <div>
+      <div class="title" part="title"><slot name="title"></slot></div>
+      <div class="author"><slot name="author"></slot></div>
+      <div class="meta"><slot name="meta"></slot></div>
+      <div class="actions" part="actions"><slot name="actions"></slot></div>
+    </div>
+  </template>
+</html-export>
+
+<html-export name="stat">
+  <style>
+    :host { display: inline-grid; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 0.3rem 0.7rem; min-width: 5.5rem; }
+    .n { font-size: 1.25rem; font-weight: 700; line-height: 1.2; }
+    .l { font-size: 0.75rem; color: var(--muted); }
+  </style>
+  <template><span class="n" part="value"><slot></slot></span><span class="l"><slot name="label"></slot></span></template>
+</html-export>

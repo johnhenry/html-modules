@@ -90,10 +90,8 @@ h2 { font-size: 1.15rem; margin-top: 0.25rem; }
 h3 { font-size: 1rem; }
 p { margin: 0.4rem 0 0.7rem; }
 
-/* Imports and bindings are control-plane elements: never rendered. */
-module-import, module-binding, define-element, esm-import, esm-binding, esm-define { display: none; }
-/* Avoid a flash of unstyled custom elements before their module loads. */
-:not(:defined):is(ui-card, ui-badge, ui-callout, lib-card, lib-badge, lib-callout, lib-stat, lib-tabs) { visibility: hidden; }
+/* Imports and bindings describe dependencies; they are never rendered. */
+html-import, html-binding, html-export { display: none; }
 
 .site-header {
   position: sticky; top: 0; z-index: 10;
@@ -185,11 +183,16 @@ th { color: var(--muted); font-weight: 600; }
 }
 td:first-child code { white-space: nowrap; overflow-wrap: normal; }
 
-/* mport traces */
-.trace { list-style: none; margin: 0; padding: 0; font-family: var(--mono); font-size: 0.78rem; line-height: 1.5; }
-.trace li { padding-left: 0.2rem; overflow-wrap: anywhere; }
-.trace .t-type { display: inline-block; min-width: 4.6rem; font-weight: 600; }
-.trace .t-ok .t-type, .trace .t-resolved .t-type { color: var(--ok); }
-.trace .t-fail .t-type, .trace .t-error { color: var(--bad); }
-.trace .t-skip .t-type, .trace .t-aborted .t-type, .trace .t-lookup .t-type { color: var(--muted); }
-.trace .t-probe .t-type { color: var(--accent); }
+/* Two-column code/preview layout used by several pages. */
+.split { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); align-items: start; }
+.split > * { min-width: 0; }
+.preview { display: grid; gap: 0.75rem; padding: 0.9rem; border: 1px dashed var(--border); border-radius: 10px; background: var(--bg); }
+.label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; margin: 0 0 0.35rem; }
+.tag { font-family: var(--mono); font-size: 0.85em; }
+.pager { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-top: 2rem; }
+.site-nav { display: flex; flex-wrap: wrap; gap: 0.35rem 0.9rem; font-size: 0.86rem; margin: 0 0 1rem; }
+.site-nav a { text-decoration: none; color: var(--muted); }
+.site-nav a[aria-current="page"] { color: var(--text); font-weight: 600; }
+.summary-row { display: flex; flex-wrap: wrap; gap: 1rem; margin: 0.75rem 0 0; }
+.summary-row .num { font-size: 1.6rem; font-weight: 700; display: block; line-height: 1.1; }
+input[type="color"] { width: 2.6rem; height: 1.9rem; padding: 0.15rem; cursor: pointer; }

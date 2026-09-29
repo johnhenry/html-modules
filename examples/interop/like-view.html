@@ -1,0 +1,13 @@
+<!-- The look of a like button, in HTML. The behaviour lives in like-button.js. -->
+<html-import src="../components/icons.html" as="icon"></html-import>
+
+<html-export name="like-view" delegates-focus>
+  <style>
+    :host { display: inline-block; }
+    button { font: inherit; display: inline-flex; gap: 0.4rem; align-items: center; cursor: pointer; border-radius: 999px; padding: 0.3rem 0.8rem;
+      border: 1px solid var(--border, #ccc); background: var(--surface, #fff); color: var(--text, #111); }
+    :host([liked]) button { border-color: var(--bad, #b3261e); color: var(--bad, #b3261e); background: var(--bad-soft, #fbe6e4); }
+    output { font-variant-numeric: tabular-nums; font-weight: 650; }
+  </style>
+  <template><button type="button" part="button" aria-pressed="false"><icon--heart></icon--heart><slot>Like</slot><output>0</output></button></template>
+</html-export>

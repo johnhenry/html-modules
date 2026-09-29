@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Compiled</title>
+  <script>try { const t = localStorage.getItem('html-modules-examples-theme'); if (t) document.documentElement.dataset.theme = t; } catch {}</script>
+  <link rel="stylesheet" href="../shared/site.css">
+  <style>body { background: var(--surface); } .frame { display: grid; gap: .6rem; padding: 12px; }</style>
+  <!-- Compiled path: no loader and no <html-import>. Native ES module imports, then define(). -->
+  <script type="module">
+    import * as ui from '../compiled/ui.js';
+    import * as rating from '../compiled/rating.js';
+
+    for (const [name, definition] of Object.entries(ui.components)) definition.define(`x--${name}`);
+    rating.stars.define('r--stars');
+    window.rendered = Promise.resolve();
+  </script>
+</head>
+<body>
+  <div class="frame" id="out">
+    <x--card><span slot="title">A card</span>Rendered from ui.html.<span slot="footer">footer slot</span></x--card>
+    <div class="row"><x--button>Button</x--button><x--badge tone="ok">badge</x--badge></div>
+    <x--callout><strong>Callout</strong>, the default export.</x--callout>
+    <r--stars> 4.5</r--stars>
+  </div>
+</body>
+</html>

@@ -1,8 +1,0 @@
-<!doctype html>
-<!-- A barrel: re-exports from an HTML module and a JS module. -->
-<module-export from="./ui.html">
-  <module-binding name="Card" as="Panel"></module-binding>  <!-- export { Card as Panel } from "./ui.html" -->
-  <module-binding name="theme"></module-binding>
-</module-export>
-<module-export from="./counter.js" all></module-export>     <!-- export * from "./counter.js" -->
-<module-export from="./ui.html" namespace="ui"></module-export> <!-- export * as ui from "./ui.html" -->

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>html-modules examples</title>
-  <script>try { const t = localStorage.getItem('wmg-examples-theme'); if (t) document.documentElement.dataset.theme = t; } catch {}</script>
+  <script>try { const t = localStorage.getItem('html-modules-examples-theme'); if (t) document.documentElement.dataset.theme = t; } catch {}</script>
   <link rel="stylesheet" href="./shared/site.css">
   <style>
     .page-card { display: flex; flex-direction: column; gap: 0.35rem; }
@@ -13,8 +13,6 @@
     .page-card .meta { display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; }
     .matrix td:first-child { white-space: nowrap; }
     .matrix .group th { background: var(--surface-2); color: var(--text); }
-    .summary-row { display: flex; flex-wrap: wrap; gap: 1rem; margin: 0.75rem 0 0; }
-    .summary-row .num { font-size: 1.6rem; font-weight: 700; display: block; line-height: 1.1; }
     .filter { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
   </style>
 </head>
@@ -28,11 +26,14 @@
   <main class="page">
     <h1>Examples</h1>
     <p class="lede">
-      One module graph for JavaScript and HTML. Each page below exercises part of the library; together they cover
-      every item on the capability checklist further down. Everything except the live CDN page works offline:
-      run <code>npm install</code> (which links <code>node_modules/mport</code> to the local mport checkout), serve the package root
-      (for example <code>python3 -m http.server</code>) and open <code>/examples/</code>. Pages that route packages load mport v2 from
-      <code>/node_modules/mport/</code> through a page import map.
+      <strong>html-modules</strong> lets you write Web Components in ordinary HTML files with <code>&lt;html-export&gt;</code>, import them into a page
+      with <code>&lt;html-import src="./ui.html" as="ui"&gt;</code> as namespaced native custom elements (<code>&lt;ui--card&gt;</code>), use them from
+      JavaScript, mix them with JS-authored components, and optionally compile them to plain ES modules. Each page below shows one part;
+      together they cover every item on the checklist further down.
+    </p>
+    <p class="small muted">
+      Everything works offline: serve the package root (for example <code>python3 -m http.server</code>) and open <code>/examples/</code>.
+      There is no build step; the pages load <code>../src/browser.js</code> directly.
     </p>
     <div class="summary-row" id="summary"></div>
 
@@ -44,7 +45,7 @@
       <p class="muted small">Every public feature, option, event and error path, and the pages that exercise it. Hover a chip to see its full label.</p>
       <div class="filter">
         <label for="q">Filter</label>
-        <input id="q" type="search" placeholder="e.g. adopt, scopes, err." autocomplete="off">
+        <input id="q" type="search" placeholder="e.g. adopt, compiler, err." autocomplete="off">
       </div>
       <div class="table-wrap"><table class="matrix" id="matrix"></table></div>
     </section>
@@ -65,10 +66,7 @@
     document.getElementById('pages').innerHTML = pages.map((p) => `
       <article class="card page-card">
         <h2><a href="${p.href}">${esc(p.title)}</a></h2>
-        <div class="meta">
-          <span class="status ${p.offline ? 'pass' : 'pending'}">${p.offline ? 'offline' : 'needs network'}</span>
-          <span class="muted small">${p.covers.length} items</span>
-        </div>
+        <div class="meta"><span class="muted small">${p.covers.length} checklist items</span></div>
         <p class="small">${esc(p.summary)}</p>
         <details class="covers"><summary>Covers</summary>
           <ul class="chips">${p.covers.map((id) => `<li class="chip" title="${esc(allItems.find((i) => i.id === id)?.label ?? id)}">${esc(id)}</li>`).join('')}</ul>

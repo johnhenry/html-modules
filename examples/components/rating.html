@@ -1,0 +1,14 @@
+<!--
+  A module that imports another module. The import is private to this module:
+  it binds <icon--star> for this module's templates to use. The stylesheet it
+  adopts from themes.html applies inside this module's components only.
+-->
+<html-import src="./icons.html" as="icon"></html-import>
+<html-import src="./themes.html">
+  <html-binding export="gold" adopt></html-binding>
+</html-import>
+
+<html-export name="stars">
+  <style>:host { display: inline-flex; gap: 0.1rem; color: var(--gold, #d4a017); font-size: 1.15rem; }</style>
+  <template><icon--star></icon--star><icon--star></icon--star><icon--star></icon--star><slot></slot></template>
+</html-export>

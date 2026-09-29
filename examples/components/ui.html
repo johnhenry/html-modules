@@ -1,25 +1,61 @@
 <!doctype html>
-<!-- An HTML module: exported nodes form its namespace; everything else is private. -->
-<template id="helper"><p>Private: not exported.</p></template>
+<meta charset="utf-8">
+<title>ui.html: a small component library, written in HTML</title>
+<!--
+  An HTML module. Every <html-export> is a public export; everything else in
+  this file (like this comment and the paragraph at the end) is private.
+  Components style themselves with the page's custom properties
+  (--surface, --text, --accent, …), which cross shadow boundaries, so they
+  follow the page's light/dark theme without any extra code.
+-->
 
-<template export="Card">
+<html-export name="card">
   <style>
-    article { border: 2px solid var(--accent, rebeccapurple); border-radius: 10px; padding: 0.8rem 1rem; margin: 0.5rem 0; background: var(--surface, transparent); }
+    :host { display: block; background: var(--surface, #fff); color: var(--text, #111); border: 1px solid var(--border, #ddd); border-radius: 10px; padding: 0.9rem 1rem; }
+    header ::slotted(*) { display: block; margin: 0 0 0.35rem; font-weight: 650; font-size: 1rem; }
+    footer ::slotted(*) { display: block; margin-top: 0.6rem; color: var(--muted, #666); font-size: 0.86rem; }
   </style>
-  <article><slot></slot></article>
-</template>
+  <template>
+    <article part="card">
+      <header part="title"><slot name="title"></slot></header>
+      <slot></slot>
+      <footer part="footer"><slot name="footer"></slot></footer>
+    </article>
+  </template>
+</html-export>
 
-<template export="default">
-  <strong style="color: var(--ok, teal)"><slot></slot></strong>
-</template>
+<html-export name="button" delegates-focus>
+  <style>
+    :host { display: inline-block; }
+    button { font: inherit; font-size: 0.9rem; cursor: pointer; border-radius: 8px; padding: 0.4rem 0.85rem;
+      border: 1px solid var(--brand, var(--accent, #5b4bd6)); background: var(--brand, var(--accent, #5b4bd6)); color: var(--surface, #fff); }
+    :host([variant="ghost"]) button { background: transparent; color: var(--brand, var(--accent, #5b4bd6)); }
+    button:focus-visible { outline: 2px solid var(--brand, var(--accent, #5b4bd6)); outline-offset: 2px; }
+  </style>
+  <template><button part="button" type="button"><slot></slot></button></template>
+</html-export>
 
-<style export="theme">
-  .quickstart h1 { color: var(--accent); }
-  .quickstart demo-counter button, .quickstart other-counter button { font-variant-numeric: tabular-nums; }
-</style>
+<html-export name="badge">
+  <style>
+    :host { display: inline-block; font-size: 0.75rem; font-weight: 600; padding: 0.1rem 0.55rem; border-radius: 999px;
+      background: var(--accent-soft, #ebe8ff); color: var(--text, #111); }
+    :host([tone="ok"]) { background: var(--ok-soft, #e1f3e8); color: var(--ok, #1f7a4a); }
+    :host([tone="warn"]) { background: var(--warn-soft, #fbf0d9); color: var(--warn, #8a5a00); }
+    :host([tone="bad"]) { background: var(--bad-soft, #fbe6e4); color: var(--bad, #b3261e); }
+  </style>
+  <template><slot></slot></template>
+</html-export>
 
-<script type="application/json" export="config">{ "brand": "demo" }</script>
+<html-export name="callout" default>
+  <style>
+    :host { display: block; border-left: 4px solid var(--brand, var(--accent, #5b4bd6)); background: var(--surface-2, #f4f4f0); padding: 0.6rem 0.85rem; border-radius: 0 8px 8px 0; }
+    ::slotted(strong) { color: var(--brand, var(--accent, #5b4bd6)); }
+  </style>
+  <template><aside part="callout"><slot></slot></aside></template>
+</html-export>
 
-<script type="module" export="controller">
-  export const greet = (name) => `Hello, ${name}!`;
-</script>
+<html-export name="meta">
+  <script type="application/json">{ "library": "ui", "version": "1.2.0", "components": 4 }</script>
+</html-export>
+
+<p>This paragraph is not exported, so no importer can see it.</p>

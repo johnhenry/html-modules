@@ -1,0 +1,10 @@
+<!-- A barrel: one module that re-exports others, like `export * from`. -->
+<html-export src="./ui.html"></html-export>
+<html-export src="./icons.html"></html-export>
+<html-export src="./rating.html" name="rating" import="stars"></html-export>
+<html-export src="./widgets.js" name="counter" import="click-counter"></html-export>
+<!-- A barrel can also have exports of its own. This one uses a closed shadow root. -->
+<html-export name="sealed" shadow="closed">
+  <style>:host { display: inline-block; padding: 0.15rem 0.5rem; border: 1px dashed var(--border, #ccc); border-radius: 6px; }</style>
+  <template>🔒 <slot></slot></template>
+</html-export>

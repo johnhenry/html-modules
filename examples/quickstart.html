@@ -4,75 +4,99 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Quickstart · html-modules</title>
-  <script>try { const t = localStorage.getItem('wmg-examples-theme'); if (t) document.documentElement.dataset.theme = t; } catch {}</script>
+  <script>try { const t = localStorage.getItem('html-modules-examples-theme'); if (t) document.documentElement.dataset.theme = t; } catch {}</script>
   <link rel="stylesheet" href="./shared/site.css">
-  <!-- Bare specifiers in declarative imports resolve through the page's import map. -->
-  <script type="importmap">
-    { "imports": { "@demo/ui": "./components/barrel.html" } }
-  </script>
-  <!-- The one-script bootstrap: defines <module-import>, <module-binding>, <define-element>. -->
+  <style>
+    /* Until their module arrives, imported elements are ordinary unknown elements. */
+    ui--card:not(:defined), ui--button:not(:defined) { opacity: 0.35; }
+  </style>
+  <!-- 1. One script defines <html-import>. -->
   <script type="module" src="../src/browser.js"></script>
 </head>
-<body class="quickstart">
+<body>
   <header class="site-header">
     <a class="home" href="./index.html">html-modules</a>
     <span class="crumb">Quickstart</span>
     <span class="spacer"></span>
     <button class="theme-toggle" type="button">Dark mode</button>
   </header>
-
-  <!-- import { Panel, theme, Counter, Counter as Counter2 } from "@demo/ui", then register/adopt -->
-  <module-import from="@demo/ui">
-    <module-binding name="Panel" element="demo-panel"></module-binding>
-    <module-binding name="theme" adopt></module-binding>
-    <module-binding name="Counter" element="demo-counter"></module-binding>
-    <module-binding name="Counter" as="Counter2" element="other-counter"></module-binding>
-  </module-import>
-
-  <!-- Registration as a separate step. It may come before the import that declares the binding. -->
-  <define-element name="demo-strong" component="Strong"></define-element>
-  <!-- import Strong from "./components/ui.html" -->
-  <module-import from="./components/ui.html" default="Strong"></module-import>
-
-  <!-- import * as UI from "./components/ui.html" -->
-  <module-import id="ns" from="./components/ui.html" namespace="UI"></module-import>
-
   <main class="page">
+    <nav class="site-nav"></nav>
     <h1>Quickstart</h1>
-    <p class="lede">The smallest useful page: one <code>&lt;script src="src/browser.js"&gt;</code>, a page import map, and declarative imports. Bare specifiers go through the page import map via <code>import.meta.resolve</code>.</p>
+    <p class="lede">
+      Write components in an ordinary HTML file with <code>&lt;html-export&gt;</code>. Import the file with
+      <code>&lt;html-import src as&gt;</code>. Every export becomes a native custom element, named
+      <code>&lt;namespace--export&gt;</code>. There is no build step and no custom JavaScript loader.
+    </p>
     <div class="covers" data-page="quickstart"></div>
 
     <section class="card">
-      <demo-panel>A <code>&lt;template export="Card"&gt;</code> re-exported as <code>Panel</code> by a barrel (<code>@demo/ui</code> → <code>components/barrel.html</code>).</demo-panel>
-      <demo-panel><demo-strong>Default export</demo-strong> registered with a <code>&lt;define-element&gt;</code> that appears before its import.</demo-panel>
-      <div class="row">
-        <demo-counter label="JS component"></demo-counter>
-        <other-counter label="same class, second tag"></other-counter>
+      <h2>The result</h2>
+      <p class="small muted">These elements appear in the page <em>before</em> the import that defines them. They start as unknown elements and upgrade natively when <code>ui.html</code> has loaded.</p>
+      <div class="preview">
+        <ui--card>
+          <span slot="title">Hello from an HTML module</span>
+          This card is a <code>&lt;template&gt;</code> in <a href="./components/ui.html">components/ui.html</a>, stamped into a shadow root.
+          <span slot="footer">Exported as <code>card</code>, used as <code>&lt;ui--card&gt;</code>.</span>
+        </ui--card>
+        <div class="row"><ui--button id="hello">Say hello</ui--button> <span id="said" class="muted small"></span></div>
       </div>
-      <p id="out" class="muted"></p>
     </section>
+
+    <!-- 2. Import the module under a namespace. -->
+    <html-import id="ui" src="./components/ui.html" as="ui"></html-import>
 
     <section class="card">
       <h2>The markup</h2>
-<pre><code>&lt;script type="importmap"&gt;{ "imports": { "@demo/ui": "./components/barrel.html" } }&lt;/script&gt;
-&lt;script type="module" src="../src/browser.js"&gt;&lt;/script&gt;
+<pre><code>&lt;script type="module" src="html-modules/src/browser.js"&gt;&lt;/script&gt;
 
-&lt;module-import from="@demo/ui"&gt;
-  &lt;module-binding name="Panel" element="demo-panel"&gt;&lt;/module-binding&gt;
-  &lt;module-binding name="theme" adopt&gt;&lt;/module-binding&gt;
-  &lt;module-binding name="Counter" element="demo-counter"&gt;&lt;/module-binding&gt;
-  &lt;module-binding name="Counter" as="Counter2" element="other-counter"&gt;&lt;/module-binding&gt;
-&lt;/module-import&gt;
-&lt;define-element name="demo-strong" component="Strong"&gt;&lt;/define-element&gt;
-&lt;module-import from="./components/ui.html" default="Strong"&gt;&lt;/module-import&gt;
-&lt;module-import id="ns" from="./components/ui.html" namespace="UI"&gt;&lt;/module-import&gt;</code></pre>
-      <p class="small muted">See <a href="./components/barrel.html">components/barrel.html</a>, <a href="./components/ui.html">components/ui.html</a> and <a href="./components/counter.js">components/counter.js</a>.</p>
+&lt;html-import src="./components/ui.html" as="ui"&gt;&lt;/html-import&gt;
+
+&lt;ui--card&gt;
+  &lt;span slot="title"&gt;Hello from an HTML module&lt;/span&gt;
+  This card is a &lt;template&gt; …
+&lt;/ui--card&gt;
+&lt;ui--button&gt;Say hello&lt;/ui--button&gt;</code></pre>
+      <p class="small muted">And the export it uses, from <code>components/ui.html</code>:</p>
+<pre><code>&lt;html-export name="card"&gt;
+  &lt;style&gt;:host { display: block; border: 1px solid var(--border); … }&lt;/style&gt;
+  &lt;template&gt;
+    &lt;article part="card"&gt;
+      &lt;header part="title"&gt;&lt;slot name="title"&gt;&lt;/slot&gt;&lt;/header&gt;
+      &lt;slot&gt;&lt;/slot&gt;
+      &lt;footer part="footer"&gt;&lt;slot name="footer"&gt;&lt;/slot&gt;&lt;/footer&gt;
+    &lt;/article&gt;
+  &lt;/template&gt;
+&lt;/html-export&gt;</code></pre>
     </section>
+
+    <section class="card">
+      <h2>What happened</h2>
+      <ul id="timeline" class="checks"></ul>
+    </section>
+
+    <div class="pager"><a href="./index.html">← All examples</a><a href="./library.html">Writing a component library →</a></div>
   </main>
 
   <script type="module">
-    const ns = await document.getElementById('ns').module;
-    document.getElementById('out').textContent = `${ns.controller.greet('HTML modules')} (brand: ${ns.config.brand}; exports: ${Object.keys(ns).join(', ')})`;
+    import { renderChecks } from './shared/site.js';
+    const t0 = performance.now();
+    const card = document.querySelector('ui--card');
+    const upgradedAtStart = card.matches(':defined');
+    const imp = document.getElementById('ui');
+    const { elements, module } = await imp.ready;
+    await customElements.whenDefined('ui--card');
+    const ms = Math.round(performance.now() - t0);
+    renderChecks(document.getElementById('timeline'), [
+      [`&lt;ui--card&gt; was in the page before its import and was not yet defined`, !upgradedAtStart],
+      [`ui.html loaded and bound in about ${ms} ms: <code>${Object.keys(elements).map((t) => `&lt;${t}&gt;`).join(' ')}</code>`, Object.keys(elements).length === 4],
+      [`the existing &lt;ui--card&gt; upgraded in place: it now has a shadow root containing <code>&lt;article&gt;</code>`, !!card.shadowRoot?.querySelector('article')],
+      [`its title and footer are slotted light DOM`, card.querySelector('[slot=title]').assignedSlot?.name === 'title'],
+      [`the module namespace holds definitions, not elements: <code>${Object.keys(module).join(', ')}</code>`, typeof module.card?.define === 'function'],
+    ]);
+    document.getElementById('hello').addEventListener('click', () => {
+      document.getElementById('said').textContent = `Hello! (clicked at ${new Date().toLocaleTimeString()})`;
+    });
   </script>
   <script type="module" src="./shared/site.js"></script>
 </body>

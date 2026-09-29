@@ -1,9 +1,0 @@
-<!doctype html>
-<!-- Helpers as an inline module script. The export's value is the script's
-     module namespace. Inline scripts load from a data: URL, so they avoid
-     relative imports (use src= for those). -->
-<script type="module" export="format">
-  export const number = (n, options) => new Intl.NumberFormat('en', options).format(n);
-  export const percent = (n) => number(n, { style: 'percent', maximumFractionDigits: 1 });
-  export const plural = (n, word) => `${number(n)} ${word}${n === 1 ? '' : 's'}`;
-</script>

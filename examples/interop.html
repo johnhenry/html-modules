@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HTML and JS components · html-modules</title>
+  <script>try { const t = localStorage.getItem('html-modules-examples-theme'); if (t) document.documentElement.dataset.theme = t; } catch {}</script>
+  <link rel="stylesheet" href="./shared/site.css">
+  <script type="module" src="../src/browser.js"></script>
+</head>
+<body>
+  <header class="site-header">
+    <a class="home" href="./index.html">html-modules</a>
+    <span class="crumb">JS interop</span>
+    <span class="spacer"></span>
+    <button class="theme-toggle" type="button">Dark mode</button>
+  </header>
+  <main class="page">
+    <nav class="site-nav"></nav>
+    <h1>Mixing HTML and JS-authored components</h1>
+    <p class="lede">
+      <code>&lt;html-import&gt;</code> also takes JavaScript modules, loaded with native <code>import()</code>. A JS module says which of its
+      exports are components; nothing else is ever registered, so <code>VERSION</code> never becomes <code>&lt;ui--version&gt;</code>.
+      Consumers cannot tell which technology a component was written in.
+    </p>
+    <div class="covers" data-page="interop"></div>
+
+    <section class="card">
+      <h2>1. A <code>components</code> manifest</h2>
+      <div class="split">
+        <div>
+          <p class="label">components/widgets.js</p>
+          <pre data-source="./components/widgets.js"></pre>
+        </div>
+        <div>
+          <p class="label"><code>&lt;html-import src="./components/widgets.js" as="w"&gt;</code></p>
+          <html-import id="w" src="./components/widgets.js" as="w"></html-import>
+          <div class="preview">
+            <div class="row"><w--click-counter>Clicks</w--click-counter> <span class="small muted">It is</span> <w--live-clock class="tag"></w--live-clock></div>
+          </div>
+          <ul id="w-checks"></ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>2. <code>defineHTMLComponent()</code> exports, no manifest</h2>
+      <div class="split">
+        <div>
+          <p class="label">components/tagged.js</p>
+          <pre data-source="./components/tagged.js"></pre>
+        </div>
+        <div>
+          <p class="label"><code>&lt;html-import src="./components/tagged.js" as="t"&gt;</code></p>
+          <html-import id="t" src="./components/tagged.js" as="t"></html-import>
+          <div class="preview"><t--shout-box>quiet words</t--shout-box></div>
+          <ul id="t-checks"></ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>3. Any class, bound by name</h2>
+      <p class="small">A plain JS module needs no manifest if the page names the export and the tag:</p>
+<pre><code>&lt;html-import src="./components/widgets.js"&gt;
+  &lt;html-binding export="ClickCounter" element="tap-counter"&gt;&lt;/html-binding&gt;
+&lt;/html-import&gt;</code></pre>
+      <html-import id="c" src="./components/widgets.js">
+        <html-binding export="ClickCounter" element="tap-counter"></html-binding>
+      </html-import>
+      <div class="row"><tap-counter start="10">Taps</tap-counter> <span id="taps" class="small muted"></span></div>
+    </section>
+
+    <section class="card">
+      <h2>4. HTML template, JS behaviour</h2>
+      <p class="small">
+        A JS module can load an HTML module, extend a definition's <code>.element</code> (which stamps the template), and export the result.
+        The template and its styles stay in HTML; only the behaviour is JavaScript.
+      </p>
+      <div class="split">
+        <div>
+          <p class="label">interop/like-view.html</p>
+          <pre data-source="./interop/like-view.html"></pre>
+        </div>
+        <div>
+          <p class="label">interop/like-button.js</p>
+          <pre data-source="./interop/like-button.js"></pre>
+        </div>
+      </div>
+      <p class="label"><code>&lt;html-import src="./interop/like-button.js" as="x"&gt;</code></p>
+      <html-import id="x" src="./interop/like-button.js" as="x"></html-import>
+      <div class="row"><x--like-button count="41">Like</x--like-button> <x--like-button>Favourite</x--like-button></div>
+    </section>
+
+    <section class="card">
+      <h2>5. An HTML barrel over JS and HTML</h2>
+      <div class="split">
+        <div>
+          <p class="label">interop/mixed.html</p>
+          <pre data-source="./interop/mixed.html"></pre>
+        </div>
+        <div>
+          <p class="label"><code>&lt;html-import src="./interop/mixed.html" as="mix"&gt;</code></p>
+          <html-import id="mix" src="./interop/mixed.html" as="mix"></html-import>
+          <div class="preview"><div class="row"><mix--click-counter>From JS</mix--click-counter> <mix--shout>from js too</mix--shout> <mix--badge tone="ok">from HTML</mix--badge></div></div>
+          <p id="mix-tags" class="small"></p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>6. A module with no components</h2>
+      <p class="small">Importing a JS module as a namespace when it offers no components is an error, rather than a silent no-op:</p>
+<pre><code>&lt;html-import src="./interop/util.js" as="u"&gt;&lt;/html-import&gt;</code></pre>
+      <div id="util-error"></div>
+    </section>
+
+    <div class="pager"><a href="./identity.html">← Identity</a><a href="./styles.html">Styles and theming →</a></div>
+  </main>
+
+  <script type="module">
+    import { renderChecks, esc, errorText } from './shared/site.js';
+    const ready = (id) => document.getElementById(id).ready;
+
+    const w = await ready('w');
+    renderChecks(document.getElementById('w-checks'), [
+      [`registered only the manifest: <code>${Object.keys(w.elements).join(' ')}</code>`, Object.keys(w.elements).length === 2],
+      ['<code>VERSION</code> and <code>formatDate</code> were not registered', !customElements.get('w--version') && !customElements.get('w--format-date')],
+      ['<code>&lt;w--click-counter&gt;</code> is a subclass of <code>ClickCounter</code>', customElements.get('w--click-counter').prototype instanceof w.module.ClickCounter],
+    ]);
+    const t = await ready('t');
+    renderChecks(document.getElementById('t-checks'), [
+      [`registered only <code>${Object.keys(t.elements).join(' ')}</code>`, Object.keys(t.elements).join() === 't--shout-box'],
+      ['the plain class <code>Untagged</code> and <code>LIMIT</code> were ignored', !customElements.get('t--untagged') && !customElements.get('t--limit')],
+    ]);
+    await ready('c');
+    document.querySelector('tap-counter').addEventListener('count', (e) => (document.getElementById('taps').textContent = `count event: ${e.detail}`));
+    await ready('x');
+    const mix = await ready('mix');
+    document.getElementById('mix-tags').innerHTML = 'Registered: ' + Object.keys(mix.elements).map((tag) => `<code>&lt;${esc(tag)}&gt;</code>`).join(' ');
+
+    const util = document.createElement('html-import');
+    util.setAttribute('src', './interop/util.js');
+    util.setAttribute('as', 'u');
+    util.addEventListener('error', (e) => (document.getElementById('util-error').innerHTML = `<div class="error-box">${esc(errorText(e.detail.error))}</div>`));
+    document.body.append(util);
+  </script>
+  <script type="module" src="./shared/site.js"></script>
+</body>
+</html>

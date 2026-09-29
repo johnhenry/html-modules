@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Selective imports and custom tag names · html-modules</title>
+  <script>try { const t = localStorage.getItem('html-modules-examples-theme'); if (t) document.documentElement.dataset.theme = t; } catch {}</script>
+  <link rel="stylesheet" href="./shared/site.css">
+  <style>
+    pick--badge:not(:defined), late--heart:not(:defined) { opacity: 0.4; font-style: italic; }
+  </style>
+  <script type="module" src="../src/browser.js"></script>
+</head>
+<body>
+  <header class="site-header">
+    <a class="home" href="./index.html">html-modules</a>
+    <span class="crumb">Bindings</span>
+    <span class="spacer"></span>
+    <button class="theme-toggle" type="button">Dark mode</button>
+  </header>
+  <main class="page">
+    <nav class="site-nav"></nav>
+    <h1>Selective imports and custom tag names</h1>
+    <p class="lede">
+      Custom element names are global and permanent: a namespace import registers every component of a module for the life of the page.
+      <code>&lt;html-binding&gt;</code> children narrow an import to the exports the page actually uses, choose tag names, adopt stylesheets and
+      expose data. This goes beyond the PRD, which specifies only the whole-namespace form; <code>element=</code> is the markup form of the
+      PRD's <code>definition.define(tag)</code>.
+    </p>
+    <div class="covers" data-page="bindings"></div>
+
+    <section class="card">
+      <h2>Only what the page uses</h2>
+<pre><code>&lt;html-import src="./components/ui.html" as="pick"&gt;
+  &lt;html-binding export="card"&gt;&lt;/html-binding&gt;                          <span class="muted">&lt;!-- &lt;pick--card&gt; --&gt;</span>
+  &lt;html-binding export="button" element="buy-button"&gt;&lt;/html-binding&gt;   <span class="muted">&lt;!-- a tag of your choosing --&gt;</span>
+  &lt;html-binding export="button" element="save-button"&gt;&lt;/html-binding&gt;  <span class="muted">&lt;!-- the same export, a second tag --&gt;</span>
+  &lt;html-binding export="default" element="tip-box"&gt;&lt;/html-binding&gt;    <span class="muted">&lt;!-- the default export --&gt;</span>
+  &lt;html-binding export="meta"&gt;&lt;/html-binding&gt;                          <span class="muted">&lt;!-- data: el.bindings.meta --&gt;</span>
+&lt;/html-import&gt;
+&lt;html-import src="./components/themes.html"&gt;
+  &lt;html-binding export="ocean" adopt&gt;&lt;/html-binding&gt;                   <span class="muted">&lt;!-- a stylesheet, adopted by the page --&gt;</span>
+&lt;/html-import&gt;</code></pre>
+      <html-import id="pick" src="./components/ui.html" as="pick">
+        <html-binding export="card"></html-binding>
+        <html-binding export="button" element="buy-button"></html-binding>
+        <html-binding export="button" element="save-button"></html-binding>
+        <html-binding export="default" element="tip-box"></html-binding>
+        <html-binding export="meta"></html-binding>
+      </html-import>
+      <html-import id="themes" src="./components/themes.html">
+        <html-binding export="ocean" adopt></html-binding>
+      </html-import>
+      <div class="split">
+        <div class="preview">
+          <pick--card>
+            <span slot="title">&lt;pick--card&gt;</span>
+            <div class="row"><buy-button>Buy</buy-button><save-button variant="ghost">Save for later</save-button></div>
+            <span slot="footer">The buttons are one <code>button</code> export under two tags, coloured by the adopted <code>ocean</code> theme.</span>
+          </pick--card>
+          <tip-box><strong>&lt;tip-box&gt;</strong> is the module's default export, <code>callout</code>.</tip-box>
+          <div class="row small">Waiting for a binding: <pick--badge>pick--badge</pick--badge></div>
+        </div>
+        <div>
+          <p class="label">The registry, for exports of ui.html</p>
+          <div class="table-wrap"><table id="registry"></table></div>
+          <p class="label" style="margin-top:.75rem"><code>document.getElementById('pick').bindings.meta</code></p>
+          <pre id="meta"></pre>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Load only</h2>
+      <p class="small">An import with no <code>as</code> and no bindings loads the module (for its side effects, or to warm the cache) and registers nothing.</p>
+<pre><code>&lt;html-import src="./components/icons.html"&gt;&lt;/html-import&gt;</code></pre>
+      <html-import id="warm" src="./components/icons.html"></html-import>
+      <ul id="warm-checks"></ul>
+    </section>
+
+    <section class="card">
+      <h2>Later</h2>
+      <p class="small">Bindings and imports can be added at any time. Elements already in the page, like the <code>&lt;pick--badge&gt;</code> above, upgrade when their tag is defined.</p>
+      <div class="row">
+        <button id="add-binding" type="button">Append <code>&lt;html-binding export="badge"&gt;</code> to the first import</button>
+        <button id="add-import" type="button">Insert <code>&lt;html-import src="./components/icons.html" as="late"&gt;</code></button>
+      </div>
+      <div class="preview" style="margin-top:.75rem">
+        <div class="row small">A late import: <late--heart style="color: var(--bad)"></late--heart> <late--star style="color: var(--warn)"></late--star></div>
+      </div>
+      <div id="late-log" class="log"></div>
+    </section>
+
+    <section class="card">
+      <h2>The same thing from JavaScript</h2>
+<pre><code>const { elements, values } = await HTMLModules.import('./components/ui.html', {
+  as: 'prog',
+  bindings: [{ export: 'badge', element: 'prog-badge' }, { export: 'meta' }],
+});</code></pre>
+      <div class="row"><button id="prog" type="button">Run it</button> <prog-badge tone="ok">&lt;prog-badge&gt;</prog-badge></div>
+      <div id="prog-out" class="log"></div>
+    </section>
+
+    <div class="pager"><a href="./namespaces.html">← Namespaces</a><a href="./identity.html">Identity vs registration name →</a></div>
+  </main>
+
+  <script type="module">
+    import { HTMLModules } from '../src/browser.js';
+    import { renderChecks, esc, status } from './shared/site.js';
+
+    const pick = document.getElementById('pick');
+    const { module } = await pick.ready;
+    await document.getElementById('themes').ready;
+    const renderRegistry = () => {
+      const tags = [...Object.keys(module.components).map((n) => `pick--${n}`), 'buy-button', 'save-button', 'tip-box'];
+      document.getElementById('registry').innerHTML = '<thead><tr><th>tag</th><th>defined</th></tr></thead><tbody>' +
+        tags.map((t) => `<tr><td><code>&lt;${t}&gt;</code></td><td>${customElements.get(t) ? status(true, 'yes') : status('pending', 'no')}</td></tr>`).join('') + '</tbody>';
+    };
+    renderRegistry();
+    document.getElementById('meta').textContent = JSON.stringify(pick.bindings.meta, null, 2);
+
+    const warm = await document.getElementById('warm').ready;
+    renderChecks(document.getElementById('warm-checks'), [
+      ['the module loaded: its namespace has <code>' + Object.keys(warm.module).join(', ') + '</code>', !!warm.module.star],
+      ['nothing was registered (<code>el.elements</code> is empty)', Object.keys(warm.elements).length === 0],
+      ['it is cached, so a later import of the same URL does not fetch again', HTMLModules.cache.has(new URL('./components/icons.html', location.href).href)],
+    ]);
+
+    const log = (text) => document.getElementById('late-log').insertAdjacentHTML('beforeend', `<div>${text}</div>`);
+    document.getElementById('add-binding').addEventListener('click', (e) => {
+      const b = document.createElement('html-binding');
+      b.setAttribute('export', 'badge');
+      b.addEventListener('load', (ev) => {
+        log(`&lt;html-binding export="badge"&gt; load: registered <code>&lt;${esc(ev.detail.tag)}&gt;</code>; the waiting &lt;pick--badge&gt; upgraded: ${!!document.querySelector('pick--badge').shadowRoot}`);
+        renderRegistry();
+      });
+      pick.append(b);
+      e.currentTarget.disabled = true;
+    });
+    document.getElementById('add-import').addEventListener('click', async (e) => {
+      e.currentTarget.disabled = true;
+      const imp = document.createElement('html-import');
+      imp.setAttribute('src', './components/icons.html');
+      imp.setAttribute('as', 'late');
+      document.body.append(imp);
+      const { elements } = await imp.ready;
+      log(`late import ready: ${Object.keys(elements).map((t) => `<code>&lt;${t}&gt;</code>`).join(' ')} (icons.html came from the cache)`);
+    });
+    document.getElementById('prog').addEventListener('click', async (e) => {
+      e.currentTarget.disabled = true;
+      const { elements, values } = await HTMLModules.import('./components/ui.html', {
+        as: 'prog',
+        bindings: [{ export: 'badge', element: 'prog-badge' }, { export: 'meta' }],
+      });
+      document.getElementById('prog-out').textContent = `elements: ${Object.keys(elements).join(', ')}\nvalues.meta: ${JSON.stringify(values.meta)}`;
+    });
+  </script>
+  <script type="module" src="./shared/site.js"></script>
+</body>
+</html>

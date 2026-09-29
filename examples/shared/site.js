@@ -2,7 +2,7 @@
 // small renderers for values, checks and errors.
 import { pages, allItems } from './catalog.js';
 
-const THEME_KEY = 'wmg-examples-theme';
+const THEME_KEY = 'html-modules-examples-theme';
 
 function readTheme() {
   try {
@@ -39,6 +39,21 @@ for (const button of document.querySelectorAll('.theme-toggle')) {
   });
 }
 
+// <nav class="site-nav"></nav> → links to every page.
+for (const nav of document.querySelectorAll('nav.site-nav')) {
+  const here = location.pathname.split('/').pop() || 'index.html';
+  nav.innerHTML = [{ href: 'index.html', title: 'All examples' }, ...pages]
+    .map((p) => `<a href="./${p.href}"${p.href === here ? ' aria-current="page"' : ''}>${esc(p.title)}</a>`).join('');
+}
+
+// <pre data-source="./components/ui.html"></pre> → that file's source.
+for (const pre of document.querySelectorAll('pre[data-source]')) {
+  fetch(pre.dataset.source, { cache: 'no-cache' })
+    .then((r) => (r.ok ? r.text() : Promise.reject(new Error(`${r.status}`))))
+    .then((text) => { pre.innerHTML = `<code>${esc(text.trim())}</code>`; })
+    .catch((e) => { pre.textContent = `Could not load ${pre.dataset.source}: ${e.message}`; });
+}
+
 // <div class="covers" data-page="id"></div> → the checklist items this page covers.
 const labels = new Map(allItems.map((i) => [i.id, i.label]));
 for (const host of document.querySelectorAll('.covers[data-page]')) {
@@ -59,12 +74,16 @@ export function describe(value) {
   if (value === undefined) return 'undefined';
   const tag = Object.prototype.toString.call(value);
   if (tag === '[object Module]') return `Module { ${Object.keys(value).join(', ')} }`;
+  if (tag === '[object HTMLComponent]') return value.isClass ? `HTMLComponent "${value.name}" (class ${value.element.name})` : `HTMLComponent "${value.name ?? '(default)'}" (template, shadow: ${value.shadow}${value.styles.length ? `, ${value.styles.length} style` : ''}${value.imports.length ? `, ${value.imports.length} import${value.imports.length > 1 ? 's' : ''}` : ''})`;
+  if (tag === '[object HTMLStylesheet]') return `HTMLStylesheet "${value.name}" (${value.css.trim().length} chars of CSS)`;
   if (typeof value === 'function') return value.prototype instanceof HTMLElement ? `class ${value.name || '(anonymous)'} extends HTMLElement` : `function ${value.name || ''}`;
   if (typeof CSSStyleSheet !== 'undefined' && value instanceof CSSStyleSheet) return `CSSStyleSheet (${value.cssRules.length} rules)`;
-  if (value?.kind === 'stylesheet') return `{ kind: "stylesheet", cssText: ${JSON.stringify(value.cssText.trim().slice(0, 40))}… }`;
   if (typeof Element !== 'undefined' && value instanceof Element) {
     const id = value.id ? `#${value.id}` : '';
     return `<${value.localName}${id}> element`;
+  }
+  if (typeof value === 'object' && Object.values(value).length && Object.values(value).every((v) => typeof v?.define === 'function')) {
+    return `manifest { ${Object.keys(value).map((k) => JSON.stringify(k)).join(', ')} }`;
   }
   if (typeof value === 'object') {
     try {

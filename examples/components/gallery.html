@@ -1,0 +1,17 @@
+<!--
+  A module whose own import is lazy. load="lazy" in its <html-import-settings>
+  means rating.html is not fetched when this module loads, but only when a
+  <rate--stars> first appears, which happens inside a <…wall> component's
+  shadow root. (Compiled, the same import is a static import: registration
+  is always eager there.)
+-->
+<html-import-settings load="lazy"></html-import-settings>
+<html-import src="./rating.html" as="rate"></html-import>
+
+<html-export name="wall">
+  <style>
+    :host { display: block; border: 1px solid var(--border, #ccc); border-radius: 10px; padding: 0.6rem 0.8rem; background: var(--surface, #fff); }
+    figcaption { margin-top: 0.3rem; }
+  </style>
+  <template><figure style="margin:0"><slot></slot><figcaption><rate--stars> 5.0</rate--stars></figcaption></figure></template>
+</html-export>

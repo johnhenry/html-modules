@@ -1,0 +1,13 @@
+<!--
+  A component whose template uses a tag it does not import: <icon--heart>.
+  It relies on the page to supply the icon namespace, which the lazy-loading
+  example does lazily, so the first <icon--heart> the page ever sees is
+  inside this component's shadow root.
+-->
+<html-export name="row">
+  <style>
+    :host { display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0.6rem; border-radius: 8px; background: var(--surface-2, #f4f4f0); }
+    icon--heart { color: var(--bad, #b3261e); }
+  </style>
+  <template><icon--heart></icon--heart><slot></slot></template>
+</html-export>

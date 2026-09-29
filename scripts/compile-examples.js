@@ -10,6 +10,7 @@ export const targets = [
   { from: 'components/themes.html', to: 'compiled/themes.js' },
   { from: 'components/rating.html', to: 'compiled/rating.js' },
   { from: 'components/tip.html', to: 'compiled/tip.js' },
+  { from: 'components/vault.html', to: 'compiled/vault.js' },
   { from: 'components/icons.html', to: 'compiled/icons.register.js', format: 'register', as: 'reg' },
   { from: 'components/icons.html', to: 'compiled/icons.dash.register.js', format: 'register', as: 'ico', delimiter: '-' },
 ];

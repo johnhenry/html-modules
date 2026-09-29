@@ -90,6 +90,14 @@
         html: '<html-import src="./components/ui.html" as="e13" delimiter="."></html-import>' },
       { id: 'err.delimiter', title: '… and in a selective binding', where: 'html-binding', expect: /<e14_card> is not a valid custom element name/,
         html: '<html-import src="./components/ui.html" as="e14" delimiter="_"><html-binding export="card"></html-binding></html-import>' },
+      { id: 'err.settings', title: 'A module whose <html-import-settings> comes after an <html-import>', where: 'html-import', expect: /<html-import-settings> must come before any <html-import> in .*late-settings\.html/,
+        html: '<html-import src="./errors/late-settings.html" as="e15"></html-import>' },
+      { id: 'err.settings', title: 'An <html-import-settings> in a page after its imports have started', where: 'html-import-settings', expect: /must come before any <html-import> in its document/,
+        html: '<html-import-settings delimiter="-"></html-import-settings>' },
+      { id: 'err.settings', title: 'An invalid per-import option', where: 'html-import', expect: /Invalid conflict="merge" on <html-import>: use "error" or "reuse"/,
+        html: '<html-import src="./components/ui.html" as="e16" conflict="merge"></html-import>' },
+      { id: 'err.settings', title: 'base on an <html-import> (it is document-level only)', where: 'html-import', expect: /"base" cannot be set on <html-import>/,
+        html: '<html-import src="./components/kit.html" as="e17" base="./components/"></html-import>' },
       { id: 'imp.element-api', title: 'A missing src attribute', where: 'html-import', expect: /requires a "src" attribute/,
         html: '<html-import as="e9"></html-import>' },
     ];
@@ -116,7 +124,7 @@
       }
       wrap.insertAdjacentHTML('beforeend', c.html);
       document.body.append(wrap);
-      await wrap.lastElementChild.ready.catch(() => {});
+      await (wrap.lastElementChild.ready ?? new Promise((r) => setTimeout(r))).catch(() => {});
     }
     await new Promise((r) => setTimeout(r));
 

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>base: ui@1</title>
+  <script>try { const t = localStorage.getItem('html-modules-examples-theme'); if (t) document.documentElement.dataset.theme = t; } catch {}</script>
+  <link rel="stylesheet" href="../shared/site.css">
+  <style>
+    body { background: var(--surface); }
+    .frame { display: grid; gap: .6rem; padding: 12px; }
+    :not(:defined) { opacity: .45; font-size: .85rem; }
+  </style>
+  <script type="module" src="../../src/browser.js"></script>
+</head>
+<body>
+  <!-- Every <html-import src> in this document resolves against ../vendor/ui@1/ (relative to this document). -->
+  <html-import-settings base="../vendor/ui@1/"></html-import-settings>
+  <html-import id="kit" src="./kit.html" as="ui"></html-import>
+
+  <div class="frame">
+    <div class="row"><ui--version></ui--version> <ui--button>Save</ui--button> <ui--chip>chips</ui--chip></div>
+    <p class="small muted"><a id="link" href="./base-v1.html">An ordinary link</a> is not affected by the setting.</p>
+    <pre id="info" class="small"></pre>
+  </div>
+  <script type="module">
+    const kit = document.getElementById('kit');
+    window.result = kit.ready.then((detail) => {
+      const fetched = performance.getEntriesByType('resource').map((e) => e.name).filter((n) => n.endsWith('.html')).map((n) => n.replace(location.origin, ''));
+      const info = { base: kit.settings.base.replace(location.origin, ''), fetched, tags: Object.keys(detail.tags), link: document.getElementById('link').href.replace(location.origin, '') };
+      document.getElementById('info').textContent = `base     ${info.base}\nfetched  ${fetched.join('\n         ')}\ntags     ${info.tags.join(' ')}`;
+      return info;
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>ui@2: a versioned component library</title>
+<!--
+  Version 2: pill-shaped buttons in the accent colour, and a new "chip"
+  component re-exported from ./extras.html. That re-export resolves against
+  this module's own URL, never the importing page's base.
+-->
+<html-export src="./extras.html"></html-export>
+
+<html-export name="version">
+  <style>:host { display: inline-block; font: 600 0.8rem/1.6 var(--mono, monospace); padding: 0 0.6rem; border-radius: 999px; background: var(--accent-soft, #ebe8ff); color: var(--accent, #5b4bd6); }</style>
+  <template>ui@2</template>
+</html-export>
+
+<html-export name="button">
+  <style>
+    :host { display: inline-block; }
+    button { font: inherit; font-size: 0.9rem; cursor: pointer; padding: 0.35rem 1rem; border-radius: 999px;
+      border: 1px solid var(--accent, #5b4bd6); background: var(--accent, #5b4bd6); color: var(--surface, #fff); }
+  </style>
+  <template><button part="button" type="button">✓ <slot></slot></button></template>
+</html-export>

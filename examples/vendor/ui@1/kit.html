@@ -1,0 +1,21 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>ui@1: a versioned component library</title>
+<!--
+  Version 1 of a small "vendored" library. A page picks the version with
+  <html-import-settings base="…/vendor/ui@1/">, and imports "./kit.html"
+  as if it were next to the page.
+-->
+<html-export name="version">
+  <style>:host { display: inline-block; font: 600 0.8rem/1.6 var(--mono, monospace); padding: 0 0.5rem; border: 1px solid var(--border, #ccc); border-radius: 2px; }</style>
+  <template>ui@1</template>
+</html-export>
+
+<html-export name="button">
+  <style>
+    :host { display: inline-block; }
+    button { font: inherit; font-size: 0.9rem; cursor: pointer; padding: 0.35rem 0.8rem; border-radius: 2px;
+      border: 1px solid var(--muted, #666); background: var(--surface-2, #eee); color: var(--text, #111); }
+  </style>
+  <template><button part="button" type="button"><slot></slot></button></template>
+</html-export>

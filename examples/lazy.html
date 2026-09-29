@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lazy loading · html-modules</title>
+  <script>try { const t = localStorage.getItem('html-modules-examples-theme'); if (t) document.documentElement.dataset.theme = t; } catch {}</script>
+  <link rel="stylesheet" href="./shared/site.css">
+  <style>
+    .stage { display: grid; gap: 0.5rem; min-height: 2.4rem; padding: 0.6rem; border: 1px dashed var(--border); border-radius: 10px; background: var(--bg); margin: 0.5rem 0; }
+    .stage:empty::before { content: "(empty)"; color: var(--muted); font-size: 0.85rem; }
+    :not(:defined) { opacity: 0.5; }
+    .net { display: grid; grid-template-columns: 4.5rem minmax(0, 1fr); gap: 0.1rem 0.6rem; }
+    .net .t { color: var(--muted); text-align: right; }
+    .step { border-top: 1px solid var(--border); padding-top: 0.8rem; margin-top: 0.8rem; }
+    .step:first-of-type { border-top: 0; padding-top: 0; margin-top: 0; }
+    .sticky-log { position: sticky; top: 3.4rem; }
+    @media (max-width: 860px) { .sticky-log { position: static; } }
+  </style>
+  <script type="module" src="../src/browser.js"></script>
+</head>
+<body>
+  <!-- Every import in this page is lazy unless it says otherwise. -->
+  <html-import-settings load="lazy"></html-import-settings>
+
+  <html-import id="ui" src="./components/ui.html" as="ui"></html-import>
+  <html-import id="shelf" src="./components/shelf.html" as="shelf"></html-import>
+  <html-import id="icons" src="./components/icons.html" as="icon"></html-import>
+  <html-import id="tip" src="./components/tip.html"><html-binding export="default" element="lazy-tip"></html-binding></html-import>
+  <html-import id="gallery" src="./components/gallery.html" as="gallery" load="eager"></html-import>
+  <html-import id="gone" src="./components/tally.html" as="gone"></html-import>
+  <html-import id="manual" src="./components/hint.html"></html-import>
+
+  <header class="site-header">
+    <a class="home" href="./index.html">html-modules</a>
+    <span class="crumb">Lazy loading</span>
+    <span class="spacer"></span>
+    <button class="theme-toggle" type="button">Dark mode</button>
+  </header>
+  <main class="page">
+    <nav class="site-nav"></nav>
+    <h1>Lazy loading</h1>
+    <p class="lede">
+      With <code>load="lazy"</code> (on an import, or for the whole document in <code>&lt;html-import-settings&gt;</code>), nothing is fetched
+      until one of the import's tags is actually used. Then the module loads, its tags are registered, and the elements that were waiting upgrade
+      in place. The network panel records every module this page has fetched, from the browser's own resource timing.
+    </p>
+    <div class="covers" data-page="lazy"></div>
+
+<pre><code>&lt;html-import-settings load="lazy"&gt;&lt;/html-import-settings&gt;
+
+&lt;html-import src="./components/ui.html" as="ui"&gt;&lt;/html-import&gt;          <span class="muted">&lt;!-- waits for any &lt;ui--…&gt; --&gt;</span>
+&lt;html-import src="./components/shelf.html" as="shelf"&gt;&lt;/html-import&gt;
+&lt;html-import src="./components/icons.html" as="icon"&gt;&lt;/html-import&gt;
+&lt;html-import src="./components/tip.html"&gt;                                <span class="muted">&lt;!-- waits for exactly &lt;lazy-tip&gt; --&gt;</span>
+  &lt;html-binding export="default" element="lazy-tip"&gt;&lt;/html-binding&gt;
+&lt;/html-import&gt;
+&lt;html-import src="./components/gallery.html" as="gallery" load="eager"&gt;&lt;/html-import&gt;  <span class="muted">&lt;!-- the attribute wins --&gt;</span>
+&lt;html-import id="gone" src="./components/tally.html" as="gone"&gt;&lt;/html-import&gt;
+&lt;html-import id="manual" src="./components/hint.html"&gt;&lt;/html-import&gt;    <span class="muted">&lt;!-- nothing to watch: only .load() --&gt;</span></code></pre>
+
+    <div class="split">
+      <section class="card">
+        <h2>Steps</h2>
+        <div class="row"><button id="run-all" class="primary" type="button">Run every step</button><span id="summary" class="small muted"></span></div>
+        <ul id="initial-checks"></ul>
+
+        <div class="step">
+          <h3>1. The first <code>&lt;ui--…&gt;</code> element</h3>
+          <p class="small">A namespace import does not know its export names before loading, so it waits for any tag starting with <code>ui--</code>.</p>
+          <button type="button" data-step="1">Add a &lt;ui--card&gt;</button>
+          <div class="stage" id="stage-1"></div>
+          <ul id="checks-1"></ul>
+        </div>
+
+        <div class="step">
+          <h3>2. A tag inside a component's shadow root</h3>
+          <p class="small">
+            <code>shelf.html</code>'s template uses <code>&lt;icon--heart&gt;</code>. Adding a <code>&lt;shelf--row&gt;</code> loads <code>shelf.html</code>;
+            its shadow root then contains the page's first <code>&lt;icon--…&gt;</code>, which loads <code>icons.html</code>. Shadow roots created by
+            html-modules components (open or closed) are watched as well as the document.
+          </p>
+          <button type="button" data-step="2">Add a &lt;shelf--row&gt;</button>
+          <div class="stage" id="stage-2"></div>
+          <ul id="checks-2"></ul>
+        </div>
+
+        <div class="step">
+          <h3>3. A binding with <code>element=</code></h3>
+          <p class="small">With <code>&lt;html-binding&gt;</code> children, the import waits for exactly the tags they bind.</p>
+          <button type="button" data-step="3">Add a &lt;lazy-tip&gt;</button>
+          <div class="stage" id="stage-3"></div>
+          <ul id="checks-3"></ul>
+        </div>
+
+        <div class="step">
+          <h3>4. A module's own lazy import</h3>
+          <p class="small">
+            <code>gallery.html</code> was loaded eagerly, but its own <code>&lt;html-import-settings load="lazy"&gt;</code> makes its import of
+            <code>rating.html</code> lazy: it is fetched when a <code>&lt;rate--stars&gt;</code> first appears in a <code>&lt;gallery--wall&gt;</code>.
+          </p>
+<pre><code>&lt;!-- gallery.html --&gt;
+&lt;html-import-settings load="lazy"&gt;&lt;/html-import-settings&gt;
+&lt;html-import src="./rating.html" as="rate"&gt;&lt;/html-import&gt;
+&lt;html-export name="wall"&gt;&lt;template&gt;… &lt;rate--stars&gt;&lt;/rate--stars&gt; …&lt;/template&gt;&lt;/html-export&gt;</code></pre>
+          <button type="button" data-step="4">Add a &lt;gallery--wall&gt;</button>
+          <div class="stage" id="stage-4"></div>
+          <ul id="checks-4"></ul>
+        </div>
+
+        <div class="step">
+          <h3>5. <code>el.load()</code></h3>
+          <p class="small"><code>#manual</code> has no <code>as</code> and no bindings, so there is no tag to wait for. <code>load()</code> loads any import now.</p>
+          <button type="button" data-step="5">manual.load()</button>
+          <ul id="checks-5"></ul>
+        </div>
+
+        <div class="step">
+          <h3>6. Disconnecting before it loads</h3>
+          <p class="small">Removing a lazy import that has not loaded stops the watching. Putting it back resumes it (and an element already present triggers it).</p>
+          <div class="row">
+            <button type="button" data-step="6a">Remove #gone, then add a &lt;gone--done&gt;</button>
+            <button type="button" data-step="6b">Put #gone back</button>
+          </div>
+          <div class="stage" id="stage-6"></div>
+          <ul id="checks-6"></ul>
+        </div>
+
+        <div class="step">
+          <h3>7. From JavaScript</h3>
+<pre><code>const handle = HTMLModules.import('./components/vault.html', { as: 'vlt', load: 'lazy' });
+handle.state;   <span class="muted">// "waiting"; also handle.ready, handle.load(), handle.cancel()</span></code></pre>
+          <button type="button" data-step="7">Add a &lt;vlt--glass&gt;</button>
+          <div class="stage" id="stage-7"></div>
+          <ul id="checks-7"></ul>
+        </div>
+      </section>
+
+      <div class="sticky-log">
+        <section class="card">
+          <h2>Network</h2>
+          <p class="small muted">HTML modules this page has fetched (<code>PerformanceObserver</code>, resource entries), in ms since the page started.</p>
+          <div id="net" class="log net"></div>
+        </section>
+        <section class="card">
+          <h2>Imports</h2>
+          <div class="table-wrap"><table id="imports"></table></div>
+          <p class="small muted">Not watched: shadow roots created by other code, other documents (iframes), and template contents until they are cloned into a watched tree.</p>
+        </section>
+      </div>
+    </div>
+
+    <div class="pager"><a href="./settings.html">← Settings</a><a href="./index.html">All examples →</a></div>
+  </main>
+
+  <script type="module">
+    import { HTMLModules } from '../src/browser.js';
+    import { componentRoot, lazyTargets } from '../src/lazy.js';
+    import { renderChecks, esc } from './shared/site.js';
+
+    const $ = (id) => document.getElementById(id);
+    const tick = (ms = 60) => new Promise((r) => setTimeout(r, ms));
+
+    // The network panel: resource timing for every HTML module fetched by this page.
+    const fetched = new Map(); // path → ms
+    const net = $('net');
+    const recordEntries = (entries) => {
+      for (const e of entries) {
+        const path = new URL(e.name).pathname;
+        if (!/\/examples\/(components|vendor)\/.*\.html$/.test(path) || fetched.has(path)) continue;
+        fetched.set(path, e.startTime);
+        net.insertAdjacentHTML('beforeend', `<span class="t">${e.startTime.toFixed(0)}</span><span>GET ${esc(path.replace('/examples/', ''))}</span>`);
+      }
+    };
+    recordEntries(performance.getEntriesByType('resource'));
+    new PerformanceObserver((list) => recordEntries(list.getEntries())).observe({ type: 'resource', buffered: true });
+    const wasFetched = (name) => {
+      recordEntries(performance.getEntriesByType('resource')); // do not wait for the observer's next callback
+      return fetched.has(`/examples/components/${name}`);
+    };
+
+    // The imports table.
+    const handle = HTMLModules.import('./components/vault.html', { as: 'vlt', load: 'lazy' });
+    const imports = [...document.querySelectorAll('html-import')];
+    const watches = (el) => {
+      const bindings = [...el.querySelectorAll('html-binding')].map((b) => ({ export: b.getAttribute('export'), element: b.getAttribute('element') ?? undefined }));
+      const t = lazyTargets({ as: el.getAttribute('as') || undefined, delimiter: el.delimiter, bindings });
+      return [...t.prefixes.map((p) => `${p}…`), ...t.tags].join(' ') || '(nothing: load() only)';
+    };
+    const renderImports = () => {
+      $('imports').innerHTML = '<thead><tr><th>import</th><th>waits for</th><th>state</th></tr></thead><tbody>'
+        + imports.map((el) => `<tr><td><code>#${el.id}</code><br><span class="small muted">${esc(el.getAttribute('src').replace('./components/', ''))}${el.hasAttribute('load') ? ` · load="${esc(el.getAttribute('load'))}"` : ''}</span></td><td><code>${esc(el.settings.load === 'lazy' ? watches(el) : '(eager)')}</code></td><td>${esc(el.state)}${el.isConnected ? '' : ' (removed)'}</td></tr>`).join('')
+        + `<tr><td><code>handle</code><br><span class="small muted">vault.html · import()</span></td><td><code>vlt--…</code></td><td>${esc(handle.state)}</td></tr></tbody>`;
+    };
+    renderImports();
+    setInterval(renderImports, 400);
+
+    // Before anything is used.
+    await $('gallery').ready;
+    await tick(150);
+    const lazyFiles = ['ui.html', 'shelf.html', 'icons.html', 'tip.html', 'rating.html', 'tally.html', 'hint.html', 'vault.html'];
+    renderChecks($('initial-checks'), [
+      ['on load, none of the lazy modules has been fetched', lazyFiles.every((f) => !wasFetched(f))],
+      ['… while the eager <code>gallery.html</code> was', wasFetched('gallery.html')],
+      ['every lazy import is <code>waiting</code>', imports.filter((el) => el.id !== 'gallery').every((el) => el.state === 'waiting') && handle.state === 'waiting'],
+    ]);
+
+    const add = (stage, html) => { $(stage).insertAdjacentHTML('beforeend', html); return $(stage).lastElementChild; };
+    const upgraded = (el) => !!(el && (el.shadowRoot || componentRoot(el)));
+    const steps = {
+      async 1() {
+        const card = add('stage-1', '<ui--card><span slot="title">Added just now</span>Its module was fetched when this element appeared.</ui--card>');
+        await $('ui').ready;
+        await tick();
+        renderChecks($('checks-1'), [
+          ['<code>ui.html</code> was fetched, only now', wasFetched('ui.html')],
+          ['the card upgraded in place', upgraded(card)],
+          ['every <code>ui--…</code> tag is registered, not just the one used', !!customElements.get('ui--badge')],
+        ]);
+      },
+      async 2() {
+        const row = add('stage-2', '<shelf--row>A row whose template has a heart icon</shelf--row>');
+        await $('shelf').ready;
+        await $('icons').ready;
+        await tick();
+        const heart = componentRoot(row)?.querySelector('icon--heart');
+        renderChecks($('checks-2'), [
+          ['<code>shelf.html</code> was fetched when the row was added', wasFetched('shelf.html')],
+          ['then <code>icons.html</code>, because of the <code>&lt;icon--heart&gt;</code> in the row\'s shadow root', wasFetched('icons.html') && fetched.get('/examples/components/icons.html') >= fetched.get('/examples/components/shelf.html')],
+          ['the icon upgraded inside the shadow root', upgraded(heart)],
+        ]);
+      },
+      async 3() {
+        const tip = add('stage-3', '<lazy-tip>Bound with <code>element="lazy-tip"</code>.</lazy-tip>');
+        await $('tip').ready;
+        await tick();
+        renderChecks($('checks-3'), [
+          ['<code>tip.html</code> was fetched for <code>&lt;lazy-tip&gt;</code>', wasFetched('tip.html')],
+          ['it upgraded', upgraded(tip)],
+        ]);
+      },
+      async 4() {
+        const before = wasFetched('rating.html');
+        const wall = add('stage-4', '<gallery--wall>A picture wall</gallery--wall>');
+        await customElements.whenDefined('rate--stars');
+        await tick();
+        renderChecks($('checks-4'), [
+          ['<code>rating.html</code> was not fetched until now', !before && wasFetched('rating.html')],
+          ['<code>&lt;rate--stars&gt;</code> upgraded inside the wall', upgraded(componentRoot(wall)?.querySelector('rate--stars'))],
+        ]);
+      },
+      async 5() {
+        const before = wasFetched('hint.html');
+        const detail = await $('manual').load();
+        await tick();
+        renderChecks($('checks-5'), [
+          ['<code>hint.html</code> was fetched by <code>load()</code>', !before && wasFetched('hint.html')],
+          ['<code>load()</code> resolved with the module', !!detail.module?.default],
+        ]);
+      },
+      async '6a'() {
+        const gone = $('gone');
+        gone.remove();
+        add('stage-6', '<gone--done>Waiting for its import to come back</gone--done>');
+        await tick(200);
+        renderChecks($('checks-6'), [
+          ['removed before loading: <code>state</code> is <code>idle</code>', gone.state === 'idle'],
+          ['a <code>&lt;gone--done&gt;</code> appeared, and <code>tally.html</code> was not fetched', !wasFetched('tally.html') && !customElements.get('gone--done')],
+          ['put it back to resume', null],
+        ]);
+        steps.gone = gone;
+      },
+      async '6b'() {
+        const gone = steps.gone ?? $('gone');
+        if (!gone.isConnected) document.body.append(gone);
+        if (!$('stage-6').firstElementChild) add('stage-6', '<gone--done>Its import is back</gone--done>');
+        await gone.ready;
+        await tick();
+        renderChecks($('checks-6'), [
+          ['removed before loading: nothing was fetched while it was out', true],
+          ['put back: the <code>&lt;gone--done&gt;</code> already in the page loaded <code>tally.html</code>', wasFetched('tally.html')],
+          ['and upgraded', upgraded($('stage-6').firstElementChild)],
+        ]);
+      },
+      async 7() {
+        const before = handle.state;
+        const glass = add('stage-7', '<vlt--glass>Registered by a lazy <code>HTMLModules.import()</code></vlt--glass>');
+        const result = await handle.ready;
+        await tick();
+        renderChecks($('checks-7'), [
+          ['the handle was <code>waiting</code> and nothing was fetched', before === 'waiting'],
+          ['the element loaded <code>vault.html</code>, and the handle is <code>loaded</code>', wasFetched('vault.html') && handle.state === 'loaded'],
+          ['<code>ready</code> resolved with the tags it registered', 'vlt--glass' in result.tags && upgraded(glass)],
+        ]);
+      },
+    };
+    const done = new Set();
+    const run = async (id) => {
+      if (done.has(id)) return;
+      done.add(id);
+      for (const b of document.querySelectorAll(`[data-step="${id}"]`)) b.disabled = true;
+      await steps[id]();
+      renderImports();
+      $('summary').textContent = `${document.querySelectorAll('.step .status.pass').length} checks passed`;
+    };
+    for (const b of document.querySelectorAll('[data-step]')) b.addEventListener('click', () => run(b.dataset.step));
+    $('run-all').addEventListener('click', async (e) => {
+      e.currentTarget.disabled = true;
+      for (const id of ['1', '2', '3', '4', '5', '6a', '6b', '7']) await run(id);
+    });
+  </script>
+  <script type="module" src="./shared/site.js"></script>
+</body>
+</html>

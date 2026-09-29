@@ -91,7 +91,7 @@ h3 { font-size: 1rem; }
 p { margin: 0.4rem 0 0.7rem; }
 
 /* Imports and bindings describe dependencies; they are never rendered. */
-html-import, html-binding, html-export { display: none; }
+html-import, html-binding, html-export, html-import-settings, html-module-settings { display: none; }
 
 .site-header {
   position: sticky; top: 0; z-index: 10;

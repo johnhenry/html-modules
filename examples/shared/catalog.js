@@ -34,6 +34,27 @@ export const checklist = [
     ['imp.bare', 'bare specifiers through the page import map'],
     ['imp.element-api', 'el.ready / el.module / el.elements / el.bindings, load and error events'],
   ] },
+  { group: 'Settings', items: [
+    ['set.import-settings', '<html-import-settings> sets defaults for the imports of its document'],
+    ['set.precedence', 'precedence: attribute > document settings > createHTMLModules() options > defaults'],
+    ['set.delimiter', 'delimiter for a whole document'],
+    ['set.base', 'base: resolve every import against a versioned folder, and nothing else'],
+    ['set.conflict', 'conflict="reuse" vs "error" (a compiled and a runtime copy on one page)'],
+    ['set.errors', 'errors="throw" reports failures to reportError() / window.onerror'],
+    ['set.scope', 'settings are lexical: page settings never reach modules; module settings stay inside'],
+    ['set.placement', 'placement rules: before any <html-import>, at most one, validated attributes'],
+    ['set.module-settings', '<html-module-settings> shadow / delegates-focus defaults, overridden per export'],
+  ] },
+  { group: 'Lazy loading', items: [
+    ['lazy.first-use', 'load="lazy": nothing is fetched until a tag is used'],
+    ['lazy.prefix', 'a lazy namespace import waits for any <as><delimiter>… tag'],
+    ['lazy.shadow', 'tags inside component shadow roots trigger a load'],
+    ['lazy.bindings', '<html-binding element=> children: exactly those tags'],
+    ['lazy.module', 'a module\'s own lazy imports'],
+    ['lazy.load', 'el.load() and el.state'],
+    ['lazy.disconnect', 'disconnecting before load cancels the watching'],
+    ['lazy.api', 'HTMLModules.import(src, { load: "lazy" }) handles'],
+  ] },
   { group: 'Upgrade and identity', items: [
     ['up.async', 'elements written before their import upgrade natively'],
     ['up.defined', ':not(:defined) styling and customElements.whenDefined()'],
@@ -74,6 +95,7 @@ export const checklist = [
     ['cmp.default', 'export default in compiled output'],
     ['cmp.same', 'compiled and runtime-loaded modules render the same'],
     ['cmp.in-browser', 'compileHTMLModule() in the browser'],
+    ['cmp.settings', 'settings compile too: export defaults in definitions, import settings in $imports'],
   ] },
   { group: 'Errors', items: [
     ['err.fetch', 'missing module (404)'],
@@ -89,6 +111,7 @@ export const checklist = [
     ['err.default-tag', 'binding the default export without element='],
     ['err.default', '<html-export default> without a name, or two default exports'],
     ['err.delimiter', 'an invalid delimiter, or a tag the delimiter makes invalid (ui.card)'],
+    ['err.settings', 'misplaced, duplicate or invalid settings, and invalid per-import options'],
   ] },
 ];
 
@@ -132,7 +155,7 @@ export const pages = [
   {
     id: 'errors', href: 'errors.html', title: 'Errors',
     summary: 'Every error, triggered on purpose, with the event it fires and its message.',
-    covers: ['err.fetch', 'err.missing-export', 'err.bad-tag', 'err.not-element', 'err.not-stylesheet', 'err.conflict', 'err.namespace', 'err.format', 'err.cycle', 'err.js-nothing', 'err.default-tag', 'err.default', 'err.delimiter', 'rt.retry', 'rt.events', 'imp.element-api'],
+    covers: ['err.fetch', 'err.missing-export', 'err.bad-tag', 'err.not-element', 'err.not-stylesheet', 'err.conflict', 'err.namespace', 'err.format', 'err.cycle', 'err.js-nothing', 'err.default-tag', 'err.default', 'err.delimiter', 'err.settings', 'set.placement', 'rt.retry', 'rt.events', 'imp.element-api'],
   },
   {
     id: 'compiler', href: 'compiler.html', title: 'The compiler',
@@ -143,6 +166,16 @@ export const pages = [
     id: 'app', href: 'app.html', title: 'A small app: reading list',
     summary: 'A reading-list app assembled from HTML modules: a component module, icons, seed data as JSON, a theme, and one JS component for behaviour.',
     covers: ['fmt.component', 'fmt.data', 'fmt.nested', 'imp.namespace', 'imp.selective', 'imp.adopt', 'imp.data', 'js.extend', 'js.manifest', 'sty.custom-props', 'sty.parts', 'rt.cache'],
+  },
+  {
+    id: 'settings', href: 'settings.html', title: 'Settings',
+    summary: '<html-import-settings> for a whole page: delimiter, a base that switches a vendored library between versions, conflict="reuse" letting a compiled and a runtime copy share a page, errors="throw" reaching window.onerror; lexical scope; and <html-module-settings> giving a module closed shadow roots by default.',
+    covers: ['set.import-settings', 'set.precedence', 'set.delimiter', 'set.base', 'set.conflict', 'set.errors', 'set.scope', 'set.placement', 'set.module-settings', 'fmt.shadow', 'fmt.reexport-all', 'imp.custom-delimiter', 'imp.tags', 'cmp.register', 'cmp.settings', 'err.settings', 'err.conflict'],
+  },
+  {
+    id: 'lazy', href: 'lazy.html', title: 'Lazy loading',
+    summary: 'load="lazy": a live network panel shows each module fetched only when its first element appears, including a tag inside a component\'s shadow root, a binding\'s exact tag, a module\'s own lazy import, el.load(), disconnecting before load, and a lazy HTMLModules.import() handle.',
+    covers: ['lazy.first-use', 'lazy.prefix', 'lazy.shadow', 'lazy.bindings', 'lazy.module', 'lazy.load', 'lazy.disconnect', 'lazy.api', 'set.import-settings', 'set.precedence', 'up.async', 'up.defined', 'imp.element-api'],
   },
 ];
 

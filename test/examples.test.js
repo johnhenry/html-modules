@@ -15,14 +15,16 @@ import { setup, shared, normalizeHTML } from './helpers.js';
 
 const examples = fileURLToPath(new URL('../examples/', import.meta.url));
 const files = (await readdir(examples, { recursive: true })).map((f) => join(examples, f));
-const htmlModules = files.filter((f) => f.endsWith('.html') && /\/(components|app|interop|errors)\//.test(f));
-const pageFiles = files.filter((f) => f.endsWith('.html') && !/\/(components|app|interop|errors|compiler)\//.test(f));
+const htmlModules = files.filter((f) => f.endsWith('.html') && /\/(components|app|interop|errors|vendor)\//.test(f));
+// Frames (compiler/, settings/) are pages embedded by other pages, not catalog pages.
+const pageFiles = files.filter((f) => f.endsWith('.html') && !/\/(components|app|interop|errors|compiler|settings|vendor)\//.test(f));
 const broken = {
   'errors/no-template.html': /needs a <template>/,
   'errors/dup-export.html': /Duplicate export "card"/,
   'errors/bad-name.html': /Invalid export name "FancyCard"/,
   'errors/default-alone.html': /write name="default"/,
   'errors/two-defaults.html': /More than one default export/,
+  'errors/late-settings.html': /<html-import-settings> must come before any <html-import>/,
   'errors/cycle-a.html': /Circular HTML module dependency/,
   'errors/cycle-b.html': /Circular HTML module dependency/,
 };
@@ -30,7 +32,8 @@ const broken = {
 const normalized = (r) => ({ ...r, exports: r.exports.map((e) => (e.kind === 'component' ? { ...e, template: normalizeHTML(e.template) } : e)) });
 
 test('every example HTML module reads the same through the DOM and the scanner', async () => {
-  assert.ok(htmlModules.length >= 15);
+  assert.ok(htmlModules.length >= 20);
+  const withSettings = [];
   for (const file of htmlModules) {
     const name = relative(examples, file);
     const source = await readFile(file, 'utf8');
@@ -42,7 +45,10 @@ test('every example HTML module reads the same through the DOM and the scanner',
     const a = readHTMLModule(new shared.DOMParser().parseFromString(source, 'text/html'), name);
     const b = scanHTMLModule(source, name);
     assert.deepEqual(normalized(b), normalized(a), name);
+    if (a.importSettings || a.moduleSettings) withSettings.push(name);
   }
+  // The settings elements are exercised by real example modules.
+  assert.deepEqual(withSettings.sort(), ['components/gallery.html', 'components/stamp.html', 'components/vault.html']);
 });
 
 test('every example HTML module loads, and the broken ones fail as documented', async () => {
@@ -83,7 +89,16 @@ test('every page works offline: no remote URLs, and every local reference exists
   for (const f of srcFiles) exists.add(f);
   for (const file of files.filter((f) => f.endsWith('.html') || f.endsWith('.js'))) {
     // Ignore markup shown as text (inside <pre>, <code> and <textarea>).
-    const text = (await readFile(file, 'utf8')).replace(/<(pre|code|textarea)\b[\s\S]*?<\/\1>/g, '');
+    let text = (await readFile(file, 'utf8')).replace(/<(pre|code|textarea)\b[\s\S]*?<\/\1>/g, '');
+    // With <html-import-settings base>, a document's <html-import src> resolves against that base.
+    const base = text.match(/<html-import-settings\b[^>]*\sbase="([^"]+)"/)?.[1];
+    if (base) {
+      const baseURL = new URL(base, pathToFileURL(file));
+      for (const m of text.matchAll(/<html-import\b[^>]*\ssrc="(\.{1,2}\/[^"#?]+)"/g)) {
+        assert.ok(exists.has(new URL(m[1], baseURL).href), `${relative(examples, file)} → ${m[1]} (base ${base}) does not exist`);
+      }
+      text = text.replace(/(<html-import\b[^>]*\s)src="[^"]*"/g, '$1');
+    }
     assert.doesNotMatch(text, /(?:src|href)="https?:\/\//, `${relative(examples, file)} references a remote URL`);
     assert.doesNotMatch(text, /from ['"]https?:\/\//, `${relative(examples, file)} imports a remote module`);
     const refs = [...text.matchAll(/(?:src|href|data-source)="(\.{1,2}\/[^"#?]+)"/g), ...text.matchAll(/^\s*(?:import|export)\b[^'"\n]*?['"](\.{1,2}\/[^'"]+)['"]/gm)].map((m) => m[1]);

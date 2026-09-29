@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Settings · html-modules</title>
+  <script>try { const t = localStorage.getItem('html-modules-examples-theme'); if (t) document.documentElement.dataset.theme = t; } catch {}</script>
+  <link rel="stylesheet" href="./shared/site.css">
+  <style>
+    iframe { width: 100%; height: 190px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+    .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+    .seg button { border: 0; border-radius: 0; }
+    .seg button[aria-pressed="true"] { background: var(--accent); color: var(--surface); }
+    .from { font-size: 0.75rem; color: var(--muted); display: block; }
+  </style>
+  <script type="module" src="../src/browser.js"></script>
+</head>
+<body>
+  <!-- This page's settings: every <html-import> below uses "-" unless it says otherwise. -->
+  <html-import-settings delimiter="-"></html-import-settings>
+
+  <header class="site-header">
+    <a class="home" href="./index.html">html-modules</a>
+    <span class="crumb">Settings</span>
+    <span class="spacer"></span>
+    <button class="theme-toggle" type="button">Dark mode</button>
+  </header>
+  <main class="page">
+    <nav class="site-nav"></nav>
+    <h1>Settings</h1>
+    <p class="lede">
+      Two optional elements set defaults for one document. <code>&lt;html-import-settings&gt;</code> configures the imports of the page (or module)
+      it appears in: <code>delimiter</code>, <code>base</code>, <code>conflict</code>, <code>load</code> and <code>errors</code>.
+      <code>&lt;html-module-settings&gt;</code>, inside an HTML module, configures that module's component exports: <code>shadow</code> and
+      <code>delegates-focus</code>. Settings are lexical: they never leak from a page into the modules it imports, or back out.
+      Lazy loading has <a href="./lazy.html">its own page</a>.
+    </p>
+    <div class="covers" data-page="settings"></div>
+
+    <section class="card">
+      <h2>One element for the whole page, and the precedence</h2>
+<pre><code>&lt;html-import-settings delimiter="-"&gt;&lt;/html-import-settings&gt;     <span class="muted">&lt;!-- first: before any &lt;html-import&gt; --&gt;</span>
+
+&lt;html-import src="./components/ui.html" as="ui"&gt;&lt;/html-import&gt;                   <span class="muted">&lt;!-- &lt;ui-card&gt;, &lt;ui-badge&gt;, … --&gt;</span>
+&lt;html-import src="./components/ui.html" as="classic" delimiter="--"&gt;&lt;/html-import&gt; <span class="muted">&lt;!-- the attribute wins: &lt;classic--card&gt; --&gt;</span></code></pre>
+      <html-import id="ui" src="./components/ui.html" as="ui"></html-import>
+      <html-import id="classic" src="./components/ui.html" as="classic" delimiter="--"></html-import>
+      <div class="split">
+        <ui-card><span slot="title">&lt;ui-card&gt;</span>The page's <code>delimiter="-"</code>. <span slot="footer"><ui-badge tone="ok">ui-badge</ui-badge></span></ui-card>
+        <classic--card><span slot="title">&lt;classic--card&gt;</span>Its own <code>delimiter="--"</code> overrides the page. <span slot="footer"><classic--badge>classic--badge</classic--badge></span></classic--card>
+      </div>
+      <p class="label" style="margin-top:1rem">Each import's <code>el.settings</code>, and where each value came from</p>
+      <div class="table-wrap"><table id="settings-table"></table></div>
+      <p class="small muted">
+        Precedence, for each option: the <code>&lt;html-import&gt;</code> attribute, then the document's <code>&lt;html-import-settings&gt;</code>,
+        then the <code>createHTMLModules({ … })</code> options of the instance, then the built-in defaults (<code>--</code>, <code>error</code>,
+        <code>eager</code>, <code>event</code>). <code>base</code> is document-level only.
+      </p>
+      <ul id="precedence-checks"></ul>
+    </section>
+
+    <section class="card">
+      <h2><code>base</code>: pick a library version for the whole document</h2>
+      <p class="small">
+        <code>base</code> is like <code>&lt;base href&gt;</code>, but only for HTML imports. It is resolved against the document's own URL and changes how
+        every <code>&lt;html-import src&gt;</code> in that document resolves, and nothing else: links, images and the programmatic API are unaffected.
+        The frame below imports <code>src="./kit.html"</code>; switching <code>base</code> switches it between <code>vendor/ui@1/</code> and
+        <code>vendor/ui@2/</code>. Version 2 re-exports a chip from <code>./extras.html</code>, which resolves against the module's own URL.
+      </p>
+<pre><code>&lt;html-import-settings base="../vendor/ui@<span id="v-code">1</span>/"&gt;&lt;/html-import-settings&gt;
+&lt;html-import src="./kit.html" as="ui"&gt;&lt;/html-import&gt;</code></pre>
+      <div class="row" style="margin-bottom:.6rem">
+        <span class="seg" role="group" aria-label="base">
+          <button type="button" data-v="1" aria-pressed="true">base = ui@1</button><button type="button" data-v="2" aria-pressed="false">base = ui@2</button>
+        </span>
+        <a id="base-link" class="small" href="./settings/base-v1.html">settings/base-v1.html</a>
+      </div>
+      <iframe id="base-frame" style="height:225px" src="./settings/base-v1.html" title="An import resolved against a versioned base"></iframe>
+      <ul id="base-checks"></ul>
+    </section>
+
+    <section class="card">
+      <h2><code>conflict</code>: a compiled copy and a runtime copy on one page</h2>
+      <p class="small">
+        Each frame first loads <code>compiled/icons.register.js</code>, a compiled build of <code>icons.html</code> that registers
+        <code>&lt;reg--star&gt;</code>, <code>&lt;reg--heart&gt;</code>, … on import. Then it imports the HTML source of the same module under the
+        same namespace. Those are different definitions of the same tags. With <code>conflict="error"</code> (the default) that is an error.
+        With <code>conflict="reuse"</code> the import keeps the existing definitions and records them as reused.
+      </p>
+      <div class="split">
+        <div><p class="label">conflict="reuse": <a href="./settings/conflict-reuse.html">settings/conflict-reuse.html</a></p><iframe id="reuse-frame" src="./settings/conflict-reuse.html" title="conflict reuse"></iframe></div>
+        <div><p class="label">conflict="error": <a href="./settings/conflict-error.html">settings/conflict-error.html</a></p><iframe id="error-frame" src="./settings/conflict-error.html" title="conflict error"></iframe></div>
+      </div>
+      <ul id="conflict-checks"></ul>
+    </section>
+
+    <section class="card">
+      <h2><code>errors="throw"</code>: failures reach <code>window.onerror</code> too</h2>
+      <p class="small">
+        By default a failure is an <code>error</code> event and a rejected <code>el.ready</code>, which is quiet unless you listen. With
+        <code>errors="throw"</code> it is also passed to <code>reportError()</code>, so it shows in the console and in <code>window.onerror</code>,
+        like an uncaught exception. Handy during development. The frame captures what <code>window.onerror</code> receives (and marks it
+        handled, so the console stays clean); one import opts back out with <code>errors="event"</code>.
+      </p>
+      <iframe id="throw-frame" src="./settings/errors-throw.html" style="height:250px" title="errors throw"></iframe>
+      <ul id="throw-checks"></ul>
+    </section>
+
+    <section class="card">
+      <h2>Scope is lexical</h2>
+      <p class="small">
+        This page's <code>delimiter="-"</code> applies to this page's imports only. <code>rating.html</code> has no settings: its template was
+        written with <code>&lt;icon--star&gt;</code>, and it still gets exactly that. <code>stamp.html</code> has its own
+        <code>&lt;html-import-settings delimiter="-"&gt;</code>, which applies inside it (<code>&lt;glyph-heart&gt;</code>) and nowhere else.
+      </p>
+      <html-import id="rating" src="./components/rating.html" as="rating"></html-import>
+      <html-import id="stamp" src="./components/stamp.html" as="stamp"></html-import>
+      <div class="split">
+        <div><pre data-source="./components/stamp.html"></pre></div>
+        <div class="preview">
+          <div class="row"><rating-stars> 4.0</rating-stars> <span class="small muted">&lt;rating-stars&gt; uses &lt;icon--star&gt; inside</span></div>
+          <div class="row"><stamp-stamp>approved</stamp-stamp> <span class="small muted">&lt;stamp-stamp&gt; uses &lt;glyph-heart&gt; inside</span></div>
+        </div>
+      </div>
+      <ul id="scope-checks"></ul>
+    </section>
+
+    <section class="card">
+      <h2><code>&lt;html-module-settings&gt;</code>: defaults for a module's exports</h2>
+      <p class="small">
+        Inside an HTML module, <code>&lt;html-module-settings shadow="closed" delegates-focus&gt;</code> makes every component export default to a
+        closed shadow root that delegates focus. An export's own <code>shadow</code> and <code>delegates-focus</code> attributes override it
+        (<code>delegates-focus="false"</code> turns a default off). The defaults are part of each definition, so the compiler produces the same thing.
+      </p>
+      <html-import id="vault" src="./components/vault.html" as="vault"></html-import>
+      <div class="split">
+        <div><pre data-source="./components/vault.html"></pre></div>
+        <div class="preview">
+          <vault-safe>closed, delegates focus</vault-safe>
+          <vault-glass>open: <code>shadowRoot</code> is visible</vault-glass>
+          <div class="table-wrap"><table id="vault-table"></table></div>
+        </div>
+      </div>
+      <ul id="vault-checks"></ul>
+      <p class="small">
+        In a page, <code>&lt;html-module-settings&gt;</code> has no exports to configure, so it is an error rather than silently doing nothing:
+      </p>
+      <div id="module-settings-error" class="error-box">(waiting)</div>
+    </section>
+
+    <section class="card">
+      <h2>Placement rules</h2>
+      <p class="small">
+        A document has at most one <code>&lt;html-import-settings&gt;</code>, and it must come before every <code>&lt;html-import&gt;</code>. A late or
+        second one is an <code>error</code> event on that element and is ignored: it never changes imports that have already started. Unknown
+        attributes and bad values are errors that name the valid values; bad values also fail the document's imports. Inside a module, the same
+        rules are <code>SyntaxError</code>s when the module loads (see <a href="./errors.html">Errors</a>).
+      </p>
+      <div id="placement"></div>
+    </section>
+
+    <div class="pager"><a href="./app.html">← A small app</a><a href="./lazy.html">Lazy loading →</a></div>
+  </main>
+
+  <script type="module">
+    import { HTMLModules } from '../src/browser.js';
+    import { componentRoot } from '../src/lazy.js';
+    import { readImportSettings } from '../src/settings.js';
+    import { renderChecks, esc, errorText } from './shared/site.js';
+    import * as compiledVault from './compiled/vault.js';
+
+    const $ = (id) => document.getElementById(id);
+    // A frame's window.result, once it has loaded (`fresh`: wait for the next load, after changing src).
+    const frameResult = (frame, fresh = false) => new Promise((resolve) => {
+      const done = () => resolve(frame.contentWindow.result);
+      if (!fresh && frame.contentDocument?.readyState === 'complete' && frame.contentWindow.result) done();
+      else frame.addEventListener('load', () => setTimeout(done), { once: true });
+    });
+
+    // 1. The page's settings and the precedence.
+    const settingsEl = document.querySelector('html-import-settings');
+    const imports = ['ui', 'classic'].map($);
+    await Promise.all(imports.map((el) => el.ready));
+    const source = (el, name) => (el.hasAttribute(name) ? 'attribute' : name in settingsEl.values ? 'document settings' : 'default');
+    $('settings-table').innerHTML = '<thead><tr><th>import</th><th>delimiter</th><th>conflict</th><th>load</th><th>errors</th></tr></thead><tbody>'
+      + imports.map((el) => `<tr><td><code>#${el.id}</code></td>${['delimiter', 'conflict', 'load', 'errors'].map((k) => `<td><code>${esc(el.settings[k])}</code><span class="from">${source(el, k)}</span></td>`).join('')}</tr>`).join('')
+      + '</tbody>';
+    renderChecks($('precedence-checks'), [
+      ['the settings element is active: first in the document, before every import', settingsEl.active && settingsEl.error === null],
+      ['<code>#ui</code> uses the document\'s <code>-</code>: <code>&lt;ui-card&gt;</code>', !!customElements.get('ui-card') && $('ui').delimiter === '-'],
+      ['<code>#classic</code>\'s own <code>delimiter="--"</code> wins: <code>&lt;classic--card&gt;</code>', !!customElements.get('classic--card')],
+      ['options nobody set are the defaults (instance options of the shared <code>HTMLModules</code>: none)', $('ui').settings.conflict === 'error' && $('ui').settings.load === 'eager' && $('ui').settings.errors === 'event'],
+      ['the page\'s settings do not change the programmatic API', HTMLModules.delimiter === '--'],
+    ]);
+
+    // 2. base.
+    const baseFrame = $('base-frame');
+    const baseChecks = async (fresh) => {
+      const v = baseFrame.getAttribute('src').includes('v2') ? 2 : 1;
+      const r = await frameResult(baseFrame, fresh);
+      renderChecks($('base-checks'), [
+        [`<code>el.settings.base</code> is <code>${esc(r.base)}</code>, resolved against the frame document's URL`, r.base === `/examples/vendor/ui@${v}/`],
+        [`<code>./kit.html</code> was fetched from <code>vendor/ui@${v}/</code>`, r.fetched.includes(`/examples/vendor/ui@${v}/kit.html`) && !r.fetched.some((f) => f.includes(`ui@${3 - v}`))],
+        [v === 2 ? 'the module\'s own re-export <code>./extras.html</code> resolved next to the module' : 'ui@1 has no chip: <code>&lt;ui--chip&gt;</code> stays undefined', v === 2 ? r.fetched.includes('/examples/vendor/ui@2/extras.html') && r.tags.includes('ui--chip') : !r.tags.includes('ui--chip')],
+        ['an ordinary link in the frame still resolves against the document', r.link === `/examples/settings/base-v${v}.html`],
+      ]);
+    };
+    for (const b of document.querySelectorAll('.seg button')) {
+      b.addEventListener('click', () => {
+        const v = b.dataset.v;
+        for (const o of document.querySelectorAll('.seg button')) o.setAttribute('aria-pressed', String(o === b));
+        $('v-code').textContent = v;
+        const href = `./settings/base-v${v}.html`;
+        $('base-link').href = href;
+        $('base-link').textContent = href.slice(2);
+        renderChecks($('base-checks'), [['loading…', null]]);
+        baseFrame.src = href;
+        baseChecks(true);
+      });
+    }
+    baseChecks(false);
+
+    // 3. conflict.
+    Promise.all([frameResult($('reuse-frame')), frameResult($('error-frame'))]).then(([reuse, error]) => {
+      renderChecks($('conflict-checks'), [
+        ['<code>conflict="reuse"</code>: the import succeeds and records <code>reused: true</code> for every tag', reuse.ok && Object.values(reuse.tags).length === 4 && Object.values(reuse.tags).every((t) => t.reused === true)],
+        ['… and the tags keep the compiled definitions', reuse.compiled],
+        ['<code>conflict="error"</code>: the same import fails with a clear error', !error.ok && /Cannot bind <reg--star>: it is already defined .*conflict="reuse"/.test(error.message)],
+      ]);
+    });
+
+    // 4. errors="throw".
+    frameResult($('throw-frame')).then((r) => {
+      renderChecks($('throw-checks'), [
+        ['the invalid module reached <code>window.onerror</code>', r.captured.some((m) => /Duplicate export "card"/.test(m))],
+        ['so did the failing binding', r.captured.some((m) => /does not provide an export named 'nope'/.test(m))],
+        ['the import with <code>errors="event"</code> did not', !r.captured.some((m) => /FancyCard/.test(m)) && r.events.some((m) => /FancyCard/.test(m))],
+        ['every failure still fired its <code>error</code> event', r.events.length === 3],
+      ]);
+    });
+
+    // 5. Lexical scope.
+    await Promise.all([$('rating').ready, $('stamp').ready]);
+    const inRating = componentRoot(document.querySelector('rating-stars'));
+    const inStamp = componentRoot(document.querySelector('stamp-stamp'));
+    renderChecks($('scope-checks'), [
+      ['<code>rating.html</code> (no settings) registered <code>&lt;icon--star&gt;</code>, not <code>&lt;icon-star&gt;</code>', !!customElements.get('icon--star') && !customElements.get('icon-star')],
+      ['… and it rendered inside <code>&lt;rating-stars&gt;</code>', !!inRating?.querySelector('icon--star')?.shadowRoot],
+      ['<code>stamp.html</code>\'s own settings registered <code>&lt;glyph-heart&gt;</code>', !!customElements.get('glyph-heart') && !!inStamp?.querySelector('glyph-heart')?.shadowRoot],
+      ['the page\'s imports were not affected by <code>stamp.html</code>\'s settings, nor it by the page\'s', !customElements.get('glyph--heart') && !customElements.get('stamp--stamp')],
+    ]);
+
+    // 6. <html-module-settings>.
+    const vault = await $('vault').ready;
+    const safe = document.querySelector('vault-safe');
+    const glass = document.querySelector('vault-glass');
+    $('vault-table').innerHTML = '<thead><tr><th>export</th><th>shadow</th><th>delegatesFocus</th><th>from</th></tr></thead><tbody>'
+      + [['safe', 'the module settings'], ['glass', 'its own attributes']].map(([n, from]) => `<tr><td><code>${n}</code></td><td><code>${vault.module[n].shadow}</code></td><td><code>${vault.module[n].delegatesFocus}</code></td><td class="small">${from}</td></tr>`).join('')
+      + '</tbody>';
+    renderChecks($('vault-checks'), [
+      ['<code>safe</code> got the module default: a closed shadow root that delegates focus', vault.module.safe.shadow === 'closed' && vault.module.safe.delegatesFocus === true],
+      ['… so <code>&lt;vault-safe&gt;.shadowRoot</code> is <code>null</code> from outside, but it rendered', safe.shadowRoot === null && !!componentRoot(safe)?.querySelector('input')],
+      ['<code>glass</code> overrides both: <code>shadow="open" delegates-focus="false"</code>', vault.module.glass.shadow === 'open' && vault.module.glass.delegatesFocus === false && !!glass.shadowRoot],
+      ['the compiled module (<code>compiled/vault.js</code>) has the same definitions', compiledVault.safe.shadow === 'closed' && compiledVault.safe.delegatesFocus === true && compiledVault.glass.shadow === 'open' && compiledVault.glass.delegatesFocus === false],
+    ]);
+    const stray = document.createElement('html-module-settings');
+    stray.setAttribute('shadow', 'closed');
+    stray.hidden = true;
+    stray.addEventListener('error', (e) => { $('module-settings-error').textContent = errorText(e.detail.error); });
+    document.body.append(stray);
+
+    // 7. Placement: a late (and second) settings element, appended now; and the attribute checks.
+    const show = (label, error) => $('placement').insertAdjacentHTML('beforeend', `<p class="small" style="margin:.4rem 0 .2rem">${label}</p><div class="error-box">${esc(errorText(error))}</div>`);
+    const late = document.createElement('html-import-settings');
+    late.setAttribute('delimiter', '_-');
+    late.hidden = true;
+    late.addEventListener('error', (e) => show('<code>&lt;html-import-settings delimiter="_-"&gt;</code> appended to <code>&lt;body&gt;</code> after the imports: an <code>error</code> event, and ignored', e.detail.error));
+    document.body.append(late);
+    for (const [attrs, values] of [['conflict="merge"', { conflict: 'merge' }], ['lazy', { lazy: '' }]]) {
+      try {
+        readImportSettings(values);
+      } catch (error) {
+        show(`<code>&lt;html-import-settings ${esc(attrs)}&gt;</code>, checked with <code>readImportSettings()</code>, the same check the element runs`, error);
+      }
+    }
+  </script>
+  <script type="module" src="./shared/site.js"></script>
+</body>
+</html>

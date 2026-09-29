@@ -1,0 +1,19 @@
+<!--
+  <html-module-settings> gives every component export in this module a
+  default: closed shadow roots that delegate focus. One export overrides both
+  with its own attributes. Settings come before the first <html-export>.
+-->
+<html-module-settings shadow="closed" delegates-focus></html-module-settings>
+
+<html-export name="safe">
+  <style>
+    :host { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.45rem 0.7rem; border-radius: 8px; border: 1px solid var(--border, #ccc); background: var(--surface-2, #f4f4f0); }
+    input { font: inherit; width: 5.5rem; padding: 0.2rem 0.4rem; border-radius: 6px; border: 1px solid var(--border, #ccc); background: var(--surface, #fff); color: var(--text, #111); }
+  </style>
+  <template>🔒 <slot></slot> <input aria-label="PIN" placeholder="PIN"></template>
+</html-export>
+
+<html-export name="glass" shadow="open" delegates-focus="false">
+  <style>:host { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.45rem 0.7rem; border-radius: 8px; border: 1px dashed var(--accent, #5b4bd6); }</style>
+  <template>🔍 <slot></slot></template>
+</html-export>

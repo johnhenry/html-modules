@@ -1,0 +1,16 @@
+<!--
+  A module with settings of its own. Its <html-import-settings> applies to
+  this module's imports only: icons.html is imported as="glyph" with
+  delimiter "-", so this module's template uses <glyph-heart>. The importing
+  page's settings never reach in here, and these never reach the page.
+-->
+<html-import-settings delimiter="-"></html-import-settings>
+<html-import src="./icons.html" as="glyph"></html-import>
+
+<html-export name="stamp">
+  <style>
+    :host { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.2rem 0.6rem; border: 2px solid var(--bad, #b3261e);
+      border-radius: 6px; color: var(--bad, #b3261e); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; font-size: 0.8rem; }
+  </style>
+  <template><glyph-heart></glyph-heart><slot></slot></template>
+</html-export>

@@ -716,7 +716,7 @@ depends on neither of these packages, and neither depends on it.
   `@johnhenry/html-modules/runtime` at one runtime copy. This library used to carry an mport adapter, routers and a
   lockfile; they were removed in `1c0c416` when it became html-modules. (mport's current line is not yet published
   under the scope.)
-- **`@johnhenry/window-algebra`**: window-algebra's views host *surfaces*, `{ mount(target), unmount() }`, and its
+- **[`@johnhenry/window-algebra`](https://github.com/johnhenry/window-algebra)**: window-algebra's views host *surfaces*, `{ mount(target), unmount() }`, and its
   `htmlSurface(element)` simply appends an element. An html-modules component is a native custom element, so
   `htmlSurface(document.createElement('ui--card'))` is a window whose content upgrades when its import registers the
   tag. window-algebra's renderer creates no shadow roots, so when its stage is in the document's light DOM a lazy

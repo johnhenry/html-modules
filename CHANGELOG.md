@@ -64,8 +64,9 @@ and a check that `examples/compiled/` is current. Six numbered, self-verifying N
 
 The README follows the family standard (install and provenance, quick start, `## Adding a new export kind`,
 `## Honest limitations`, `## Family`); `docs/api.md` and `docs/api/*.md` are the complete API reference (`11c3416`).
-Writing it found one real divergence, now documented rather than fixed: an `<html-export>` or `<html-import>`
-nested inside another is collected by the DOM reader but not by the scanner.
+Writing it found one real divergence: an `<html-export>` or `<html-import>` nested inside another was collected by
+the DOM reader but not by the scanner, so the runtime and the compiler saw different exports. Nesting is now a
+`SyntaxError` in both, with a test that probes both readers directly. Fixed in the commit that adds this line.
 
 ### Housekeeping
 

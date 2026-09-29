@@ -128,9 +128,9 @@ of duplicate attributes wins, and character references in values are decoded (nu
 elements; `<template>` content is kept verbatim (nested templates included) and is not part of the document.
 
 The test suite checks that the scanner and the DOM reader produce the same record for every example module and for
-tricky source. Known differences: the scanner decodes only the named character references listed above, and it
-collects only **outermost** `<html-export>` / `<html-import>` elements, where the DOM reader collects nested ones too
-(see [Placement and nesting rules](html-syntax.md#placement-and-nesting-rules): do not nest them).
+tricky source. Known differences: the scanner decodes only the named character references listed above. Both
+readers record a nested `<html-export>` / `<html-import>` with its enclosing element (`nestedIn`), and
+`recordFromRaw` rejects it (see [Placement and nesting rules](html-syntax.md#placement-and-nesting-rules)).
 
 ## `recordFromRaw(raw, url)`
 

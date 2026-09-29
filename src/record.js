@@ -208,6 +208,12 @@ export function moduleImportOptions(record, i) {
  */
 export function recordFromRaw({ imports, exports, importSettings: iset = [], moduleSettings: mset = [] }, url = '') {
   const where = url ? ` in ${url}` : '';
+  // Exports and imports are top-level declarations. A nested one would be read by
+  // a DOM (querySelectorAll finds it) but not by a scanner that stops at the outer
+  // element, so both readers reject it the same way.
+  for (const raw of [...exports, ...imports]) {
+    if (raw.nestedIn) throw new SyntaxError(`${describe(raw)} is nested inside ${describe(raw.nestedIn)}${where}: <html-export> and <html-import> must not be nested`);
+  }
   const iel = settingsElement(iset, imports, 'html-import', where);
   const mel = settingsElement(mset, exports, 'html-export', where);
   const importSettings = iel ? readImportSettings(iel.attrs, where) : null;
@@ -244,9 +250,11 @@ export function recordFromRaw({ imports, exports, importSettings: iset = [], mod
 
 function rawOf(el, order) {
   const attrs = (node) => Object.fromEntries([...node.attributes].map((a) => [a.name, a.value]));
+  const parent = el.parentElement?.closest?.('html-export, html-import');
   return {
     tag: el.localName,
     order,
+    ...(parent && (el.localName === 'html-export' || el.localName === 'html-import') && { nestedIn: { tag: parent.localName, attrs: attrs(parent) } }),
     attrs: attrs(el),
     children: [...el.children].map((c) => ({
       tag: c.localName,

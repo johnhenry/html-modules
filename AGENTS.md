@@ -28,9 +28,10 @@ CI (`.github/workflows/ci.yml`) runs steps 1-5 in this order on Node 26. Locally
 
 - **The DOM reader and the scanner must produce the same record.** The loader reads modules with `readHTMLModule`
   (DOM), the compiler with `scanHTMLModule` (text); both feed `recordFromRaw`, and `test/examples.test.js` compares
-  them over every example module. Put new validation in `record.js`, never in one reader. Known gap: nested
-  `<html-export>` / `<html-import>` are collected by the DOM reader but not by the scanner (documented in
-  `docs/api/html-syntax.md`; not yet fixed or tested).
+  them over every example module. Put new validation in `record.js`, never in one reader. Corpus
+  comparison can't see edge cases the corpus lacks: nested `<html-export>` / `<html-import>` once diverged (the DOM
+  reader collected them, the scanner didn't) until both started recording `nestedIn` and `recordFromRaw` rejected
+  it; `test/format.test.js` now probes that edge directly. Add a direct probe for every new structural rule.
 - **A runtime copy and a compiled copy of the same module are different definitions.** Registering both under one
   tag is a conflict error unless `conflict="reuse"` (see `examples/settings/conflict-*.html`). Two copies of
   `runtime.js` at different URLs also split the registration bookkeeping and lazy-loading watchers: compiled examples

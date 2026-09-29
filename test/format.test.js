@@ -129,3 +129,20 @@ test('format errors are SyntaxErrors with the module URL', () => {
     }
   }
 });
+
+test('nested <html-export>/<html-import> is rejected identically by the DOM reader and the scanner', () => {
+  const cases = [
+    ['an export inside an export', '<html-export name="a"><template><p>a</p></template><html-export name="b"><template><p>b</p></template></html-export></html-export>', /<html-export name="b"> is nested inside <html-export name="a">/],
+    ['an import inside an export', '<html-export name="a"><template><p>a</p></template><html-import src="./x.html" as="x"></html-import></html-export>', /<html-import src="\.\/x\.html"> is nested inside <html-export name="a">/],
+    ['an export inside an import', '<html-import src="./x.html" as="x"><html-export name="b"><style>p{}</style></html-export></html-import>', /<html-export name="b"> is nested inside <html-import src="\.\/x\.html">/],
+  ];
+  for (const [label, html, message] of cases) {
+    const url = 'https://example.test/nested.html';
+    assert.throws(() => readHTMLModule(parse(html), url), message, `DOM reader: ${label}`);
+    assert.throws(() => scanHTMLModule(html, url), message, `scanner: ${label}`);
+  }
+  // Inside a <template> they are inert content, not declarations: allowed.
+  const ok = '<html-export name="a"><template><html-export name="b"><template><p></p></template></html-export></template></html-export>';
+  assert.deepEqual(readHTMLModule(parse(ok)).exports.map((e) => e.name), ['a']);
+  assert.deepEqual(scanHTMLModule(ok).exports.map((e) => e.name), ['a']);
+});

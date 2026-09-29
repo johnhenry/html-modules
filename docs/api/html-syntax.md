@@ -265,11 +265,10 @@ elements only; `import()` is lazy only when the call says `load: 'lazy'`.
   their position is checked against the imports and exports.
 - `<html-export>`, `<html-import>` and the settings elements inside a `<template>` are template content and are
   ignored by the module reader.
-- **Do not nest `<html-export>` or `<html-import>` inside one another.** The DOM reader collects every such element
-  in the document, while the scanner collects only outermost ones, so a nested export or import is seen by the
-  runtime loader but not by the compiler (for example `<html-export name="a"><template>…</template><html-export
-  name="b">…</html-export></html-export>` gives the runtime exports `a` and `b`, and the compiler only `a`). This
-  is a known difference, not a feature; the example-module agreement test does not cover it.
+- **`<html-export>` and `<html-import>` are top-level declarations and must not be nested inside one another.** A
+  nested one is a `SyntaxError` naming both elements, e.g. `<html-export name="b"> is nested inside <html-export
+  name="a">`, raised identically by the runtime loader and the compiler. (Inside a `<template>` they are inert
+  template content, which is allowed.)
 - `<html-binding>` counts only as a direct child of `<html-import>`, and template/style/script count only as direct
   children of `<html-export>`.
 

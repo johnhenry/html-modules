@@ -142,6 +142,12 @@ export function scanRawElements(src) {
       // they collect no children of their own.
       out[SETTINGS[tag]].push({ tag, order: order++, attrs, children: [] });
     }
+    if (COLLECT.has(tag) && collecting) {
+      // Nested export/import: recorded so the record builder rejects it exactly as it
+      // does for the DOM reader; otherwise handled as ordinary content below.
+      const raw = { tag, order: order++, attrs, children: [], nestedIn: { tag: collecting.raw.tag, attrs: collecting.raw.attrs } };
+      (tag === 'html-export' ? out.exports : out.imports).push(raw);
+    }
     if (COLLECT.has(tag) && !collecting) {
       const raw = { tag, order: order++, attrs, children: [] };
       (tag === 'html-export' ? out.exports : out.imports).push(raw);

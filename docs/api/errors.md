@@ -27,6 +27,7 @@ Nothing is silently ignored: a mistake is an exception, a rejection, or an `erro
 | `SyntaxError` | `Invalid export name "<name>" in <url>: use lower-case words joined by single hyphens, e.g. "custom-card"` |
 | `SyntaxError` | `"components" is reserved and cannot be used as an export name in <url>` |
 | `SyntaxError` | `Duplicate export "<name>" in <url>` |
+| `SyntaxError` | `<html-export name="<b>"> is nested inside <html-export name="<a>"> in <url>: <html-export> and <html-import> must not be nested` (also for `<html-import>` in either position) |
 | `SyntaxError` | `<html-export name="<n>"> needs a <template> (a component), <style> (a stylesheet) or <script type="application/json"> (data) in <url>` |
 | `SyntaxError` | `<html-export name="<n>"> has <N> <template> elements; an export has one in <url>` |
 | `SyntaxError` | `<html-export name="<n>">: shadow="<value>" must be "open" or "closed" in <url>` |

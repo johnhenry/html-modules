@@ -7,7 +7,7 @@ This document maps each PRD section onto the code as it stood at the start of th
 ## Where the code started
 
 The library had grown out of a different conversation, about routing JavaScript imports across CDNs
-(which became the separate [mport](../../../mport) library). Its source was about 1,900 lines:
+(which became the separate [mport](https://github.com/johnhenry/mport) library). Its source was about 1,900 lines:
 
 | Area | Files | What it did |
 | --- | --- | --- |

@@ -13,6 +13,11 @@ restart. The unscoped `html-modules` on npm is an unrelated package by another a
   `<template>` stamped into a shadow root, with `shadow`, `delegates-focus` and `<style>` children as shared
   constructed stylesheets), stylesheets, JSON data, and re-exports (`<html-export src>`, whole or one export renamed,
   from HTML or JS modules). Everything else in the file is private. Implemented in `e597271`.
+- **Every ESM re-export form.** Besides `export *` (`<html-export src>`) and one renamed export (`src name import`):
+  lists (`names="card, fancy-button as button"`, `export { … } from`), namespaces (`name="icon" import="*"`,
+  `export * as icon from`, whose components join the manifest as `icon--star`), and default re-exports
+  (`name="default"`, `name="default" import="card"`, `name="card" default`). A star re-export is still never the
+  default. `66dab2b`.
 - **Declarative imports.** `<html-import src as>` registers every component as `<as>--<export>`, the HTML
   counterpart of `import * as`; elements written before their import upgrade in place. `<html-binding export element
   adopt>` children bind selectively, choose tags, adopt stylesheets and expose data (a deliberate extension beyond the

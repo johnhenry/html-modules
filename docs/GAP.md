@@ -35,7 +35,7 @@ JS-authored component protocol.
 | §9 Export syntax `<html-export name="…"><template>…</template></html-export>`, preferred over `<template export>` and `data-*`; metadata such as `shadow` only with concrete semantics | Used `export="…"` attributes on built-in elements, which §9.1 explicitly rejects | **Change** to `<html-export name>`. Implemented metadata with concrete semantics only: `shadow="open\|closed"`, `delegates-focus`, `default`. `<style>` children of an export become the definition's `styles` (one constructed sheet shared by every instance). |
 | §10 Templates as the V1 payload, native `<slot>` | Held (template stamped into an open shadow root) | **Keep**, moved into the shared runtime. |
 | §11 `<html-import src as>` = `import * as ui`; `as` is a namespace, not a rename | `<module-import from namespace=>` bound a JS-style local, not elements | **Change**: `<html-import src="./ui.html" as="ui">` registers every component export as `ui--<export>`. |
-| §12 `--` namespace delimiter | Absent | **Add**. Namespaces and export names are lower-case kebab words, so neither can contain `--` and every tag splits unambiguously. |
+| §12 `--` namespace delimiter | Absent | **Add**. Namespaces and export names are lower-case kebab words, so neither can contain `--` and every tag splits unambiguously. Note: §12 says `.` is not permitted in custom element names; it is (`ui.custom-card` registers in current browsers, as the namespaces example shows live). The real problem with `.` is one-word exports: `ui.card` has no hyphen. `--` is still the right choice, and the docs give that reason instead. |
 | §13 Identity vs registration name | Partly (`element=` chose the tag, but a template had no identity of its own) | **Add**: a definition carries its module-local `name`; the importer chooses the tag. The same definition can be bound as `ui--custom-card` and `admin--custom-card`. |
 | §14 One constructor cannot be registered twice; use generated subclasses | Held (`renamedSubclass`) | **Keep**, moved into `definition.define()`: every registration is a fresh subclass of the definition's base element. |
 | §15 Runtime loading: resolve, fetch, DOMParser, discover exports, create definitions, bind, register | Held, apart from definitions and namespaces | **Change** the pipeline to produce definitions. |
@@ -58,7 +58,7 @@ JS-authored component protocol.
 | `<script type="application/json" export>` | **Kept** as a data export, `<html-export name="config"><script type="application/json">…</script></html-export>`. |
 | `<script type="module" export>` inline scripts, `<svg export>`, arbitrary-element exports | **Removed**. Behaviour comes from JS modules (§21), not scripts embedded in HTML modules; the conversation defers hybrid script semantics past V1. |
 | `ModuleScope`, `default=` / `namespace=` locals | **Removed**. HTML imports bind element names, not JS-style identifiers; values are exposed on the import element (`el.module`, `el.bindings`) and through `HTMLModules.load()`. |
-| Loader cache, events, `fetch` / `parseHTML` hooks | **Kept** for tests and SSR, with events renamed to the new pipeline (`fetch`, `load`, `error`, `define`). |
+| Loader cache, events, `fetch` / `parseHTML` hooks | **Kept** for tests and SSR, with events renamed to the new pipeline (`fetch`, `load`, `error`). |
 | Import-map resolver, compiler, merge, script, routers, mport adapter, lockfile, CLI build/resolve | **Removed**. |
 
 ## Deliberate extension beyond the PRD: `<html-binding>`

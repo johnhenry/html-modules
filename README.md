@@ -1,275 +1,353 @@
 # html-modules
 
-One module graph for JavaScript **and** HTML in the browser.
-
-- **HTML modules**: an `.html` file exports named/default values (`<template export="Card">`, `<style export="theme">`, …), just like an ES module.
-- **Declarative imports**: `<module-import>` / `<module-binding>` Web Components import from JS *or* HTML modules, with named, aliased, default, namespace, and side-effect imports.
-- **Importing is separate from using**: `as` is only a local alias. Registering a custom element (`element="ui-card"` or `<define-element>`) and adopting a stylesheet (`adopt`) are explicit, separate steps.
-- **Routing underneath**: bare specifiers resolve through an import map, a pluggable **Router**, or the host's `import.meta.resolve`. Package and CDN routing (`react@^19`, `npm:`, `jsr:`, `github:`, mirrors, strategies, health, lockfiles) is delegated to [mport v2](https://github.com/johnhenry/mport) through `fromMport()`.
-- **Import maps as the compile target**: a CLI resolves specifiers ahead of time and emits a standard import map and an mport-format lockfile.
-
-Plain ESM, no runtime dependencies, no build step. mport is an optional peer dependency (`^2.0.0`), needed only for package routing.
-
-> Origin: designed in the ChatGPT conversation "JavaScript Import Routing" (extracted to `../_chat-shares/6ab9f756/`). The design rule it settled on:
-> *A module is a resource with a namespace of named exports. JavaScript and HTML are module formats that produce that namespace. Importing creates bindings to exports; it does not prescribe what consumers do with those bindings.*
-
-## Install
-
-```bash
-npm install html-modules   # (not yet published)
-npm install mport@^2                      # optional: package/CDN routing
-```
-
-In a page, one script sets up the elements. Bare specifiers then resolve through the page's import map:
+Declarative HTML modules for the browser. Write Web Components in ordinary HTML files, export them with
+`<html-export>`, and import them into a page with `<html-import src="./ui.html" as="ui">`. Each export becomes a
+native custom element under the import's namespace: `<ui--card>`, `<ui--button>`. There is no build step and no
+custom JavaScript module loader. The same modules can be used from JavaScript, mixed with JS-authored components,
+and optionally compiled to plain ES modules.
 
 ```html
 <script type="module" src="/node_modules/html-modules/src/browser.js"></script>
-```
 
-## HTML modules
+<html-import src="./ui.html" as="ui"></html-import>
+
+<ui--card>
+  <h2 slot="title">Hello!</h2>
+  An ordinary HTML file defined this element.
+</ui--card>
+```
 
 ```html
 <!-- ui.html -->
-<template id="helper">private: not exported</template>
-
-<template export="Card"><article><slot></slot></article></template>
-<template export="default"><main>…</main></template>
-<style export="theme">.card { border: 1px solid }</style>
-<script type="application/json" export="config">{ "size": 3 }</script>
-<script type="module" export="controller">export const greet = (n) => `hi ${n}`;</script>
-<svg export="logo">…</svg>
+<html-export name="card">
+  <style>:host { display: block; border: 1px solid; padding: 1rem; }</style>
+  <template>
+    <article>
+      <header><slot name="title"></slot></header>
+      <slot></slot>
+    </article>
+  </template>
+</html-export>
 ```
 
-| Exported node | Value |
-|---|---|
-| `<template>` | the `HTMLTemplateElement` |
-| `<style>` | a constructed `CSSStyleSheet` (or `{ kind: 'stylesheet', cssText }` where none is available) |
-| `<script type="module">` | that script's module namespace (inline scripts load through a `data:` URL, so relative imports inside them won't resolve; use `src=`) |
-| `<script type="application/json">` | parsed JSON |
-| anything else | the element |
+This implements the PRD *Declarative HTML Modules*. [`docs/GAP.md`](docs/GAP.md) maps each PRD section onto the code.
 
-You can override this per loader with `interpret(element, ctx)`.
+> **Renamed.** This project was called `web-module-graph`. That version grew out of a different conversation, about
+> routing JavaScript imports across CDNs, and carried routers, import-map compilation and lockfiles. Those are gone.
+> Package and CDN routing is a separate concern, handled by [mport](../../mport).
 
-**Re-exports (barrels)** use the same shape as JS. You can write `<module-export>`/`<module-binding>`, or the future native spelling `<export>`/`<binding>`:
+- Plain JavaScript ES modules, no runtime dependencies, Node 20+ for the compiler and tests.
+- Examples: serve the package root (`python3 -m http.server`) and open `/examples/`. They work offline.
+
+## Contents
+
+- [Writing HTML modules](#writing-html-modules)
+- [Importing](#importing)
+- [Selective imports: `<html-binding>`](#selective-imports-html-binding)
+- [Identity vs registration name](#identity-vs-registration-name)
+- [JavaScript API](#javascript-api)
+- [JavaScript-authored components](#javascript-authored-components)
+- [The compiler](#the-compiler)
+- [Resolution and caching](#resolution-and-caching)
+- [Errors](#errors)
+- [Non-goals](#non-goals)
+- [Project layout](#project-layout)
+
+## Writing HTML modules
+
+An HTML module is an ordinary HTML file. Each `<html-export>` in it is a public export; everything else is private
+to the file. Export names are lower-case words joined by single hyphens (`card`, `fancy-button`).
+
+| Export | Markup | Value |
+| --- | --- | --- |
+| Component | `<html-export name="card"><template>…</template></html-export>` | an HTML Component Definition |
+| Stylesheet | `<html-export name="dark"><style>…</style></html-export>` | an `HTMLStylesheet` |
+| Data | `<html-export name="config"><script type="application/json">…</script></html-export>` | the parsed JSON |
+| Default | add `default` to any of the above (`name` becomes optional) | also the `default` export |
+| Every component of another module | `<html-export src="./more.html"></html-export>` | like `export * from` |
+| One export of another module | `<html-export src="./b.html" name="button" import="fancy-button"></html-export>` | like `export { fancyButton as button } from` |
+
+A component export holds exactly one `<template>`, which is stamped into a shadow root, so native `<slot>`,
+named slots and `part` work as usual. Its attributes:
+
+- `shadow="open"` (default) or `shadow="closed"`
+- `delegates-focus`
+
+`<style>` elements *beside* the template become the component's `styles`. They are built into one constructed
+stylesheet per definition and adopted by every instance's shadow root. (`<style>` inside the template works too,
+but is cloned into each instance.)
+
+Modules can import other modules with the same `<html-import>` element a page uses. Those imports are private to
+the module: they are bound when one of the module's components is registered, and a stylesheet the module adopts
+applies inside the module's components only.
 
 ```html
-<module-export from="./controls.html">
-  <module-binding name="Card" as="Panel"></module-binding>  <!-- export { Card as Panel } from … -->
-</module-export>
-<module-export from="./dialogs.js" name="Dialog"></module-export>  <!-- export { Dialog } from … -->
-<module-export from="./icons.js" all></module-export>          <!-- export * from … -->
-<module-export from="./icons.html" namespace="icons"></module-export> <!-- export * as icons from … -->
+<!-- rating.html -->
+<html-import src="./icons.html" as="icon"></html-import>
+<html-import src="./themes.html"><html-binding export="gold" adopt></html-binding></html-import>
+
+<html-export name="stars">
+  <template><icon--star></icon--star><icon--star></icon--star><icon--star></icon--star></template>
+</html-export>
 ```
 
-The semantics follow ESM: `export *` skips `default`, local exports shadow star exports, names that conflict between star exports are dropped, and duplicate exports (including a `namespace` name) are a `SyntaxError`. An HTML module's namespace is built only after every module it re-exports from has loaded, so a circular re-export chain between HTML modules can never complete. The loader rejects it with `Circular HTML module re-export: a.html -> b.html -> a.html`, whether the modules are loaded one after another or concurrently. (ESM itself tolerates some `export *` cycles; this implementation does not.) Modules that share a dependency (diamonds) are not cycles.
-
-## Declarative imports
+## Importing
 
 ```html
-<!-- import { Card, Button as B } from "./ui.js"; customElements.define("ui-card", Card) -->
-<module-import from="./ui.js">
-  <module-binding name="Card" element="ui-card"></module-binding>
-  <module-binding name="Button" as="B"></module-binding>
-</module-import>
-
-<module-import from="./ui.html" default="Main"></module-import>     <!-- import Main from -->
-<module-import from="./ui.html" namespace="UI"></module-import>     <!-- import * as UI from -->
-<module-import from="./setup.js"></module-import>                   <!-- import "./setup.js" -->
-<module-import from="./ui.html" name="theme" adopt></module-import> <!-- shorthand + adopt stylesheet -->
-<module-import from="@foo/ui" type="html" …>                        <!-- force module format -->
+<html-import src="./ui.html" as="ui"></html-import>
 ```
 
-- A `<template>` export registered with `element=` becomes an element that stamps the template into an open shadow root.
-- A constructor export registers as-is. It must extend `HTMLElement`; anything else fails at registration with a clear `TypeError`. You can register the same export under several names, and each extra name gets a subclass (with the same `name`).
-- Bindings go into a per-document `ModuleScope` (`scopeFor(document)`), with `get`, `has`, and `whenDeclared(name)`. Declaring the same name again with a different value throws, as a duplicate `import` would.
-- `el.module` is a promise of the namespace, and `el.bindings` holds the created locals. The element fires `load` and `error` events.
-- Use `defineModuleElements({ prefix: 'esm' })` to get `<esm-import>`/`<esm-binding>`/`<esm-define>`.
+is the HTML counterpart of `import * as ui from "./ui.js"`. `as` names a namespace: every component export is
+registered as `<as>--<export>`. Stylesheet and data exports are not elements and are not registered.
 
-### Registering as a separate step: `<define-element>`
+**Why `--`.** A registered tag must be a valid custom element name, or native upgrade is lost. `ui.card` has no
+hyphen, so one-word exports could not be registered with `.`; a single `-` is ambiguous (`ui-custom-card`);
+Unicode separators are hard to type and misread. `--` always supplies the hyphen, and since namespaces and export
+names cannot contain `--`, every tag splits exactly one way. It also echoes CSS custom properties.
 
-`element=` is shorthand. The long form registers a binding that some import declared:
+**Asynchronous upgrade.** Elements may appear before, or long after, the import that defines them. Until then
+they are ordinary unknown elements (style them with `:not(:defined)`); when the module arrives, the browser
+upgrades them in place. No `MutationObserver` is involved.
+
+The same module can be imported under several namespaces (`as="shop"`, `as="admin"`); it is fetched and parsed
+once. An import with no `as` and no bindings only loads the module, for its side effects or to warm the cache.
+
+`<html-import>` attributes and API:
+
+| | |
+| --- | --- |
+| `src` | module URL: relative to the document, absolute, or a bare specifier resolved through the page's import map |
+| `as` | namespace |
+| `type` | `html` or `js`, to override detection by extension (`.html`/`.htm` are HTML; anything else is JS) |
+| `el.module` | Promise of the module namespace |
+| `el.ready` | Promise of `{ module, elements, bindings }` once bound; rejects on failure |
+| `el.elements` | tags registered so far → classes |
+| `el.bindings` | bound export names → values (components, stylesheets, data) |
+| `load` / `error` events | on the import; `error` has `detail.error` and bubbles |
+
+## Selective imports: `<html-binding>`
+
+The PRD specifies the whole-namespace import. As a deliberate extension, an `<html-import>` may have
+`<html-binding>` children. With any children, **only** those exports are bound, which keeps the global,
+permanent custom element registry free of components the page never uses.
 
 ```html
-<!-- import { Card } from "./ui.js"; customElements.define("ui-card", Card) -->
-<module-import from="./ui.js"><module-binding name="Card"></module-binding></module-import>
-<define-element name="ui-card" component="Card"></define-element>
+<html-import src="./ui.html" as="ui">
+  <html-binding export="card"></html-binding>                          <!-- <ui--card> only -->
+  <html-binding export="button" element="brand-button"></html-binding>  <!-- a tag you choose -->
+  <html-binding export="button" element="save-button"></html-binding>   <!-- the same export, again -->
+  <html-binding export="default" element="tip-box"></html-binding>      <!-- a default export needs element= -->
+  <html-binding export="theme" adopt></html-binding>                   <!-- a stylesheet, adopted -->
+  <html-binding export="config"></html-binding>                        <!-- data, on el.bindings.config -->
+</html-import>
+
+<html-import src="./counter.js">                                     <!-- a JS module -->
+  <html-binding export="Counter" element="x-counter"></html-binding>
+</html-import>
 ```
 
-`component` names a local binding in the document's `ModuleScope`, not an export. So it can be an alias (`as`), a `default=` local, or a binding from any import on the page. The binding can come from an import before or after the `<define-element>`, including one inserted later: the element waits on `scope.whenDeclared(component)`. It never times out, so a misspelled `component` just never registers. `el.defined` is a promise of the registered constructor. The element fires `load` (`detail: { name, constructor }`) or `error`.
+- `element=` sets the tag, overriding `<as>--<export>`. It is the markup form of `definition.define(tag)`.
+- `adopt` adopts a stylesheet export into the root that contains the import: the document, or a shadow root.
+- A binding can be added at any time, before or after its module loads; it fires `load` (with
+  `detail.tag`, `detail.element`, `detail.value`) or `error` (bubbling through the import). A failing binding
+  does not stop the others.
 
-## Loader
+## Identity vs registration name
+
+A component's exported identity is not its tag. `ui.html`'s `card` has the identity `"card"` wherever it is
+bound; the importer chooses the tag. A registry accepts a constructor only once, so every registration is a fresh
+subclass of the definition's one base element:
 
 ```js
-import { createRouter, fallback, race, esmSh, jsDelivr, unpkg, jsr } from 'mport';
-import { createLoader, fromMport, basicRouter, chainRouters } from 'html-modules';
-
-const packages = createRouter({
-  '*': fallback(race(esmSh(), jsDelivr({ esm: true })), unpkg()),
-  '@std/*': jsr(),
-});
-
-const loader = createLoader({
-  importMap: { imports: { react: 'https://esm.sh/react@19.2.0' } }, // 1. explicit pins
-  router: chainRouters(                                               // 2. routing policy
-    basicRouter({ routes: { '@ui': '/components/all.html' } }),       //    static aliases (not packages)
-    fromMport(packages),                                              //    packages: mport v2
-  ),
-  hostResolve: (s) => import.meta.resolve(s),                         // 3. page import map
-  onEvent: (e) => console.debug(e.type, e),                           // resolve / load / error
-});
-
-const ns = await loader.load('./ui.html');          // HTML module namespace
-const js = await loader.load('npm:lodash-es@^4');   // routed by mport; e.resolution.trace shows how
-const std = await loader.load('jsr:@std/text@^1', undefined, { signal: AbortSignal.timeout(5000) });
+const ui = await HTMLModules.load('./ui.html');
+ui.card.name;                          // "card"
+ui.card.define('profile-card');        // one tag
+ui.card.define('invoice-card');        // another; a different class, the same component
+customElements.get('profile-card').component === ui.card;   // true
+customElements.define('fancy-card', class extends ui.card.element { /* behaviour */ });
 ```
 
-The loader resolves a specifier through `importMap` first (which can also remap URLs, via URL keys), then loads fetchable URLs (`http:`, `https:`, `file:`, `data:`, `blob:`) directly. Bare specifiers and other schemes such as `npm:` or `jsr:` go to the `router`, then `hostResolve`. A `signal` passed to `load()`/`resolve()` reaches the router. It picks the module format from a `type` override, then `resolution.type`, then the `.html`/`.htm` extension. Namespaces are cached by URL, and failed loads are evicted from the cache so they can be retried. When the router already evaluated the module (mport with `probe: "import"`), the loader reuses it instead of importing again.
+Defining the same definition under the same tag again is a no-op; defining a *different* component under a
+taken tag throws.
 
-## Architecture: what mport owns
+## JavaScript API
 
-```
- specifier ──► loader ──► 1. importMap        (pins, a compiled map, URL keys)        html-modules
-                          2. router
-                             ├─ basicRouter / functions / importMapRouter             html-modules
-                             │    static aliases, HTML-module paths, app schemes,
-                             │    targets that depend on the referrer
-                             └─ fromMport(createRouter(routes))                         mport v2
-                                  specifier parsing (react@^19, npm:, jsr:, github:),
-                                  registry lookups, providers, strategies
-                                  (fallback, race, adaptive, prefer, verified, cache),
-                                  probing, health / circuit breaker, traces, lockfiles
-                          3. hostResolve      (import.meta.resolve: the page's map)    html-modules
-          ──► format (type → resolution.type → .html) ──► JS import() or HTML module    html-modules
-```
-
-html-modules keeps what is specific to it: HTML modules, the loader, the declarative elements, the resolution order (import map first), routers for things that are not packages, and HTML-module `type` in resolutions. Everything about packages and CDNs is mport's.
-
-## Routers
-
-A Router is just:
-
-```ts
-interface Router {
-  resolve(specifier: string, ctx?: { referrer?: string; signal?: AbortSignal; onEvent?(e): void }):
-    Resolution | null | Promise<Resolution | null>; // null = "not mine"
-}
-interface Resolution {
-  url: string; provider?: string; type?: 'js' | 'html'; version?: string; integrity?: string; module?: object;
-  build?: string; trace?: object[]; // from mport
-}
-```
-
-| Router | Purpose |
-|---|---|
-| `fromMport(router, { match?, type?, resolveOptions?, onEvent?, name? })` | **The recommended way to route bare, `npm:`, `jsr:` and `github:` specifiers.** Wraps a router from mport v2's `createRouter()`. The resolution is mport's, unchanged (`url`, `provider`, `version`, `build`, `integrity`, `module`, `trace`, …), plus `type: "js"` when mport already evaluated the module. `signal` and `onEvent` pass through. By default (`isPackageSpecifier`) relative paths, URLs and unknown schemes such as `partial:` are left to other routers. `router.mport` is the wrapped mport router (for `health`, `lock`, `build`). |
-| `basicRouter({ routes })` | Static aliases for things that are not packages: `'*'`, `'@x/*'`, `'x*'`, `'scheme:'` and exact patterns mapped to a base URL or a function `(specifier, { referrer }) => url`. |
-| `importMapRouter(map)` | Router from a static or compiled import map. |
-| `chainRouters(...)`, `toRouter(fn)`, `isRouter(x)` | Composition helpers: the first non-null resolution wins. |
-| `mportRouter(options)` | **Deprecated.** See the migration notes. |
-
-mport is not imported by html-modules itself: you import it, create the router, and hand it to `fromMport()`. In a browser, map `mport` in the page's import map (for example to `/node_modules/mport/src/index.mjs`) or import it from a CDN.
+`src/browser.js` defines the elements and exposes the shared instance as `HTMLModules` (exported, and on
+`globalThis`). `<html-import>` is a thin layer over it, so both share one cache and one set of rules.
 
 ```js
-import { createRouter, fallback, custom, local } from 'mport';
+import { HTMLModules } from 'html-modules/browser';
 
-// Traces: every registry lookup, probe, skip and failure.
-const r = await loader.resolve('npm:react@^19');
-r.trace; // [{ type: 'lookup', provider: 'npm registry' }, { type: 'resolved', version: '19.2.0' }, { type: 'probe', provider: 'esm.sh' }, …]
+const ui = await HTMLModules.load('./ui.html');
+// { card, button, theme, config, default, components } — shaped like a compiled ES module
 
-// Health: shared by every resolution of this mport router.
-const packages = createRouter(routes, { circuitBreaker: { failures: 3, reset: '30s' } });
-fromMport(packages).mport.health.snapshot();
-
-// Lockfile pinning: versions and builds come back without registry lookups.
-const pinned = fromMport(createRouter(routes, { lock: JSON.parse(lockText) }));
+await HTMLModules.import('./ui.html', { as: 'ui' });                                    // = <html-import as="ui">
+await HTMLModules.import('./ui.html', { bindings: [{ export: 'card', element: 'x-card' }] });
+HTMLModules.bind(ui, { as: 'admin' });                                                  // bind a loaded module
+HTMLModules.resolve('./ui.html');                                                       // → absolute URL
+HTMLModules.cache;                                                                      // Map<URL, Promise<namespace>>
 ```
 
-## CLI: compile to an import map
+A loaded namespace is frozen and has a null prototype. Named exports are camelCase (`fancy-button` →
+`fancyButton`), `default` is present when the module has one, and `components` maps export names to component
+definitions.
+
+**Definitions** (`src/runtime.js`, also `html-modules/runtime`) are the shared representation. The loader and
+the compiler both produce them with `defineHTMLComponent()`:
 
 ```js
-// modules.config.js — a config object, or ({ lock }) => config
-import { createRouter, fallback, esmSh, jsDelivr, unpkg, jsr } from 'mport';
-import { basicRouter, chainRouters, fromMport } from 'html-modules/routers';
+import { defineHTMLComponent } from 'html-modules/runtime';
 
-export default ({ lock }) => ({
-  router: chainRouters(
-    basicRouter({ routes: { '@ui': () => '/components/all.html' } }),
-    fromMport(createRouter({ '*': fallback(esmSh(), jsDelivr(), unpkg()), '@std/*': jsr() }, { lock })),
-  ),
-  specifiers: ['@ui', 'react@^19', 'lit/', 'jsr:@std/path@^1'],
-  scopes: { 'https://legacy.example.com/': ['react@18'] }, // or mport's form: { react: 'react@18' }
-  importMap: { imports: { app: '/app.js' } },              // merged in
+const card = defineHTMLComponent({
+  name: 'card',                        // identity
+  template: '<article><slot></slot></article>',
+  shadow: 'open',                      // or 'closed'
+  delegatesFocus: false,
+  styles: [':host { display: block }'],
+  imports: [],                         // [{ module, from, as?, bindings? }] bound before registration
 });
+card.define('my-card');                // → the registered class
+card.element;                          // the base class, to extend
 ```
 
-```bash
-html-modules build --out importmap.json --lock modules.lock.json   # --html for a <script type="importmap">; --relock
-html-modules resolve react@^19 --trace
+| Export | Purpose |
+| --- | --- |
+| `createHTMLModules({ window, registry, baseURL, hostResolve, fetch, parseHTML, importModule, onEvent })` | a runtime instance; the hooks serve tests and server-side use. `onEvent` receives `fetch`, `load` and `error` events |
+| `defineHTMLModuleElements({ modules, window, registry })` | define `<html-import>`, `<html-binding>`, `<html-export>` over an instance |
+| `defineHTMLComponent(spec \| Class)`, `HTMLComponent` | component definitions |
+| `defineHTMLStylesheet({ name, css })`, `HTMLStylesheet` | stylesheet exports: `.sheetFor(window)`, `.adopt(root)` |
+| `bindModule(ns, { as, bindings, root })`, `applyBinding`, `registerComponents`, `defineElement` | binding and registration |
+| `lookupExport`, `componentsOf`, `manifest`, `adoptStylesheet` | helpers used by the loader and compiled output |
+| `readHTMLModule(doc)`, `scanHTMLModule(source)` | read a module into its JSON record, from a DOM or from text |
+| `bindingName`, `parseBindingName`, `DELIMITER` | the `--` naming rules |
+| `compileHTMLModule`, `compileRecord` | the compiler |
+
+## JavaScript-authored components
+
+`<html-import>` takes JS modules too, loaded with native `import()`. A JS module says which exports are
+components; nothing else is ever registered, so `export const VERSION = "2.1"` never becomes `<ui--version>`.
+
+```js
+// ui.js — either a components manifest …
+export const components = { 'custom-card': CustomCard, 'fancy-button': FancyButton };
+
+// … or exports made with defineHTMLComponent()
+export const customCard = defineHTMLComponent(CustomCard);
 ```
 
-- Package keys drop the version, as in mport (`react@^19` → `react`); other keys are the specifier as written.
-- The lockfile is mport's format, `{ lockfileVersion: 1, packages }`, keyed like mport: by the specifier as written (`react@^19`, or `npm:react@^19` if you wrote the prefix), with the serving registry in each entry's `registry`. Entries from non-package routers are keyed by the specifier (`"<scope> <specifier>"` inside scopes); mport ignores them.
-- If the `--lock` file exists, the CLI reads it and passes it to a config function, so a rebuild pins the same versions and builds without asking the registry. `--relock` ignores it.
-- If `router` is a plain mport router (and scopes use mport's object form), the CLI calls mport's `router.build()` directly. Otherwise it uses `compileImportMap()`, with mport's own `compileImportMap` and `mergeImportMaps` when mport is installed.
-- mport's default `probe: "head"` works in Node, so live CDN configs work at build time too.
-
-`compileImportMap(router, specifiers, { scopes, signal, compile })` is also exported for use in code; its output matches mport's `router.build()` for the same mport router.
-
-## Migrating from the built-in CDN routing
-
-The CDN pieces that duplicated mport are gone or reduced to thin wrappers:
-
-| Before | Now |
-|---|---|
-| `mportRouter({ MPortURL, mport: { cdns }, match })` (mport 1.x race) | **Deprecated.** Use `fromMport(createRouter(routes, options))`. `mportRouter({ routes, module, ...createRouterOptions })` still works as a thin wrapper (default routes `{ '*': [esmSh(), jsDelivr(), unpkg()] }`, `probe: "import"`), and the 1.x form with `MPortURL` still calls mport's v1 API. |
-| `basicRouter({ routes: { '*': [a, b] }, probe })`: ordered fallback with a probe | **Removed.** `basicRouter` is for static aliases; several targets or a `probe` throw a `TypeError` that explains the migration. Use `fromMport(createRouter({ '*': fallback(custom(a), custom(b)) }, { probe }))`. |
-| `httpProbe({ fetch, timeout })` | **Removed.** mport's default `probe: "head"` (HEAD, then GET on 405/501), or `probe: fn`. |
-| `parsePackageSpecifier(s)` → `{ name, version, path }` | **Removed.** Use mport's `parseSpecifier(s)` → `{ registry, name, range, path, prefix }` (`version` is `range`). It also handles `jsr:` and `github:`. |
-| Lockfile `{ "<specifier>": { specifier, url, provider, route } }` | mport's `{ lockfileVersion: 1, packages: { "react@^19": { registry: "npm", … } } }`. |
-| Import-map keys were the specifier as written (`react@19`) | Resolutions with a `key` (mport) use it (`react`). |
-| `mport` peer `>=1.0.0` | `^2.0.0` (still optional). |
-
-## Examples
-
-Run `npm install`, serve the package root (for example `python3 -m http.server`) and open `/examples/`. The hub lists every page with the
-capability-checklist items it covers; together they cover the whole checklist. All pages except `cdn.html` work offline.
-
-Pages that route packages load mport v2 through a page import map, `{ "mport": "../node_modules/mport/src/index.mjs" }`. `node_modules/mport` is a symlink to the local mport checkout, created by `npm install` from the `file:` devDependency, so it is always current; after switching mport branches there is nothing to refresh. (Loading mport from a second local server, such as mport's own `python3 -m http.server 8712`, does not work: module scripts need CORS headers across origins, and Python's server sends none.)
-
-| Page | Shows |
-|---|---|
-| `quickstart.html` | The one-script bootstrap (`src/browser.js`), a page import map, a barrel, `<define-element>` before its import. |
-| `component-library.html` | A component library written as HTML modules: templates, tokens, icons, JSON, module scripts, a nested barrel. |
-| `barrels.html` | Barrels of barrels using every re-export form, with checks for shadowing, ambiguity, `default` and diamonds. |
-| `registration.html` | One class under several tags, `<define-element>` before/after/late, custom prefixes, `registry`/`scope`/`window` options. |
-| `theming.html` | Adopted stylesheets, theme switching, one sheet shared with shadow roots, the `cssText` fallback. |
-| `import-maps.html` | An editable import-map playground: exact, prefix, scopes, URL keys, merging, and loader scopes in re-exports. |
-| `routers.html` | A traced chain ending in `fromMport()`: `npm:`/`jsr:` ranges, fallback, race and adaptive strategies, health and the circuit breaker, lockfile pinning and `verified()` integrity, against local mirrors and a local registry. |
-| `loader-timeline.html` | Every loader event on a live timeline: nesting, cache hits, de-duplication, eviction and retry. |
-| `loader-hooks.html` | A module graph served from memory through every loader hook. |
-| `errors.html` | Every error path, triggered on purpose and shown on the page. |
-| `app.html` | A task board app built from HTML modules. |
-| `cli.html` | An import map and mport-format lockfile compiled by the CLI (`examples/cli/`), used at runtime and fed back to mport to pin versions. |
-| `cdn.html` | Live routing of `npm:` and `jsr:` specifiers across public CDNs with mport v2, with traces and provider health (needs network access). |
-
-## Development
-
-```bash
-npm test        # node:test (linkedom provides the DOM; HTML modules need no doctype or <html> wrapper)
-npm run build   # syntax-check all sources + import entry points (no compile step)
+```html
+<html-import src="./ui.js" as="ui"></html-import>   <!-- <ui--custom-card>, <ui--fancy-button> -->
 ```
 
-mport is a `file:` devDependency pointing at the local checkout (`../../mport`), so the tests run the real mport v2 offline, with a fake `fetch` for registries and CDNs.
+A plain class needs no manifest when the page names it: `<html-binding export="Counter" element="x-counter">`.
+To give an HTML template JavaScript behaviour, extend its definition's `element` and export the result:
 
-## Not implemented (yet)
+```js
+const { likeView } = await HTMLModules.load(new URL('./like-view.html', import.meta.url).href);
+export class LikeButton extends likeView.element { connectedCallback() { /* … */ } }
+export const components = { 'like-button': defineHTMLComponent({ element: LikeButton, imports: likeView.imports }) };
+```
 
-These parts of the design are deferred:
+HTML modules can re-export JS components too: `<html-export src="./widgets.js" name="counter" import="Counter">`.
 
-- package.json-driven dependency graphs (resolving a package's own dependencies). Ranges, strategies, health, integrity and lockfiles are mport's.
-- Runtime fallback after the browser's native loader has already picked a URL. There is no standard hook for this; mport's `router.import()` retries mirrors for JS it imports itself.
-- JS importing `.html` natively (`import { Card } from "./ui.html"`). This needs a bundler plugin or future platform support. For now, use `loader.load()`.
-- HTML expressions that use namespace bindings (`UI.Card`), and SSR.
-- Cyclic `export *` between HTML modules (rejected; see Re-exports).
+## The compiler
+
+Browsers cannot `import` an `.html` file, and this library does not try to make them (no service worker, no
+custom loader). Instead, an optional compiler turns an HTML module into an ordinary ES module:
+
+```sh
+npx html-module ui.html                         # → ui.js
+npx html-module ui.html -o dist/ui.js
+npx html-module a.html b.html --runtime ./vendor/html-modules/runtime.js
+npx html-module ui.html --format register --as ui    # → ui.register.js, registers <ui--…> on import
+npx html-module ui.html --stdout
+```
+
+```js
+import { compileHTMLModule } from 'html-modules/compiler';
+const js = compileHTMLModule(source, { url: 'ui.html', runtime: 'html-modules/runtime', format: 'esm' });
+```
+
+The output imports only the runtime and exports the same definitions the runtime loader would build:
+
+```js
+// ui.js (abridged)
+import { defineHTMLComponent, manifest } from "html-modules/runtime";
+const $x_card = defineHTMLComponent({ name: "card", template: "<article>…</article>", shadow: "open", … });
+const $components = manifest({ "card": $x_card }, []);
+export { $x_card as card, $components as components };
+```
+
+- **Nothing registers on import.** `import { card } from './ui.js'; card.define('my-card')`, or
+  `<html-import src="./ui.js" as="ui">`, which reads the `components` manifest. `--format register` is the
+  sugar that registers every component on import (under `--as`, or under the export names, which must then
+  be valid custom element names).
+- **Dependencies** (`<html-import>`, `<html-export src>`) become static imports with `.html` rewritten to `.js`
+  (`rewrite` option), so compile those modules too. Star re-exports become `export * from`.
+- The compiler reads source with a small dependency-free scanner that produces the same module record as the
+  browser's DOM reader (tested against every example). Pass `parse` to use a DOM parser instead.
+- Runtime-loaded and compiled modules render identically; the test suite and the compiler example check this.
+
+## Resolution and caching
+
+- `src` resolves like a module specifier: relative to the importing document (or, inside a module, the importing
+  module), or absolute. Bare specifiers go to `hostResolve`; in the browser that is `import.meta.resolve`, so the
+  page's own `<script type="importmap">` applies. Import maps only map URLs; they never parse HTML.
+- Modules are cached by resolved URL as promises, so repeated and concurrent imports share one fetch and parse.
+  Failed loads are evicted and can be retried.
+- Circular dependencies between HTML modules are rejected with the cycle in the message, whether the modules
+  load one after another or concurrently.
+
+## Errors
+
+| Situation | Error | Reported on |
+| --- | --- | --- |
+| Module fetch fails | `Error: Failed to fetch HTML module …: 404` | `<html-import>` |
+| Invalid module (no template/style/JSON, duplicate or non-kebab name, two templates, bad `shadow`) | `SyntaxError` naming the module | `<html-import>` |
+| Invalid namespace (`as="UI"`, `as="a--b"`) | `SyntaxError` | `<html-import>` |
+| Circular dependency | `Error: Circular HTML module dependency: a -> b -> a` | `<html-import>` |
+| JS module with no components imported with `as` | `TypeError` | `<html-import>` |
+| Tag already bound to a different component | `Error: Cannot bind <ui--card>: it is already defined by "card" from …` | `<html-import>` or `<html-binding>` |
+| Missing export | `SyntaxError: The requested module '…' does not provide an export named '…'` | `<html-binding>` |
+| Invalid tag in `element=` | `SyntaxError` | `<html-binding>` |
+| Stylesheet or data bound with `element=` | `TypeError: … it is a stylesheet, not a component` | `<html-binding>` |
+| `adopt` on a non-stylesheet | `TypeError` | `<html-binding>` |
+| `export="default"` without `element=` under a namespace | `SyntaxError` | `<html-binding>` |
+
+## Non-goals
+
+From the PRD: no custom JavaScript module loader; no direct `import … from "./ui.html"` in JavaScript (use
+`HTMLModules.load()` or the compiler); no service workers; no bundler requirement; no framework; import maps
+are not responsible for HTML. Package and CDN routing (version ranges, mirrors, lockfiles) is out of scope:
+use [mport](../../mport), and point a page import map at what it resolves.
+
+Deferred PRD items (HTML Include, further export metadata, a `bundle` compiler format, scoped registries) are
+listed with reasons in [`docs/GAP.md`](docs/GAP.md#deferred).
+
+## Project layout
+
+```
+src/
+  names.js         export names, namespaces and the -- delimiter
+  runtime.js       HTML Component Definitions → custom elements; binding (shared by runtime and compiled code)
+  record.js        module records; readHTMLModule() from a DOM
+  scan.js          scanHTMLModule() from source text
+  loader.js        resolve, fetch, parse, cache, link dependencies
+  html-modules.js  createHTMLModules(): load / import / bind
+  elements.js      <html-import>, <html-binding>, <html-export>
+  compiler.js      compileHTMLModule()
+  browser.js       the one-script bootstrap
+bin/html-module.js the compiler CLI
+examples/          the demo site (open /examples/)
+test/              node:test suites (npm test)
+docs/GAP.md        the PRD mapped onto the code
+```
+
+```sh
+npm test                    # node:test, with linkedom as the test DOM
+npm run check               # every source file parses; entry points import
+npm run examples:compile    # regenerate examples/compiled/
+```
 
 ## License
 

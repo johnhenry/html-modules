@@ -47,11 +47,12 @@ scripts, a non-JSON script with no template, invalid JSON.
 | Attribute | Applies to | Values | Meaning |
 | --- | --- | --- | --- |
 | `name` | all | a kebab name, `default`, or empty | The export name. A kebab name (`card`, `fancy-button`) is a **named export**; JavaScript sees it camelCased (`fancyButton`) and the `components` manifest keys it as written. `name="default"` or an empty `name` (`<html-export name>`) is the **default export** only. Required unless `src` is given. `components` is reserved (the manifest's name). |
-| `default` | component, stylesheet, data | boolean, no value (`default` or `default="default"`) | Also make this named export the module's default: `name="card" default` is `export { card, card as default }`. Not allowed alone (use `name="default"`), with `name="default"` / an empty name, or on a re-export. |
+| `default` | all but a star re-export | boolean, no value (`default` or `default="default"`) | Also make this named export the module's default: `name="card" default` is `export { card, card as default }`. Not allowed alone (use `name="default"`), with `name="default"` / an empty name, with `names`, or on a star re-export. |
 | `shadow` | component only | `open` (default), `closed` | The shadow root mode. Overrides `<html-module-settings shadow>`. An empty value means "not set". On a non-component export it is an error. |
 | `delegates-focus` | component only | [boolean](#boolean-attributes): present, `"true"`, `"false"` | `delegatesFocus` for `attachShadow()`. Overrides `<html-module-settings delegates-focus>`; `delegates-focus="false"` turns a module default off. On a non-component export it is an error. |
 | `src` | re-export | a module specifier | Makes this a re-export of another module (HTML or JS), resolved like an `<html-import src>` of this module (including its `<html-import-settings base>`). |
-| `import` | re-export with `name` | an export name of the source module | The export to take from `src`, when it differs from `name`. |
+| `import` | re-export with `name` | an export name of the source module, `default`, or `*` | The export to take from `src`, when it differs from `name`. `import="*"` takes the whole namespace (`export * as ns from`). |
+| `names` | re-export | a comma-separated list of `<export>` or `<export> as <name>` | Re-export several names in one element (`export { a, b as c } from`). Replaces `name`, `import` and `default`, which it cannot be combined with. |
 
 ### Default exports
 
@@ -74,24 +75,44 @@ A module has **at most one** default export, however it is spelled:
 
 ### Re-exports
 
+Every ESM re-export form has an `<html-export src>` counterpart:
+
 ```html
-<html-export src="./more.html"></html-export>                                   <!-- export * from "./more.html"            -->
-<html-export src="./b.html" name="button" import="fancy-button"></html-export>  <!-- export { fancyButton as button } from … -->
-<html-export src="./b.html" name="button"></html-export>                        <!-- export { button } from …               -->
-<html-export src="./widgets.js" name="counter" import="Counter"></html-export>  <!-- a JS module's export, too             -->
+<html-export src="./more.html"></html-export>                                   <!-- export * from "./more.html"                -->
+<html-export src="./b.html" name="button"></html-export>                        <!-- export { button } from …                   -->
+<html-export src="./b.html" name="button" import="fancy-button"></html-export>  <!-- export { fancyButton as button } from …     -->
+<html-export src="./b.html" names="card, fancy-button as button"></html-export> <!-- export { card, fancyButton as button } from … -->
+<html-export src="./icons.html" name="icon" import="*"></html-export>           <!-- export * as icon from …                    -->
+<html-export src="./b.html" name="default"></html-export>                       <!-- export { default } from …                  -->
+<html-export src="./b.html" name="default" import="card"></html-export>         <!-- export { card as default } from …          -->
+<html-export src="./b.html" name="card" default></html-export>                  <!-- export { card, card as default } from …    -->
+<html-export src="./widgets.js" name="counter" import="Counter"></html-export>  <!-- a JS module's export, too                 -->
 ```
 
-- **Star** (`src` without `name`) follows ESM `export *`: every named export of the source enters this module's
-  namespace (components, stylesheets and data alike) except `default` and `components`; this module's own names win;
-  a name two star sources give different values is left out of the namespace. The `components` manifest merges the
-  source's components; a component name two star sources disagree on is a `SyntaxError` (`Conflicting star exports
-  for 'x' from 'a' and 'b'`).
+- **Star** (`src` without `name` or `names`) follows ESM `export *`: every named export of the source enters this
+  module's namespace (components, stylesheets, data and namespace re-exports alike) except `default` and
+  `components`; this module's own names win; a name two star sources give different values is left out of the
+  namespace. The `components` manifest merges the source's components; a component name two star sources disagree on
+  is a `SyntaxError` (`Conflicting star exports for 'x' from 'a' and 'b'`). A star re-export is never the default.
 - **Named** (`src` + `name`, optional `import`): the export is looked up in the source by the name used in markup:
-  its `components` manifest first, then the name as written, then its camelCase form. A missing name is a
-  `SyntaxError: The requested module '…' does not provide an export named '…'`. Identity is preserved: the re-export
-  *is* the source's definition, not a copy. A named re-export that is a component enters this module's manifest.
-- A re-export is never the default (`default`, `name="default"` or an empty name with `src` is an error), and
-  `import` without `name` is an error.
+  its `components` manifest first, then the name as written, then its camelCase form (`import="default"` takes the
+  source's default). A missing name is a `SyntaxError: The requested module '…' does not provide an export named
+  '…'`. Identity is preserved: the re-export *is* the source's definition, not a copy. A named re-export that is a
+  component enters this module's manifest.
+- **List** (`src` + `names`): one named re-export per entry, exactly as if each were its own element: `names="card,
+  fancy-button as button"` is the same as two `<html-export src name [import]>`s. Entries are `<export>` or
+  `<export> as <name>`, separated by commas (a trailing comma is fine); `<export>` may be any export name of the
+  source (a JS `Counter`, `default`), `<name>` is a kebab name or `default`. `"*"` is not an entry (ESM doesn't allow
+  `export { * as ns }` either): use `name="ns" import="*"`.
+- **Namespace** (`import="*"`): the named export is the source's whole namespace object, as `export * as icon from`.
+  The source's components also enter this module's manifest as `<name>--<export>` (`icon--star`), so importing this
+  module with `as="ui"` registers `<ui--icon--star>`, and `<html-binding export="icon--star">` finds it. `--` cannot
+  occur in an export name, so these keys never collide with the module's own. A source with no components (a plain
+  JS module) adds nothing to the manifest.
+- **Default**: `name="default"` (or an empty `name`) re-exports as this module's default: the source's default by
+  default, or the export `import` names. Like any default-only export it stays out of the manifest and is not
+  registered by an `as=` import; bind it with `<html-binding export="default" element="…">`. `name="card" default`
+  re-exports `card` both named and as the default. The one-default-per-module rule counts re-exports.
 - Circular re-exports (and imports) are rejected: `Circular HTML module dependency: a -> b -> a`.
 
 ## `<html-import>`

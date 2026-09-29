@@ -14,7 +14,7 @@
  */
 import { moduleImportOptions, readHTMLModule } from './record.js';
 import {
-  defineHTMLComponent, defineHTMLStylesheet, lookupExport, manifest,
+  defineHTMLComponent, defineHTMLStylesheet, lookupExport, manifest, namespaceComponents,
 } from './runtime.js';
 import { camelCase } from './names.js';
 
@@ -57,16 +57,17 @@ export function linkHTMLModule(record, modules, { lazy } = {}) {
         value = e.value;
         break;
       case 'reexport':
-        if (!e.name) {
+        if (!('name' in e)) {
           stars.push([modules.get(e.src), e.src]);
           continue;
         }
-        value = lookupExport(modules.get(e.src), e.import ?? e.name, e.src);
+        value = e.import === '*' ? modules.get(e.src) : lookupExport(modules.get(e.src), e.import ?? e.name ?? 'default', e.src);
         break;
     }
     if (e.name) {
       named.set(camelCase(e.name), value);
       manifestLocals[e.name] = value;
+      if (e.import === '*') Object.assign(manifestLocals, namespaceComponents(e.name, value));
     }
     if (e.default) {
       hasDefault = true;

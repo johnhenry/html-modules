@@ -44,9 +44,14 @@ Nothing is silently ignored: a mistake is an exception, a rejection, or an `erro
 | `SyntaxError` | `<html-export name="default" default>: name="default" is already the default export; drop the "default" attribute in <url>` (also for `name=""`) |
 | `SyntaxError` | `<html-export name="<n>" default>: "default" is a boolean attribute and takes no value in <url>` |
 | `SyntaxError` | `More than one default export: <html-export …> and <html-export …> in <url>` |
-| `SyntaxError` | `<html-export src="<src>" …>: a re-export cannot be the default export in <url>` |
-| `SyntaxError` | `<html-export src="<src>">: import="<x>" needs a name="…" to export it as in <url>` |
-| `SyntaxError` | `The requested module '<src>' does not provide an export named '<name>'` (a named re-export, when the dependency loads) |
+| `SyntaxError` | `<html-export src="<src>" default>: a star re-export (src without a name) is never the default; write name="default" to re-export the source's default in <url>` |
+| `SyntaxError` | `<html-export src="<src>" import="<x>">: import="<x>" needs a name="…" to export it as in <url>` |
+| `SyntaxError` | `<html-export src="<src>" names="">: names="" lists no exports; write names="card, button" (or drop "names" to re-export every component) in <url>` |
+| `SyntaxError` | `<html-export src="<src>" names="…">: "<entry>" in names is not "<export>" or "<export> as <name>" in <url>` |
+| `SyntaxError` | `<html-export src="<src>" names="…">: "*" cannot appear in names; write name="<ns>" import="*" for a namespace re-export in <url>` |
+| `SyntaxError` | `<html-export … names="…">: "names" lists every re-exported name; it cannot be combined with "name" (or "import" / "default") in <url>` |
+| `SyntaxError` | `<html-export name="<n>" import="<x>">: "import" only applies to a re-export (an <html-export> with "src") in <url>` (same for `"names"`) |
+| `SyntaxError` | `The requested module '<src>' does not provide an export named '<name>'` (a named, listed or default re-export, when the dependency loads) |
 | `SyntaxError` | `Conflicting star exports for '<name>' from '<a>' and '<b>'` (two star sources with different components of one name) |
 | `Error` | `Circular HTML module dependency: <url> -> <url> -> …` (imports or re-exports; including a module re-exporting itself) |
 

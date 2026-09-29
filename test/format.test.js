@@ -116,7 +116,7 @@ test('format errors are SyntaxErrors with the module URL', () => {
     ['<html-export name="a"><script type="application/json">{nope</script></html-export>', /invalid JSON/],
     ['<html-export name="a"><script type="module">1</script></html-export>', /exactly one <script type="application\/json">/],
     ['<html-export name="default"><template>x</template></html-export><html-export name="b" default><template>y</template></html-export>', /More than one default/],
-    ['<html-export src="./x.html" default></html-export>', /cannot be the default/],
+    ['<html-export src="./x.html" default></html-export>', /is never the default/],
     ['<html-export src="./x.html" import="a"></html-export>', /needs a name/],
     ['<html-import as="ui"></html-import>', /requires a "src" attribute/],
     ['<html-import src="./x.html" as="UI"></html-import>', /Invalid namespace "UI"/],

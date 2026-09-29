@@ -390,6 +390,27 @@ export function componentsOf(ns, from = 'module') {
 }
 
 /**
+ * The components a namespace re-export (`<html-export src name="icon" import="*">`,
+ * `export * as icon from`) adds to the re-exporting module's manifest: each of the
+ * source's components as `<name>--<export>` ("icon--star"), so importing the
+ * re-exporter `as="ui"` gives `<ui--icon--star>`. "--" cannot occur in an export
+ * name, so these never collide with the module's own. A source with no
+ * components (a plain JS module) adds nothing.
+ * @param {string} name the namespace export's name
+ * @param {object} ns   the source namespace
+ * @returns {Record<string, unknown>}
+ */
+export function namespaceComponents(name, ns) {
+  let entries;
+  try {
+    entries = componentsOf(ns);
+  } catch {
+    return {};
+  }
+  return Object.fromEntries(entries.map(([key, value]) => [`${name}${DELIMITER}${key}`, value]));
+}
+
+/**
  * Apply one binding `{ export, element?, adopt? }` of an import.
  * `namespace` is the import's `as` when the tag was made from it, and null
  * when `element=` chose the tag (or nothing was registered): the mapping is

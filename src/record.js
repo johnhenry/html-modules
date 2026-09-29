@@ -16,6 +16,12 @@
  *   <html-export src="./more.html"></html-export>                 → re-export every component
  *   <html-export src="./b.html" name="button" import="fancy-button"></html-export>
  *                                                                 → re-export one, renamed
+ *   <html-export src="./b.html" names="card, fancy-button as button"></html-export>
+ *                                                                 → re-export several (`export { … } from`)
+ *   <html-export src="./icons.html" name="icon" import="*"></html-export>
+ *                                                                 → re-export the namespace (`export * as icon from`)
+ *   <html-export src="./b.html" name="default" import="card"></html-export>
+ *                                                                 → re-export as the default (`export { card as default } from`)
  *   <html-export name="default">…</html-export>                   → the default export (`export default`)
  *   <html-export name>…</html-export>                             → the same: an empty name is the default
  *   <html-export name="custom-card" default>…</html-export>       → named, and also the default export
@@ -32,7 +38,7 @@
  * An export record's `name` is its named-export name, or null for the
  * default-only export (`name="default"` or a bare `name`); `default: true`
  * marks the default export, whichever way it was spelled. A module has at
- * most one default. Re-exports are never the default.
+ * most one default, which may be a re-export (never a star re-export).
  *
  * An import's `delimiter` is present only when written; absent, it is "--"
  * (inside modules the page's library-wide default does not apply, so a
@@ -43,7 +49,8 @@
  * @typedef {{ kind: 'component', name: string|null, default?: true, template: string, shadow: 'open'|'closed', delegatesFocus: boolean, styles: string[] }
  *         | { kind: 'stylesheet', name: string|null, default?: true, css: string }
  *         | { kind: 'data', name: string|null, default?: true, value: unknown }
- *         | { kind: 'reexport', src: string, name?: string, import?: string }} ExportRecord
+ *         | { kind: 'reexport', src: string, name?: string|null, default?: true, import?: string }} ExportRecord
+ * (a re-export without a `name` key is a star re-export; `import: "*"` is a namespace re-export)
  * @typedef {{ url: string, imports: ImportRecord[], exports: ExportRecord[],
  *   importSettings?: { delimiter?: string, base?: string, conflict?: string, load?: string, errors?: string },
  *   moduleSettings?: { shadow?: 'open'|'closed', delegatesFocus?: boolean } }} ModuleRecord
@@ -61,7 +68,7 @@ const has = (attrs, name) => Object.prototype.hasOwnProperty.call(attrs, name);
 const nonEmpty = (v) => (v == null || v === '' ? undefined : v);
 
 function describe(raw) {
-  const bits = ['name', 'src'].filter((a) => has(raw.attrs, a)).map((a) => ` ${a}="${raw.attrs[a]}"`);
+  const bits = ['name', 'src', 'import', 'names'].filter((a) => has(raw.attrs, a)).map((a) => ` ${a}="${raw.attrs[a]}"`);
   if (has(raw.attrs, 'default')) bits.push(' default');
   return `<${raw.tag}${bits.join('')}>`;
 }
@@ -124,18 +131,59 @@ function exportName(raw, where) {
   return { name, isDefault: modifier };
 }
 
+/** Parse a `names` list: "card, fancy-button as button, default, card as default". */
+function reexportList(raw, src, where) {
+  const items = raw.attrs.names.split(',').map((s) => s.trim()).filter(Boolean);
+  if (!items.length) throw new SyntaxError(`${describe(raw)}: names="" lists no exports; write names="card, button" (or drop "names" to re-export every component)${where}`);
+  return items.map((item) => {
+    const m = /^(\S+)(?:\s+as\s+(\S+))?$/.exec(item);
+    if (!m) throw new SyntaxError(`${describe(raw)}: "${item}" in names is not "<export>" or "<export> as <name>"${where}`);
+    const [, from, to = from] = m;
+    if (from === '*') throw new SyntaxError(`${describe(raw)}: "*" cannot appear in names; write name="${m[2] ?? 'ns'}" import="*" for a namespace re-export${where}`);
+    if (to !== 'default') assertExportName(to, where);
+    return {
+      kind: 'reexport', src, name: to === 'default' ? null : to,
+      ...(to === 'default' && { default: true }),
+      ...(from !== to && { import: from }),
+    };
+  });
+}
+
+/**
+ * A re-export's records (one, or one per entry of a `names` list):
+ *   src                           → export * from               { src }
+ *   src name="card"               → export { card } from        { src, name: "card" }
+ *   src name="b" import="a"       → export { a as b } from      { src, name: "b", import: "a" }
+ *   src name="ns" import="*"      → export * as ns from         { src, name: "ns", import: "*" }
+ *   src name="default"            → export { default } from     { src, name: null, default: true }
+ *   src name="default" import="a" → export { a as default } from
+ *   src name="card" default       → export { card, card as default } from
+ *   src names="a, b as c"         → export { a, b as c } from   (one record each)
+ * A star re-export is the one with no `name` key.
+ */
+function reexportRecords(raw, src, where) {
+  const { attrs } = raw;
+  if (has(attrs, 'names')) {
+    const other = ['name', 'import', 'default'].filter((a) => has(attrs, a));
+    if (other.length) throw new SyntaxError(`${describe(raw)}: "names" lists every re-exported name; it cannot be combined with ${other.map((a) => `"${a}"`).join(' or ')}${where}`);
+    return reexportList(raw, src, where);
+  }
+  const imported = nonEmpty(attrs.import);
+  if (!has(attrs, 'name')) {
+    if (imported) throw new SyntaxError(`${describe(raw)}: import="${imported}" needs a name="…" to export it as${where}`);
+    if (has(attrs, 'default')) throw new SyntaxError(`${describe(raw)}: a star re-export (src without a name) is never the default; write name="default" to re-export the source's default${where}`);
+    return [{ kind: 'reexport', src }];
+  }
+  const { name, isDefault } = exportName(raw, where);
+  return [{ kind: 'reexport', src, name, ...(isDefault && { default: true }), ...(imported && { import: imported }) }];
+}
+
 function exportRecord(raw, where, defaults = EXPORT_DEFAULTS) {
   const { attrs } = raw;
   const src = nonEmpty(attrs.src);
-  if (src) {
-    const imported = nonEmpty(attrs.import);
-    const named = has(attrs, 'name');
-    if (has(attrs, 'default') || (named && (attrs.name === '' || attrs.name === 'default'))) {
-      throw new SyntaxError(`${describe(raw)}: a re-export cannot be the default export${where}`);
-    }
-    if (imported && !named) throw new SyntaxError(`${describe(raw)}: import="${imported}" needs a name="…" to export it as${where}`);
-    if (named) assertExportName(attrs.name, where);
-    return { kind: 'reexport', src, ...(named && { name: attrs.name }), ...(imported && { import: imported }) };
+  if (src) return reexportRecords(raw, src, where);
+  for (const a of ['import', 'names']) {
+    if (has(attrs, a)) throw new SyntaxError(`${describe(raw)}: "${a}" only applies to a re-export (an <html-export> with "src")${where}`);
   }
   const { name, isDefault } = exportName(raw, where);
 
@@ -151,7 +199,7 @@ function exportRecord(raw, where, defaults = EXPORT_DEFAULTS) {
     const delegatesFocus = has(attrs, 'delegates-focus')
       ? booleanAttribute('delegates-focus', attrs['delegates-focus'], ` on ${describe(raw)}${where}`)
       : defaults.delegatesFocus ?? EXPORT_DEFAULTS.delegatesFocus;
-    return { kind: 'component', ...base, template: templates[0].html ?? '', shadow, delegatesFocus, styles };
+    return [{ kind: 'component', ...base, template: templates[0].html ?? '', shadow, delegatesFocus, styles }];
   }
   for (const a of ['shadow', 'delegates-focus']) {
     if (has(attrs, a)) throw new SyntaxError(`${describe(raw)}: "${a}" only applies to an export with a <template>${where}`);
@@ -162,12 +210,12 @@ function exportRecord(raw, where, defaults = EXPORT_DEFAULTS) {
       throw new SyntaxError(`${describe(raw)}: a data export has exactly one <script type="application/json"> and nothing else${where}`);
     }
     try {
-      return { kind: 'data', ...base, value: JSON.parse(json[0].text ?? '') };
+      return [{ kind: 'data', ...base, value: JSON.parse(json[0].text ?? '') }];
     } catch (error) {
       throw new SyntaxError(`${describe(raw)}: invalid JSON${where}: ${error.message}`);
     }
   }
-  if (styles.length) return { kind: 'stylesheet', ...base, css: styles.join('\n') };
+  if (styles.length) return [{ kind: 'stylesheet', ...base, css: styles.join('\n') }];
   throw new SyntaxError(`${describe(raw)} needs a <template> (a component), <style> (a stylesheet) or <script type="application/json"> (data)${where}`);
 }
 
@@ -234,16 +282,17 @@ export function recordFromRaw({ imports, exports, importSettings: iset = [], mod
   const names = new Set();
   let firstDefault = null;
   for (const raw of exports) {
-    const e = exportRecord(raw, where, moduleSettings ?? undefined);
-    if (e.name) {
-      if (names.has(e.name)) throw new SyntaxError(`Duplicate export "${e.name}"${where}`);
-      names.add(e.name);
+    for (const e of exportRecord(raw, where, moduleSettings ?? undefined)) {
+      if (e.name) {
+        if (names.has(e.name)) throw new SyntaxError(`Duplicate export "${e.name}"${where}`);
+        names.add(e.name);
+      }
+      if (e.default) {
+        if (firstDefault) throw new SyntaxError(`More than one default export: ${describe(firstDefault)} and ${describe(raw)}${where}`);
+        firstDefault = raw;
+      }
+      record.exports.push(e);
     }
-    if (e.default) {
-      if (firstDefault) throw new SyntaxError(`More than one default export: ${describe(firstDefault)} and ${describe(raw)}${where}`);
-      firstDefault = raw;
-    }
-    record.exports.push(e);
   }
   return record;
 }

@@ -1,0 +1,10 @@
+<!--
+  A barrel written with the other ESM re-export forms: a list, a namespace
+  and a default.
+-->
+<!-- export { card, badge as tag, meta as info } from "./ui.html" -->
+<html-export src="./ui.html" names="card, badge as tag, meta as info"></html-export>
+<!-- export * as icon from "./icons.html": its components become icon--star, icon--heart, … -->
+<html-export src="./icons.html" name="icon" import="*"></html-export>
+<!-- export { default } from "./tip.html" -->
+<html-export src="./tip.html" name="default"></html-export>

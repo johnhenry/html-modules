@@ -53,7 +53,7 @@ JS-authored component protocol.
 | --- | --- |
 | `<module-import>` / `<module-binding>` | **Renamed** to `<html-import>` / `<html-binding>` (see the extension below). |
 | `<define-element name component>` | **Removed**. Its job (choosing a tag for one export) is `<html-binding export element>`, or `definition.define(tag)` in JS. |
-| `<module-export from>` re-exports (barrels) | **Kept** as `<html-export src="…">` (re-export every component) and `<html-export src="…" name="x" import="y">` (one export, optionally renamed). Sources may be HTML or JS modules. Cycle detection kept. |
+| `<module-export from>` re-exports (barrels) | **Kept** as `<html-export src="…">` (`export *`), `<html-export src="…" name="x" import="y">` (one export, optionally renamed), and extended to every ESM form: `names="a, b as c"` (a list), `import="*"` (`export * as ns`), and `name="default"` (a default re-export). Sources may be HTML or JS modules. Cycle detection kept. |
 | `<style export>` + `adopt` | **Kept** as a stylesheet export, `<html-export name="theme"><style>…</style></html-export>`, adopted with `<html-binding export="theme" adopt>` into the import's root (the document, or the shadow root that contains the import). |
 | `<script type="application/json" export>` | **Kept** as a data export, `<html-export name="config"><script type="application/json">…</script></html-export>`. |
 | `<script type="module" export>` inline scripts, `<svg export>`, arbitrary-element exports | **Removed**. Behaviour comes from JS modules (§21), not scripts embedded in HTML modules; the conversation defers hybrid script semantics past V1. |
@@ -164,7 +164,8 @@ attribute (`<html-export default>`, with `name` optional). That changed to mirro
 | no `name` and no `src` | error mentioning `name="default"` |
 | two defaults (`name="default"` twice, or with `name="x" default`) | error |
 | `name="default" default`, `default="yes"` | error |
-| a re-export (`src`) with `default`, `name="default"` or an empty name | error: re-exports are never the default |
+| a star re-export (`src`, no `name`) with `default` | error: star re-exports are never the default |
+| a re-export with `name="default"` (or empty), `import="x"`, or `name="x" default` | the default re-export: `export { default } from`, `export { x as default } from`, `export { x, x as default } from` |
 
 `default` and `components` remain reserved as named exports. The default is never star re-exported, a
 default-only component is not in the `components` manifest and is not registered by `as=` (the importer names it

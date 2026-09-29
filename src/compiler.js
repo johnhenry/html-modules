@@ -131,13 +131,17 @@ export function compileRecord(record, { runtime = '@johnhenry/html-modules/runti
         expr = str(e.value);
         break;
       case 'reexport':
-        if (!e.name) {
+        if (!('name' in e)) {
           stars.push(`[${dep(e.src)}, ${str(e.src)}]`);
           starLines.push(`export * from ${str(specifier(e.src))};`);
           continue;
         }
+        if (e.import === '*') {
+          expr = dep(e.src);
+          break;
+        }
         helpers.add('lookupExport');
-        expr = `lookupExport(${dep(e.src)}, ${str(e.import ?? e.name)}, ${str(e.src)})`;
+        expr = `lookupExport(${dep(e.src)}, ${str(e.import ?? e.name ?? 'default')}, ${str(e.src)})`;
         break;
     }
     body.push(`const ${local} = ${expr};`);
@@ -145,6 +149,10 @@ export function compileRecord(record, { runtime = '@johnhenry/html-modules/runti
       exported.push([local, camelCase(e.name)]);
       // Components, and named re-exports (which may be components); manifest() skips the rest.
       if (e.kind === 'component' || e.kind === 'reexport') manifestEntries.push(`  ${str(e.name)}: ${local},`);
+      if (e.import === '*') {
+        helpers.add('namespaceComponents');
+        manifestEntries.push(`  ...namespaceComponents(${str(e.name)}, ${local}),`);
+      }
     }
     if (e.default) defaultLocal = local;
   }

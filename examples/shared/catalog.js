@@ -124,7 +124,7 @@ export const pages = [
   },
   {
     id: 'library', href: 'library.html', title: 'Writing a component library in HTML',
-    summary: 'The source of a small library next to what it renders: templates, styles, slots and parts, a default export, data, stylesheets, a module that imports another, and a barrel.',
+    summary: 'The source of a small library next to what it renders: templates, styles, slots and parts, a default export, data, stylesheets, a module that imports another, and barrels using every re-export form (list, namespace, default).',
     covers: ['fmt.component', 'fmt.styles', 'fmt.shadow', 'fmt.slots', 'fmt.stylesheet', 'fmt.data', 'fmt.default', 'fmt.private', 'fmt.reexport-all', 'fmt.reexport-one', 'fmt.nested', 'js.reexport', 'api.load', 'rt.cache', 'sty.scoped'],
   },
   {

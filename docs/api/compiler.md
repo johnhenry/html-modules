@@ -104,7 +104,7 @@ Both formats produce, in order:
 
 1. A header: `// Compiled from <basename> by html-module. Do not edit; recompile instead.`
 2. `import { <helpers> } from "<runtime>";`: only the helpers used, sorted (`defineHTMLComponent`,
-   `defineHTMLStylesheet`, `lookupExport`, `manifest`, `registerComponents`).
+   `defineHTMLStylesheet`, `lookupExport`, `manifest`, `namespaceComponents`, `registerComponents`).
 3. One `import * as $m<n> from "<specifier>";` per dependency (each `<html-import src>` and `<html-export src>`,
    once per distinct `src`), with the specifier rebased by the module's `base` and rewritten (`.html` → `.js`).
    **Compile the dependencies too.**
@@ -118,8 +118,10 @@ Both formats produce, in order:
      with `<html-module-settings>` defaults already baked in;
    - stylesheet → `defineHTMLStylesheet({ name, css, url: import.meta.url })`;
    - data → the JSON value as a literal;
-   - named re-export → `lookupExport($m<n>, "<import or name>", "<src>")`.
-7. `const $components = manifest({ <components and named re-exports> }, [<[star namespace, src] pairs>]);`
+   - named re-export → `lookupExport($m<n>, "<import, else name, else default>", "<src>")`;
+   - namespace re-export (`import="*"`) → `$m<n>` itself.
+7. `const $components = manifest({ <components and named re-exports>, ...namespaceComponents("<name>", $x_<name>) per
+   namespace re-export }, [<[star namespace, src] pairs>]);`
 8. `register` only: `registerComponents({ components: $components }, { as?, delimiter? (only with as and when not
    "--"), conflict? (only when "reuse"), from: import.meta.url });`
 9. `export { $x_… as <camelName>, …, $components as components };` and `export default …;` when the module has a

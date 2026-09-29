@@ -234,7 +234,7 @@ What `load()` resolves to for an HTML module, and what `import * as ns` of the c
 - one key per named export, **camelCased** (`fancy-button` → `fancyButton`);
 - star re-exported names ([ESM `export *` rules](html-syntax.md#re-exports));
 - `components`: a frozen manifest, export name as written → component (local components and named re-exports that
-  are components, then star-re-exported components);
+  are components, a namespace re-export's components as `<name>--<export>`, then star-re-exported components);
 - `default`, when the module has one.
 
 For a JavaScript module, `load()` returns its native module namespace unchanged.

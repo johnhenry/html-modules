@@ -2,7 +2,7 @@
 export {
   HTMLComponent, HTMLStylesheet, defineHTMLComponent, defineHTMLStylesheet, isHTMLComponent, isHTMLStylesheet,
   isStylesheet, isElementLike, toComponent, defineElement, adoptStylesheet, lookupExport, componentsOf,
-  applyBinding, bindModule, registerComponents, manifest,
+  applyBinding, bindModule, registerComponents, manifest, namespaceComponents,
 } from './runtime.js';
 export {
   DELIMITER, bindingName, parseBindingName, camelCase, kebabCase, isKebabName, isValidElementName, isValidDelimiter,

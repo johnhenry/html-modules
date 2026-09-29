@@ -11,7 +11,7 @@ tag.**
 - Stylesheets: [`HTMLStylesheet` / `defineHTMLStylesheet`](#htmlstylesheet), [`adoptStylesheet`](#adoptstylesheetroot-value-options), [`isHTMLStylesheet`, `isStylesheet`](#ishtmlstylesheetvalue-isstylesheetvalue)
 - Registration: [`defineElement`](#defineelementtag-value-options), [`toComponent`](#tocomponentvalue-options), [`isElementLike`](#iselementlikevalue-window)
 - Binding: [`bindModule`](#bindmodule), [`applyBinding`](#applybinding), [`registerComponents`](#registercomponentsns-options)
-- Namespaces: [`lookupExport`](#lookupexportns-name-from), [`componentsOf`](#componentsofns-from), [`manifest`](#manifestlocals-stars)
+- Namespaces: [`lookupExport`](#lookupexportns-name-from), [`componentsOf`](#componentsofns-from), [`manifest`](#manifestlocals-stars), [`namespaceComponents`](#namespacecomponentsname-ns)
 
 ## `HTMLComponent`
 
@@ -265,3 +265,14 @@ Build an HTML module's `components` manifest: the element-like values of `locals
 skipped), then each star source's components that `locals` does not already name. A name two star sources give
 **different** components is a `SyntaxError: Conflicting star exports for '<name>' from '<a>' and '<b>'`. Frozen.
 Used by the loader and by compiled output.
+
+## `namespaceComponents(name, ns)`
+
+```ts
+namespaceComponents(name: string, ns: object): Record<string, unknown>
+```
+
+The manifest entries a namespace re-export (`<html-export src="./icons.html" name="icon" import="*">`) contributes:
+each of `ns`'s components (per [`componentsOf`](#componentsofns-from)) keyed `<name>--<export>`, e.g.
+`{ 'icon--star': … }`. Returns `{}` when `ns` offers no components instead of throwing. Spread into the `locals` of
+[`manifest`](#manifestlocals-stars) by the loader and by compiled output.

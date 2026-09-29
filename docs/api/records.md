@@ -43,7 +43,7 @@ type ExportRecord =
       shadow: 'open' | 'closed', delegatesFocus: boolean, styles: string[] }
   | { kind: 'stylesheet', name: string | null, default?: true, css: string }
   | { kind: 'data', name: string | null, default?: true, value: unknown }
-  | { kind: 'reexport', src: string, name?: string, import?: string };
+  | { kind: 'reexport', src: string, name?: string | null, default?: true, import?: string };
 ```
 
 - Optional keys are present **only when written** in the source. An import's `delimiter`, `conflict`, `load` and
@@ -51,7 +51,10 @@ type ExportRecord =
   [`moduleImportOptions`](#moduleimportoptionsrecord-importrecord)). A page's settings and the instance options
   never reach a module.
 - `name: null` with `default: true` is a default-only export; a string `name` with `default: true` is a named export
-  that is also the default. At most one export has `default: true`. Re-exports have no `default`.
+  that is also the default. At most one export has `default: true`, and it may be a re-export.
+- A re-export **without a `name` key** is a star re-export (`export * from`); `import: "*"` is a namespace re-export
+  (`export * as <name> from`); otherwise `import` (when present) is the source export's name. A `names="…"` list is
+  expanded into one record per entry, so records never carry `names`.
 - `shadow` and `delegatesFocus` are always present on components: the export's attribute, else the module's
   `moduleSettings`, else the built-in default. `moduleSettings` is also kept on the record for reference.
 - `template` is the `<template>`'s content HTML (verbatim from the scanner; serialized by the DOM reader, so
@@ -92,7 +95,8 @@ reads (with `url: 'shop.html'`) into:
     { "kind": "stylesheet", "name": "dark", "css": ":host { color: white }" },
     { "kind": "data", "name": "config", "value": { "currency": "EUR" } },
     { "kind": "reexport", "src": "./buttons.html" },
-    { "kind": "reexport", "src": "./forms.html", "name": "field", "import": "text-field" }
+    { "kind": "reexport", "src": "./forms.html", "name": "field", "import": "text-field" },
+    { "kind": "reexport", "src": "./icons.html", "name": "icon", "import": "*" }
   ],
   "importSettings": { "base": "./vendor/", "conflict": "reuse" },
   "moduleSettings": { "delegatesFocus": true }

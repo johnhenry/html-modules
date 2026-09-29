@@ -59,11 +59,9 @@ test('default export errors', () => {
     ['<html-export name="Default"><template>x</template></html-export>', /Invalid export name "Default"/],
     ['<html-export name=" default"><template>x</template></html-export>', /Invalid export name " default"/],
     ['<html-export name="components"><template>x</template></html-export>', /"components" is reserved/],
-    // Re-exports are never the default.
-    ['<html-export src="./x.html" default></html-export>', /a re-export cannot be the default export/],
-    ['<html-export src="./x.html" name="default" import="card"></html-export>', /a re-export cannot be the default export/],
-    ['<html-export src="./x.html" name import="card"></html-export>', /a re-export cannot be the default export/],
-    ['<html-export src="./x.html" name="card" import="card" default></html-export>', /a re-export cannot be the default export/],
+    // A star re-export is never the default; a named one may be (test/reexport.test.js).
+    ['<html-export src="./x.html" default></html-export>', /a star re-export \(src without a name\) is never the default/],
+    ['<html-export src="./x.html" name="default" default></html-export>', /already the default export/],
   ];
   for (const [html, message] of cases) {
     for (const fn of [(h) => readHTMLModule(parse(h), 'm.html'), (h) => scanHTMLModule(h, 'm.html')]) {

@@ -31,6 +31,8 @@
 
     <html-import src="./components/ui.html" as="ui"></html-import>
     <html-import id="kit" src="./components/kit.html" as="kit"></html-import>
+    <html-import id="pack" src="./components/pack.html" as="pack"></html-import>
+    <html-import id="pack-default" src="./components/pack.html"><html-binding export="default" element="pack-tip"></html-binding></html-import>
 
     <section class="card">
       <h2>1. The module: <code>components/ui.html</code></h2>
@@ -116,6 +118,34 @@
       <ul id="kit-checks"></ul>
     </section>
 
+    <section class="card">
+      <h2>5. Every re-export form: <code>components/pack.html</code></h2>
+      <p class="small">
+        <code>names="card, badge as tag"</code> re-exports a list, like <code>export { card, badge as tag } from</code>.
+        <code>name="icon" import="*"</code> re-exports a whole module as a namespace, like <code>export * as icon from</code>; its
+        components join the manifest as <code>icon--star</code>, so <code>as="pack"</code> registers <code>&lt;pack--icon--star&gt;</code>.
+        <code>name="default"</code> passes another module's default through, like <code>export { default } from</code>; as with any
+        default, the importer names it with <code>&lt;html-binding export="default" element="pack-tip"&gt;</code>.
+      </p>
+      <div class="split">
+        <div>
+          <p class="label">Source</p>
+          <pre data-source="./components/pack.html"></pre>
+        </div>
+        <div>
+          <p class="label">Imported with <code>as="pack"</code>, and its default bound as <code>&lt;pack-tip&gt;</code></p>
+          <div class="preview">
+            <div class="row"><pack--tag>tag</pack--tag> <pack--icon--star></pack--icon--star><pack--icon--heart></pack--icon--heart><pack--icon--check></pack--icon--check></div>
+            <pack--card><span slot="title">&lt;pack--card&gt;</span>Re-exported from a list.</pack--card>
+            <pack-tip>The default of <code>tip.html</code>, passed through <code>pack.html</code>.</pack-tip>
+          </div>
+          <p class="label" style="margin-top:.75rem">Registered by the <code>as="pack"</code> import</p>
+          <p id="pack-tags" class="small"></p>
+        </div>
+      </div>
+      <ul id="pack-checks"></ul>
+    </section>
+
     <div class="pager"><a href="./quickstart.html">← Quickstart</a><a href="./namespaces.html">Namespaces and delimiters →</a></div>
   </main>
 
@@ -148,6 +178,21 @@
       ['its adopted <code>gold</code> sheet is inside <code>&lt;kit--rating&gt;</code> only, not the page', rating.shadowRoot.adoptedStyleSheets.length === 2 && document.adoptedStyleSheets.length === 0],
       ['<code>&lt;kit--counter&gt;</code> is the JS class <code>ClickCounter</code>, re-exported through HTML', customElements.get('kit--counter').prototype instanceof widgets.ClickCounter],
       ['<code>&lt;kit--sealed&gt;</code> has a closed shadow root', document.querySelector('kit--sealed').shadowRoot === null && kit.sealed.shadow === 'closed'],
+    ]);
+
+    const pack = await document.getElementById('pack').module;
+    const packed = await document.getElementById('pack').ready;
+    await document.getElementById('pack-default').ready;
+    document.getElementById('pack-tags').innerHTML = Object.keys(packed.elements).map((t) => `<code>&lt;${esc(t)}&gt;</code>`).join(' ');
+    const icons = await HTMLModules.load('./components/icons.html');
+    const tip = await HTMLModules.load('./components/tip.html');
+    renderChecks(document.getElementById('pack-checks'), [
+      ['<code>names</code>: <code>pack.card === ui.card</code>, <code>pack.tag === ui.badge</code>, <code>pack.info === ui.meta</code>', pack.card === ui.card && pack.tag === ui.badge && pack.info === ui.meta],
+      ['<code>import="*"</code>: <code>pack.icon</code> is the icons.html namespace itself', pack.icon === icons],
+      ['its components are in the manifest as <code>icon--star</code>, …', pack.components['icon--star'] === icons.star],
+      ['<code>&lt;pack--icon--star&gt;</code> rendered', !!document.querySelector('pack--icon--star').shadowRoot],
+      ['<code>name="default"</code>: <code>pack.default === tip.default</code>, and <code>as=</code> did not register it', pack.default === tip.default && !Object.keys(packed.elements).some((t) => t.includes('default'))],
+      ['<code>&lt;pack-tip&gt;</code> is the passed-through default', customElements.get('pack-tip')?.component === tip.default && !!document.querySelector('pack-tip').shadowRoot],
     ]);
   </script>
   <script type="module" src="./shared/site.js"></script>

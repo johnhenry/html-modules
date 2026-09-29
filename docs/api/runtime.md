@@ -86,8 +86,8 @@ class LikeButton extends likeView.element { connectedCallback() { /* … */ } }
 export const components = { 'like-button': defineHTMLComponent({ element: LikeButton, imports: likeView.imports }) };
 ```
 
-Throws `TypeError: defineHTMLComponent: pass a \`template\` string or an \`element\` class`, `TypeError:
-defineHTMLComponent: \`element\` must be a class extending HTMLElement`, or `SyntaxError: Invalid shadow mode "…":
+Throws `` TypeError: defineHTMLComponent: pass a `template` string or an `element` class ``, `` TypeError:
+defineHTMLComponent: `element` must be a class extending HTMLElement ``, or `SyntaxError: Invalid shadow mode "…":
 use "open" or "closed"`.
 
 ## `isHTMLComponent(value)`
@@ -243,9 +243,9 @@ componentsOf(ns: object, from?: string): Array<[exportName: string, value: unkno
 
 The components a module offers to a whole-namespace import: its `components` manifest if it has one (an object);
 otherwise its exports made with `defineHTMLComponent()` (excluding `default`), keyed by kebab-cased export name. Other
-exports (constants, functions, plain classes) are never components. Throws `TypeError: The module '<from>' does not
-export any HTML components: export a \`components\` manifest or definitions made with defineHTMLComponent(), or bind
-exports explicitly with <html-binding>`.
+exports (constants, functions, plain classes) are never components. Throws `` TypeError: The module '<from>' does not
+export any HTML components: export a `components` manifest or definitions made with defineHTMLComponent(), or bind
+exports explicitly with <html-binding> ``.
 
 A JavaScript module offers components either way:
 

@@ -63,7 +63,7 @@ createHTMLModules(options?: {
 | `baseURL` | `document.baseURI`, else `location.href` | The referrer for top-level relative specifiers. |
 | `hostResolve` | none | Resolves bare specifiers. `/browser` passes `(s) => import.meta.resolve(s)`, which applies the page's import map. Return a falsy value for "unresolvable". |
 | `fetch` | `globalThis.fetch` | Fetches HTML modules. Only `ok`, `status` and `text()` of the response are used. |
-| `parseHTML` | the window's `DOMParser` | Parses fetched HTML into a `Document`. Without either, loading an HTML module throws `TypeError: No DOMParser available; pass \`parseHTML\` to createLoader()`. |
+| `parseHTML` | the window's `DOMParser` | Parses fetched HTML into a `Document`. Without either, loading an HTML module throws `` TypeError: No DOMParser available; pass `parseHTML` to createLoader() ``. |
 | `importModule` | native `import()` | Loads JavaScript modules. |
 | `onEvent` | no-op | Observes the loader: `{ type: 'fetch', url }` before an HTML module is fetched; `{ type: 'load', url, kind }` and `{ type: 'error', url, kind, error }` when any module (HTML or JS) settles. |
 

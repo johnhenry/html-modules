@@ -11,7 +11,7 @@ export const checklist = [
     ['fmt.slots', 'native <slot>, named slots and ::part'],
     ['fmt.stylesheet', 'stylesheet export: <html-export> with only <style>'],
     ['fmt.data', 'data export: <script type="application/json">'],
-    ['fmt.default', 'default export (<html-export default>)'],
+    ['fmt.default', 'default export: name="default", a bare name, or name="x" default'],
     ['fmt.private', 'unexported markup stays private'],
     ['fmt.reexport-all', '<html-export src> re-exports every component (barrels)'],
     ['fmt.reexport-one', '<html-export src name import> re-exports one, renamed'],
@@ -19,7 +19,9 @@ export const checklist = [
   ] },
   { group: 'Importing', items: [
     ['imp.namespace', '<html-import src as> registers every component as <as>--<export>'],
-    ['imp.delimiter', 'why the -- delimiter'],
+    ['imp.delimiter', 'why -- is the default delimiter'],
+    ['imp.custom-delimiter', 'delimiter="-" on an import, createHTMLModules({ delimiter }), and inside modules'],
+    ['imp.tags', 'el.tags records { tag, namespace, export }; tags are never parsed'],
     ['imp.two-namespaces', 'the same module under two namespaces'],
     ['imp.selective', '<html-binding> children bind only the listed exports'],
     ['imp.element', 'element= chooses the tag'],
@@ -68,6 +70,8 @@ export const checklist = [
     ['cmp.define', 'import { card } from "./ui.js"; card.define(tag)'],
     ['cmp.html-import', '<html-import src="ui.js" as> on compiled output'],
     ['cmp.register', '--format register (registers on import)'],
+    ['cmp.delimiter', '--delimiter for the register format'],
+    ['cmp.default', 'export default in compiled output'],
     ['cmp.same', 'compiled and runtime-loaded modules render the same'],
     ['cmp.in-browser', 'compileHTMLModule() in the browser'],
   ] },
@@ -83,6 +87,8 @@ export const checklist = [
     ['err.cycle', 'circular module dependency'],
     ['err.js-nothing', 'a JS module with no components imported as a namespace'],
     ['err.default-tag', 'binding the default export without element='],
+    ['err.default', '<html-export default> without a name, or two default exports'],
+    ['err.delimiter', 'an invalid delimiter, or a tag the delimiter makes invalid (ui.card)'],
   ] },
 ];
 
@@ -99,9 +105,9 @@ export const pages = [
     covers: ['fmt.component', 'fmt.styles', 'fmt.shadow', 'fmt.slots', 'fmt.stylesheet', 'fmt.data', 'fmt.default', 'fmt.private', 'fmt.reexport-all', 'fmt.reexport-one', 'fmt.nested', 'js.reexport', 'api.load', 'rt.cache', 'sty.scoped'],
   },
   {
-    id: 'namespaces', href: 'namespaces.html', title: 'Namespaces and the -- delimiter',
-    summary: 'as="ui" makes <ui--card>. The same module under two namespaces, a bare specifier through the import map, and a live test of which delimiters the Custom Elements registry accepts.',
-    covers: ['imp.namespace', 'imp.delimiter', 'imp.two-namespaces', 'imp.bare', 'id.subclass', 'rt.cache', 'err.namespace'],
+    id: 'namespaces', href: 'namespaces.html', title: 'Namespaces and delimiters',
+    summary: 'as="ui" makes <ui--card>; delimiter="-" makes <ui-card>. The same module under several namespaces and delimiters, a module choosing its own delimiter, the tag records, a bare specifier through the import map, and a live test of which delimiters the registry accepts.',
+    covers: ['imp.namespace', 'imp.delimiter', 'imp.custom-delimiter', 'imp.tags', 'imp.two-namespaces', 'imp.bare', 'id.subclass', 'rt.cache', 'err.namespace', 'err.delimiter'],
   },
   {
     id: 'bindings', href: 'bindings.html', title: 'Selective imports and custom tag names',
@@ -110,8 +116,8 @@ export const pages = [
   },
   {
     id: 'identity', href: 'identity.html', title: 'Component identity vs registration name',
-    summary: 'One definition, many tags: define() in JS, element= in markup and two namespaces, each a subclass of one base element.',
-    covers: ['id.identity', 'id.define', 'id.subclass', 'imp.multi-tag', 'api.load', 'api.bind', 'api.define-js'],
+    summary: 'One definition, many tags: define() in JS, element= in markup and two namespaces, each a subclass of one base element. A default export has no name at all: the importer names it.',
+    covers: ['id.identity', 'id.define', 'id.subclass', 'imp.multi-tag', 'api.load', 'api.bind', 'api.define-js', 'fmt.default', 'imp.default'],
   },
   {
     id: 'interop', href: 'interop.html', title: 'Mixing HTML and JS-authored components',
@@ -126,12 +132,12 @@ export const pages = [
   {
     id: 'errors', href: 'errors.html', title: 'Errors',
     summary: 'Every error, triggered on purpose, with the event it fires and its message.',
-    covers: ['err.fetch', 'err.missing-export', 'err.bad-tag', 'err.not-element', 'err.not-stylesheet', 'err.conflict', 'err.namespace', 'err.format', 'err.cycle', 'err.js-nothing', 'err.default-tag', 'rt.retry', 'rt.events', 'imp.element-api'],
+    covers: ['err.fetch', 'err.missing-export', 'err.bad-tag', 'err.not-element', 'err.not-stylesheet', 'err.conflict', 'err.namespace', 'err.format', 'err.cycle', 'err.js-nothing', 'err.default-tag', 'err.default', 'err.delimiter', 'rt.retry', 'rt.events', 'imp.element-api'],
   },
   {
     id: 'compiler', href: 'compiler.html', title: 'The compiler',
-    summary: 'An HTML module next to the ES module html-module compiled from it, both registered and rendered side by side, plus a live in-browser compiler.',
-    covers: ['cmp.esm', 'cmp.no-register', 'cmp.define', 'cmp.html-import', 'cmp.register', 'cmp.same', 'cmp.in-browser'],
+    summary: 'An HTML module next to the ES module html-module compiled from it, both registered and rendered side by side, export default, register builds with and without a custom delimiter, plus a live in-browser compiler.',
+    covers: ['cmp.esm', 'cmp.no-register', 'cmp.define', 'cmp.html-import', 'cmp.register', 'cmp.delimiter', 'cmp.default', 'cmp.same', 'cmp.in-browser'],
   },
   {
     id: 'app', href: 'app.html', title: 'A small app: reading list',

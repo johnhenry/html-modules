@@ -6,6 +6,7 @@
  *   html-module ui.html -o dist/ui.js
  *   html-module ui.html --format register   → ui.register.js (registers on import)
  *   html-module ui.html --format register --as ui
+ *   html-module ui.html --format register --as ui --delimiter -   → <ui-card>, …
  *   html-module a.html b.html --runtime ./vendor/html-modules/runtime.js
  *   html-module ui.html --stdout
  */
@@ -22,6 +23,7 @@ Options:
   -o, --out <file>        output file (one input only; default: input with .js)
   -f, --format <format>   esm (default: definitions only) or register (also registers on import)
       --as <namespace>    register format: register as <namespace>--<export>
+      --delimiter <d>     register format: the namespace delimiter (default: --), e.g. - for <namespace>-<export>
       --runtime <spec>    where the output imports the runtime from (default: html-modules/runtime)
       --stdout            print instead of writing files
   -h, --help`;
@@ -37,6 +39,7 @@ export async function main(argv = process.argv.slice(2), { stdout = process.stdo
         out: { type: 'string', short: 'o' },
         format: { type: 'string', short: 'f', default: 'esm' },
         as: { type: 'string' },
+        delimiter: { type: 'string' },
         runtime: { type: 'string', default: 'html-modules/runtime' },
         stdout: { type: 'boolean', default: false },
         help: { type: 'boolean', short: 'h', default: false },
@@ -59,7 +62,7 @@ export async function main(argv = process.argv.slice(2), { stdout = process.stdo
   for (const input of positionals) {
     try {
       const source = await readFile(input, 'utf8');
-      const js = compileHTMLModule(source, { url: input, format: values.format, as: values.as, runtime: values.runtime });
+      const js = compileHTMLModule(source, { url: input, format: values.format, as: values.as, delimiter: values.delimiter, runtime: values.runtime });
       if (values.stdout) {
         stdout.write(js);
         continue;

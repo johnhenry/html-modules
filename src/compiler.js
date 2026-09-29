@@ -6,7 +6,7 @@
  * The output imports only the runtime, and exports one HTML Component
  * Definition per component (camelCase: "custom-card" → `customCard`), one
  * stylesheet or value per stylesheet or data export, a `components` manifest
- * keyed by export name, and `default` when the module has one. It registers
+ * keyed by export name, and `export default` when the module has one. It registers
  * nothing (PRD, compiler §6): call `customCard.define('my-card')`, or import
  * it declaratively with `<html-import src="./ui.js" as="ui">`. The `register`
  * format adds a call that registers every component on import.
@@ -16,7 +16,7 @@
  */
 import { scanHTMLModule } from './scan.js';
 import { readHTMLModule } from './record.js';
-import { camelCase, assertNamespace } from './names.js';
+import { DELIMITER, assertDelimiter, assertNamespace, bindingName, camelCase } from './names.js';
 
 const str = (v) => JSON.stringify(v);
 
@@ -32,6 +32,7 @@ const basename = (url) => String(url).split(/[\\/]/).pop();
  * @param {string} [options.runtime]        specifier the output imports the runtime from (default "html-modules/runtime")
  * @param {'esm'|'register'} [options.format]
  * @param {string} [options.as]             register format: namespace to register under (default: the export names)
+ * @param {string} [options.delimiter]      register format: namespace delimiter (default "--"), e.g. "-" for <ui-card>
  * @param {(src: string) => string} [options.rewrite]   dependency specifier rewrite (default ".html" → ".js")
  * @param {(html: string, url: string) => Document} [options.parse]  use a DOM parser instead of the built-in scanner
  * @returns {string} JavaScript module source
@@ -45,9 +46,14 @@ export function compileHTMLModule(source, { url = 'module.html', parse, ...optio
  * Generate an ES module from a module record.
  * @param {import('./record.js').ModuleRecord} record
  */
-export function compileRecord(record, { runtime = 'html-modules/runtime', format = 'esm', as, rewrite = rewriteSpecifier } = {}) {
+export function compileRecord(record, { runtime = 'html-modules/runtime', format = 'esm', as, delimiter = DELIMITER, rewrite = rewriteSpecifier } = {}) {
   if (format !== 'esm' && format !== 'register') throw new TypeError(`Unknown format "${format}": use "esm" or "register"`);
   if (as != null) assertNamespace(as);
+  assertDelimiter(delimiter);
+  if (format === 'register' && as != null) {
+    // Check the tags this module's own components will get now, rather than on import.
+    for (const e of record.exports) if (e.kind === 'component' && e.name) bindingName(as, e.name, delimiter);
+  }
   const helpers = new Set(['manifest']);
   const deps = new Map(); // src → identifier
   const dep = (src) => {
@@ -64,7 +70,7 @@ export function compileRecord(record, { runtime = 'html-modules/runtime', format
   let defaultLocal = null;
 
   if (record.imports.length) {
-    const items = record.imports.map((i) => `  { module: ${dep(i.src)}, from: ${str(i.src)}${i.as ? `, as: ${str(i.as)}` : ''}, bindings: ${str(i.bindings)} }`);
+    const items = record.imports.map((i) => `  { module: ${dep(i.src)}, from: ${str(i.src)}${i.as ? `, as: ${str(i.as)}` : ''}${i.delimiter !== undefined ? `, delimiter: ${str(i.delimiter)}` : ''}, bindings: ${str(i.bindings)} }`);
     body.push(`const $imports = [\n${items.join(',\n')},\n];`);
   }
   const imports = record.imports.length ? '$imports' : '[]';
@@ -106,10 +112,10 @@ export function compileRecord(record, { runtime = 'html-modules/runtime', format
 
   body.push(`const $components = manifest({${manifestEntries.length ? `\n${manifestEntries.join('\n')}\n` : ''}}, [${stars.join(', ')}]);`);
   exported.push(['$components', 'components']);
-  if (defaultLocal) exported.push([defaultLocal, 'default']);
   if (format === 'register') {
     helpers.add('registerComponents');
-    body.push(`registerComponents({ components: $components }, { ${as != null ? `as: ${str(as)}, ` : ''}from: import.meta.url });`);
+    const opts = [...(as != null ? [`as: ${str(as)}`] : []), ...(as != null && delimiter !== DELIMITER ? [`delimiter: ${str(delimiter)}`] : []), 'from: import.meta.url'];
+    body.push(`registerComponents({ components: $components }, { ${opts.join(', ')} });`);
   }
 
   const out = [
@@ -121,6 +127,7 @@ export function compileRecord(record, { runtime = 'html-modules/runtime', format
     ...body,
     '',
     `export {\n${exported.map(([local, name]) => `  ${local} as ${name},`).join('\n')}\n};`,
+    ...(defaultLocal ? [`export default ${defaultLocal};`] : []),
     '',
   ];
   return out.join('\n');

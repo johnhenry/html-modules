@@ -1,0 +1,9 @@
+<!--
+  A bare name attribute (an empty name) is also the default export.
+  Careful with templating: name="" produced by an empty variable becomes a
+  default export too. Prefer name="default" when you write it by hand.
+-->
+<html-export name>
+  <style>:host { display: inline-block; font-size: 0.8rem; padding: 0.1rem 0.5rem; border-radius: 999px; background: var(--accent-soft, #ebe8ff); }</style>
+  <template>💡 <slot></slot></template>
+</html-export>

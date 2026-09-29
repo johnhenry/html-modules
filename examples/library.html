@@ -55,7 +55,7 @@
             <div class="row">
               <ui--badge>default</ui--badge><ui--badge tone="ok">ok</ui--badge><ui--badge tone="warn">warn</ui--badge><ui--badge tone="bad">bad</ui--badge>
             </div>
-            <ui--callout><strong>Default export.</strong> <code>callout</code> is also the module's default export.</ui--callout>
+            <ui--callout><strong>Default export.</strong> <code>name="callout" default</code>: exported as <code>callout</code> <em>and</em> as the module's default, like <code>export { callout, callout as default }</code>.</ui--callout>
           </div>
         </div>
       </div>
@@ -116,7 +116,7 @@
       <ul id="kit-checks"></ul>
     </section>
 
-    <div class="pager"><a href="./quickstart.html">← Quickstart</a><a href="./namespaces.html">Namespaces and the -- delimiter →</a></div>
+    <div class="pager"><a href="./quickstart.html">← Quickstart</a><a href="./namespaces.html">Namespaces and delimiters →</a></div>
   </main>
 
   <script type="module">

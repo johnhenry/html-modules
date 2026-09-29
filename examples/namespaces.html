@@ -19,12 +19,13 @@
   </header>
   <main class="page">
     <nav class="site-nav"></nav>
-    <h1>Namespaces and the <code>--</code> delimiter</h1>
+    <h1>Namespaces and delimiters</h1>
     <p class="lede">
       <code>&lt;html-import src="./ui.html" as="ui"&gt;</code> is the HTML counterpart of <code>import * as ui from "./ui.js"</code>.
       The <code>as</code> attribute names a namespace, not a single element: each export <code>card</code>,
       <code>button</code>, … is registered as <code>&lt;ui--card&gt;</code>, <code>&lt;ui--button&gt;</code>, …
-      The module's author chooses the export names; the importer chooses the namespace.
+      The module's author chooses the export names; the importer chooses the namespace, and, if it wants something other than
+      <code>--</code>, the delimiter.
     </p>
     <div class="covers" data-page="namespaces"></div>
 
@@ -49,7 +50,53 @@
     </section>
 
     <section class="card">
-      <h2>Why <code>--</code>?</h2>
+      <h2>Choosing a delimiter</h2>
+      <p class="small">
+        <code>delimiter</code> changes what goes between the namespace and the export name. The same module is imported three times below: with the
+        default <code>--</code>, and twice with <code>-</code>. A page can change the default for all of its imports with
+        <code>createHTMLModules({ delimiter: '-' })</code>; a <code>delimiter</code> attribute (or the <code>delimiter</code> option of
+        <code>HTMLModules.import()</code> and <code>bind()</code>) overrides it.
+      </p>
+<pre><code>&lt;html-import src="./components/ui.html" as="ui"&gt;&lt;/html-import&gt;                        <span class="muted">&lt;!-- &lt;ui--card&gt; --&gt;</span>
+&lt;html-import src="./components/ui.html" as="ui" delimiter="-"&gt;&lt;/html-import&gt;          <span class="muted">&lt;!-- &lt;ui-card&gt; --&gt;</span>
+&lt;html-import src="./components/ui.html" as="ui-kit" delimiter="-"&gt;&lt;/html-import&gt;      <span class="muted">&lt;!-- &lt;ui-kit-card&gt; --&gt;</span></code></pre>
+      <html-import id="d-default" src="./components/ui.html" as="ui"></html-import>
+      <html-import id="d-dash" src="./components/ui.html" as="ui" delimiter="-"></html-import>
+      <html-import id="d-kit" src="./components/ui.html" as="ui-kit" delimiter="-"></html-import>
+      <div class="grid">
+        <ui--card><span slot="title">&lt;ui--card&gt;</span>the default, <code>--</code></ui--card>
+        <ui-card><span slot="title">&lt;ui-card&gt;</span><code>delimiter="-"</code></ui-card>
+        <ui-kit-card><span slot="title">&lt;ui-kit-card&gt;</span><code>as="ui-kit" delimiter="-"</code></ui-kit-card>
+      </div>
+      <p class="label" style="margin-top:1rem">What each import registered: <code>el.tags</code></p>
+      <div class="table-wrap"><table id="tag-records"></table></div>
+      <p class="small muted">
+        <code>&lt;ui-kit-card&gt;</code> could be the <code>card</code> export of <code>ui-kit</code> or the <code>kit-card</code> export of
+        <code>ui</code>. The runtime never parses a tag to find out: each binding records <code>{ tag, namespace, export }</code> when it is made,
+        and <code>el.tags</code> exposes the records.
+      </p>
+      <ul id="delim-checks"></ul>
+    </section>
+
+    <section class="card">
+      <h2>Inside a module</h2>
+      <p class="small">
+        A module's own imports can choose a delimiter too. <code>tally.html</code> imports the icons as <code>as="ic" delimiter="-"</code> and uses
+        <code>&lt;ic-check&gt;</code> in its template. A module's imports use <code>--</code> unless they say otherwise, whatever this page's default is,
+        so a module's templates always know their tags.
+      </p>
+      <div class="split">
+        <div><pre data-source="./components/tally.html"></pre></div>
+        <div class="preview">
+          <html-import id="tally" src="./components/tally.html" as="tally"></html-import>
+          <tally--done>Rendered with <code>&lt;ic-check&gt;</code> inside.</tally--done>
+        </div>
+      </div>
+      <ul id="tally-checks"></ul>
+    </section>
+
+    <section class="card">
+      <h2>Why <code>--</code> is the default</h2>
       <p class="small">
         A registered tag must be a valid custom element name, or the browser's native upgrade (which lets elements appear before their
         definitions) is lost. The table below asks this browser's <code>customElements.define()</code> about each candidate delimiter,
@@ -57,20 +104,23 @@
       </p>
       <div class="table-wrap"><table id="delims"></table></div>
       <p class="small muted">
-        <code>.</code> reads well and is even legal inside a name, but <code>ui.card</code> has no hyphen, so one-word exports could never be
-        registered. A single <code>-</code> is always legal but ambiguous: is <code>ui-custom-card</code> the <code>custom-card</code> export of
-        <code>ui</code>, or the <code>card</code> export of <code>ui-custom</code>? Unicode separators such as <code>·</code> are legal but hard to type
-        and easy to misread. <code>--</code> always supplies the required hyphen, and because namespaces and export names are lower-case words
-        joined by single hyphens, neither can contain <code>--</code>: every tag splits exactly one way. It also echoes CSS custom properties
-        (<code>--ui-accent</code>).
+        <code>--</code> cannot appear inside a namespace or an export name (they are lower-case words joined by <em>single</em> hyphens), so every
+        tag splits exactly one way, and it always supplies the hyphen a custom element name needs, so one-word exports stay valid. It also echoes
+        CSS custom properties (<code>--ui-accent</code>).
+        <code>-</code> is compact and always valid, but ambiguous (<code>ui-custom-card</code>); that is fine when you control the names.
+        <code>.</code> reads well and is legal inside a name, but <code>ui.card</code> has no hyphen, so one-word exports become invalid:
       </p>
+      <html-import id="d-dot" src="./components/ui.html" as="dot" delimiter="."></html-import>
+<pre><code>&lt;html-import src="./components/ui.html" as="dot" delimiter="."&gt;&lt;/html-import&gt;</code></pre>
+      <div id="dot-error" class="error-box">(waiting)</div>
     </section>
 
     <section class="card">
       <h2>Read a tag</h2>
+      <p class="small">Looks the tag up in the records of this page's imports, and shows what splitting it by text would say.</p>
       <div class="field">
         <label for="tag">Tag name</label>
-        <input id="tag" value="shop--card" autocomplete="off" spellcheck="false">
+        <input id="tag" value="ui-kit-card" autocomplete="off" spellcheck="false">
       </div>
       <div id="tag-out" class="ok-box"></div>
     </section>
@@ -86,7 +136,7 @@
 
   <script type="module">
     import { HTMLModules } from '../src/browser.js';
-    import { parseBindingName, isValidElementName } from '../src/names.js';
+    import { parseBindingName, isValidElementName, DELIMITER } from '../src/names.js';
     import { renderChecks, esc, errorText, status } from './shared/site.js';
 
     const [shop, admin] = await Promise.all(['shop', 'admin'].map((id) => document.getElementById(id).ready));
@@ -100,7 +150,7 @@
     ]);
 
     // Ask the registry about each delimiter.
-    const candidates = [['--', 'recommended'], ['-', ''], ['.', ''], ['_', ''], [':', ''], ['·', 'U+00B7']];
+    const candidates = [['--', 'default'], ['-', ''], ['.', ''], ['_', ''], [':', 'not allowed'], ['·', 'U+00B7']];
     let n = 0;
     const accepts = (name) => {
       try {
@@ -123,21 +173,54 @@
     });
     document.getElementById('delims').innerHTML = `<thead><tr><th>delimiter</th><th>one-word export</th><th>two-word export</th><th>splits</th></tr></thead><tbody>${rows.join('')}</tbody>`;
 
+    // Delimiters: three imports of one module, and the records they keep.
+    const ids = ['d-default', 'd-dash', 'd-kit'];
+    const imports = ids.map((id) => document.getElementById(id));
+    const done = await Promise.all(imports.map((el) => el.ready));
+    document.getElementById('tag-records').innerHTML = '<thead><tr><th>import</th><th>tag</th><th>namespace</th><th>export</th></tr></thead><tbody>'
+      + imports.flatMap((el) => Object.values(el.tags).map((t) => `<tr><td><code>as="${esc(el.getAttribute('as'))}"${el.hasAttribute('delimiter') ? ` delimiter="${esc(el.getAttribute('delimiter'))}"` : ''}</code></td><td><code>&lt;${esc(t.tag)}&gt;</code></td><td><code>${esc(t.namespace)}</code></td><td><code>${esc(t.export)}</code></td></tr>`)).join('')
+      + '</tbody>';
+    renderChecks(document.getElementById('delim-checks'), [
+      ['<code>as="ui"</code> used the default, <code>--</code>: <code>&lt;ui--card&gt;</code>', imports[0].delimiter === DELIMITER && !!customElements.get('ui--card')],
+      ['<code>delimiter="-"</code> registered <code>&lt;ui-card&gt;</code> …', !!customElements.get('ui-card')],
+      ['… from the same definition, fetched once', customElements.get('ui-card').component === customElements.get('ui--card').component && done[0].module === done[1].module],
+      ['<code>&lt;ui-kit-card&gt;</code> is recorded as namespace <code>ui-kit</code>, export <code>card</code>', imports[2].tags['ui-kit-card']?.namespace === 'ui-kit' && imports[2].tags['ui-kit-card']?.export === 'card'],
+      ['… although splitting the text on <code>-</code> is ambiguous (<code>parseBindingName</code> returns null)', parseBindingName('ui-kit-card', '-') === null],
+    ]);
+
+    const tally = await document.getElementById('tally').ready;
+    renderChecks(document.getElementById('tally-checks'), [
+      ['<code>&lt;tally--done&gt;</code> registered (the page import uses <code>--</code>)', !!tally.elements['tally--done']],
+      ['its own import registered <code>&lt;ic-check&gt;</code> with <code>delimiter="-"</code>', !!customElements.get('ic-check')],
+      ['… which rendered inside the component', !!document.querySelector('tally--done').shadowRoot.querySelector('ic-check')?.shadowRoot],
+    ]);
+
+    const dot = document.getElementById('d-dot');
+    dot.ready.then(
+      () => { document.getElementById('dot-error').textContent = 'unexpectedly succeeded'; },
+      (error) => { document.getElementById('dot-error').textContent = errorText(error); },
+    );
+
     const input = document.getElementById('tag');
     const out = document.getElementById('tag-out');
+    const allImports = () => [...document.querySelectorAll('html-import')];
     const read = () => {
       const tag = input.value.trim();
-      const parts = parseBindingName(tag);
+      const owner = allImports().find((el) => el.tags?.[tag]);
+      const record = owner?.tags[tag];
       const Tag = customElements.get(tag);
-      if (!parts) {
-        out.className = 'error-box';
-        out.textContent = `"${tag}" is not <namespace>--<export>${isValidElementName(tag) ? ' (it is still a valid custom element name)' : ''}`;
-        return;
-      }
-      out.className = 'ok-box';
-      out.textContent = `namespace: ${parts.namespace}\nexport:    ${parts.name}\n` + (Tag?.component
-        ? `defined:   yes, component "${Tag.component.name}" from ${Tag.component.url.replace(location.origin, '')}`
-        : 'defined:   not on this page');
+      const split = (d) => {
+        const parts = parseBindingName(tag, d);
+        return parts ? `${parts.namespace} + ${parts.name}` : 'no single split';
+      };
+      out.className = record || Tag ? 'ok-box' : 'error-box';
+      out.textContent = (record
+        ? `recorded:  namespace ${record.namespace ?? '(none: element=)'}, export ${record.export}, by <html-import as="${owner.getAttribute('as')}"${owner.hasAttribute('delimiter') ? ` delimiter="${owner.getAttribute('delimiter')}"` : ''}>\n`
+        : 'recorded:  no import on this page registered this tag\n')
+        + `split "--": ${split('--')}\nsplit "-":  ${split('-')}\n`
+        + (Tag?.component
+          ? `defined:   yes, component "${Tag.component.name}" from ${(Tag.component.url ?? '').replace(location.origin, '')}`
+          : `defined:   ${isValidElementName(tag) ? 'not on this page' : 'no (not a valid custom element name)'}`);
     };
     input.addEventListener('input', read);
     read();

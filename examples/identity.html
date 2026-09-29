@@ -71,6 +71,33 @@ priceTag.define('cost-tag');</code></pre>
       <ul id="js-checks"></ul>
     </section>
 
+    <section class="card">
+      <h2>The default export has no name</h2>
+      <p class="small">
+        <code>&lt;html-export name="default"&gt;</code> is a module's default export, like <code>export default</code> in JavaScript. Its definition has
+        no identity of its own (<code>name</code> is <code>null</code>), it is not in the <code>components</code> manifest, and a namespace import does not
+        register it: the importer names it with <code>&lt;html-binding export="default" element="…"&gt;</code>. A bare <code>name</code> means the same
+        thing; mind templating that can render <code>name=""</code>, which also becomes the default. To export a component under a name
+        <em>and</em> as the default, add <code>default</code> next to a real name: <code>&lt;html-export name="callout" default&gt;</code>.
+      </p>
+      <div class="split">
+        <div><p class="label">components/tip.html: <code>name="default"</code></p><pre data-source="./components/tip.html"></pre></div>
+        <div><p class="label">components/hint.html: a bare <code>name</code></p><pre data-source="./components/hint.html"></pre></div>
+      </div>
+<pre><code>&lt;html-import src="./components/tip.html"&gt;
+  &lt;html-binding export="default" element="page-tip"&gt;&lt;/html-binding&gt;
+&lt;/html-import&gt;
+&lt;html-import src="./components/hint.html" as="hint"&gt;                <span class="muted">&lt;!-- as= alone registers nothing here --&gt;</span>
+  &lt;html-binding export="default" element="hint-pill"&gt;&lt;/html-binding&gt;
+&lt;/html-import&gt;</code></pre>
+      <html-import id="tip" src="./components/tip.html"><html-binding export="default" element="page-tip"></html-binding></html-import>
+      <html-import id="hint" src="./components/hint.html" as="hint"><html-binding export="default" element="hint-pill"></html-binding></html-import>
+      <div class="preview">
+        <page-tip>The importer chose <code>&lt;page-tip&gt;</code> for a component that has no name. <hint-pill>and &lt;hint-pill&gt;</hint-pill></page-tip>
+      </div>
+      <ul id="default-checks"></ul>
+    </section>
+
     <div class="pager"><a href="./bindings.html">← Selective imports</a><a href="./interop.html">Mixing HTML and JS components →</a></div>
   </main>
 
@@ -103,6 +130,17 @@ priceTag.define('cost-tag');</code></pre>
       ['<code>ui.card.name</code> is still <code>"card"</code>: the identity never changes', ui.card.name === 'card'],
       ['<code>define()</code> again with the same tag is a no-op that returns the existing class', ui.card.define('profile-card') === customElements.get('profile-card')],
       ['your subclass adds behaviour on top of the template', document.querySelector('fancy-card').shadowRoot.querySelector('article').hasAttribute('data-fancy')],
+    ]);
+
+    const [tip, hint] = await Promise.all([document.getElementById('tip').ready, document.getElementById('hint').ready]);
+    const bareHint = await HTMLModules.import('./components/hint.html', { as: 'bare' });
+    renderChecks(document.getElementById('default-checks'), [
+      ['<code>tip.default</code> is a definition whose <code>name</code> is <code>null</code>', tip.module.default?.name === null],
+      ['it is not in the <code>components</code> manifest', Object.keys(tip.module.components).length === 0],
+      ['<code>&lt;page-tip&gt;</code> is that definition', customElements.get('page-tip').component === tip.module.default],
+      ['a bare <code>name</code> is the default export too: <code>&lt;hint-pill&gt;</code>', customElements.get('hint-pill').component === hint.module.default],
+      ['<code>as="bare"</code> on its own registered nothing', Object.keys(bareHint.elements).length === 0],
+      ['<code>ui.html</code>\'s <code>name="callout" default</code> is both: <code>ui.default === ui.callout</code>', ui.default === ui.callout],
     ]);
 
     const priceTag = defineHTMLComponent({

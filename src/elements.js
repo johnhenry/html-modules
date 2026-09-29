@@ -2,6 +2,7 @@
  * The declarative layer: <html-import>, <html-binding> and <html-export>.
  *
  *   <html-import src="./ui.html" as="ui"></html-import>             every component as <ui--…>
+ *   <html-import src="./ui.html" as="ui" delimiter="-"></html-import>   … as <ui-…> (default: the instance's, "--")
  *   <html-import src="./ui.html" as="ui">                           only these:
  *     <html-binding export="card"></html-binding>                     <ui--card>
  *     <html-binding export="button" element="brand-button"></html-binding>
@@ -15,13 +16,13 @@
  * Elements that use a binding may appear anywhere, before or after the import:
  * they upgrade natively when their tag is defined (PRD §17).
  *
- * Events: `load` (detail: { module, elements, bindings }) and `error`
+ * Events: `load` (detail: { module, elements, bindings, tags }) and `error`
  * (detail: { error }) on <html-import>; `load` / `error` on each
  * <html-binding>, where `error` bubbles through its import.
  */
-import { applyBinding, registerComponents } from './runtime.js';
+import { applyBinding, bindModule } from './runtime.js';
 import { bindingRecord } from './record.js';
-import { assertNamespace } from './names.js';
+import { assertDelimiter, assertNamespace } from './names.js';
 
 const BIND = Symbol('html-modules.bind');
 
@@ -46,6 +47,7 @@ export function defineHTMLModuleElements({ modules, window: win = globalThis, re
     #applied = new WeakSet();
     #elements = {};
     #bindings = {};
+    #tags = {};
 
     /** Promise of the module namespace (loads it if needed). */
     get module() {
@@ -66,6 +68,16 @@ export function defineHTMLModuleElements({ modules, window: win = globalThis, re
     /** Bound export names → values (components, stylesheets, data), so far. */
     get bindings() {
       return { ...this.#bindings };
+    }
+
+    /** Registered tags → `{ tag, namespace, export }`: what each tag was made from, so far. */
+    get tags() {
+      return Object.fromEntries(Object.entries(this.#tags).map(([k, v]) => [k, { ...v }]));
+    }
+
+    /** The namespace delimiter this import uses: its `delimiter` attribute, or the instance's default. */
+    get delimiter() {
+      return this.getAttribute('delimiter') ?? modules.delimiter;
     }
 
     connectedCallback() {
@@ -90,7 +102,9 @@ export function defineHTMLModuleElements({ modules, window: win = globalThis, re
         const [module] = await Promise.all([this.#load(), domReady(doc)]);
         const as = this.getAttribute('as') || undefined;
         if (as) assertNamespace(as);
-        this.#state = { module, as, from: this.getAttribute('src'), root: this.getRootNode?.() ?? doc };
+        const { delimiter } = this;
+        assertDelimiter(delimiter);
+        this.#state = { module, as, delimiter, from: this.getAttribute('src'), root: this.getRootNode?.() ?? doc };
         const children = [...this.children].filter((c) => c.localName === 'html-binding');
         let firstError = null;
         if (children.length) {
@@ -99,10 +113,12 @@ export function defineHTMLModuleElements({ modules, window: win = globalThis, re
             firstError ??= error;
           }
         } else if (as) {
-          Object.assign(this.#elements, registerComponents(module, { as, from: this.#state.from, registry: reg(), window: win }));
+          const bound = bindModule(module, { as, delimiter, from: this.#state.from, registry: reg(), window: win });
+          Object.assign(this.#elements, bound.elements);
+          Object.assign(this.#tags, bound.tags);
         }
         if (firstError) throw firstError;
-        const detail = { module, elements: this.elements, bindings: this.bindings };
+        const detail = { module, elements: this.elements, bindings: this.bindings, tags: this.tags };
         this.dispatchEvent(new win.CustomEvent('load', { detail }));
         return detail;
       })();
@@ -121,13 +137,16 @@ export function defineHTMLModuleElements({ modules, window: win = globalThis, re
     #apply(el) {
       if (this.#applied.has(el)) return null;
       this.#applied.add(el);
-      const { module, as, from, root } = this.#state;
+      const { module, as, delimiter, from, root } = this.#state;
       try {
         const result = applyBinding(module, bindingRecord(Object.fromEntries([...el.attributes].map((a) => [a.name, a.value]))), {
-          as, from, registry: reg(), window: win, root,
+          as, delimiter, from, registry: reg(), window: win, root,
         });
         this.#bindings[result.export] = result.value;
-        if (result.tag) this.#elements[result.tag] = result.element;
+        if (result.tag) {
+          this.#elements[result.tag] = result.element;
+          this.#tags[result.tag] = { tag: result.tag, namespace: result.namespace, export: result.export };
+        }
         el.dispatchEvent(new win.CustomEvent('load', { detail: result }));
         return null;
       } catch (error) {

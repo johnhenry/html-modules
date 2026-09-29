@@ -1,0 +1,13 @@
+<!--
+  A module with only a default export. name="default" is the canonical
+  spelling, like `export default` in JavaScript. The component has no name of
+  its own: whoever imports it chooses the tag, with
+  <html-binding export="default" element="…">.
+-->
+<html-export name="default">
+  <style>
+    :host { display: block; border: 1px dashed var(--accent, #5b4bd6); border-radius: 8px; padding: 0.5rem 0.75rem; }
+    b { color: var(--accent, #5b4bd6); }
+  </style>
+  <template><b>Tip</b> <slot></slot></template>
+</html-export>

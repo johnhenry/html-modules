@@ -30,7 +30,9 @@ const URL_LIKE = /^(?:\.{0,2}\/)/;
  */
 export function linkHTMLModule(record, modules) {
   const { url } = record;
-  const imports = record.imports.map((i) => ({ module: modules.get(i.src), from: i.src, ...(i.as && { as: i.as }), bindings: i.bindings }));
+  const imports = record.imports.map((i) => ({
+    module: modules.get(i.src), from: i.src, ...(i.as && { as: i.as }), ...(i.delimiter !== undefined && { delimiter: i.delimiter }), bindings: i.bindings,
+  }));
   const named = new Map();
   const manifestLocals = {};
   const stars = [];

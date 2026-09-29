@@ -15,7 +15,7 @@
  * something binds it to a tag.
  */
 import {
-  assertElementName, assertNamespace, bindingName, camelCase, kebabCase,
+  DELIMITER, assertDelimiter, assertElementName, assertNamespace, bindingName, camelCase, kebabCase,
 } from './names.js';
 
 const COMPONENT = Symbol.for('html-modules.component');
@@ -41,7 +41,7 @@ export class HTMLComponent {
    * @param {'open'|'closed'} [spec.shadow]  shadow root mode (default "open")
    * @param {boolean} [spec.delegatesFocus]
    * @param {string[]} [spec.styles]         CSS text, adopted into every shadow root (one sheet per definition)
-   * @param {Array<{module: object, from: string, as?: string, bindings?: object[]}>} [spec.imports]
+   * @param {Array<{module: object, from: string, as?: string, delimiter?: string, bindings?: object[]}>} [spec.imports]
    *                                         modules this component uses, bound before it is registered
    * @param {Function} [spec.element]        a JS-authored HTMLElement subclass instead of a template
    * @param {string} [spec.url]              where it came from, for messages
@@ -338,13 +338,16 @@ export function componentsOf(ns, from = 'module') {
 
 /**
  * Apply one binding `{ export, element?, adopt? }` of an import.
- * @returns {{ export: string, value: unknown, tag: string|null, element: Function|null, adopted: boolean }}
+ * `namespace` is the import's `as` when the tag was made from it, and null
+ * when `element=` chose the tag (or nothing was registered): the mapping is
+ * recorded here, never parsed back out of the tag.
+ * @returns {{ export: string, value: unknown, tag: string|null, namespace: string|null, element: Function|null, adopted: boolean }}
  */
-export function applyBinding(ns, binding, { as, from = 'module', registry, window: win = globalThis, root } = {}) {
+export function applyBinding(ns, binding, { as, delimiter = DELIMITER, from = 'module', registry, window: win = globalThis, root } = {}) {
   const name = binding.export;
   if (!name) throw new SyntaxError('<html-binding> requires an "export" attribute');
   const value = lookupExport(ns, name, from);
-  const result = { export: name, value, tag: null, element: null, adopted: false };
+  const result = { export: name, value, tag: null, namespace: null, element: null, adopted: false };
   if (binding.adopt) {
     if (!isStylesheet(value)) throw new TypeError(`Cannot adopt '${name}' from '${from}': it is ${kindOf(value)}, not a stylesheet`);
     if (root) {
@@ -360,7 +363,8 @@ export function applyBinding(ns, binding, { as, from = 'module', registry, windo
     }
   } else if (as && !binding.adopt && isElementLike(value, win)) {
     if (name === 'default') throw new SyntaxError(`Binding the default export of '${from}' needs element="…"`);
-    tag = bindingName(as, name);
+    tag = bindingName(as, name, delimiter);
+    result.namespace = as;
   }
   if (tag) {
     result.tag = tag;
@@ -370,41 +374,67 @@ export function applyBinding(ns, binding, { as, from = 'module', registry, windo
 }
 
 /**
+ * The namespaced registrations `registerComponents()` would make, without
+ * making them: `[{ tag, namespace, export, value }]`. Every tag is checked
+ * first, so an invalid one (e.g. "ui.card" with delimiter ".") fails before
+ * anything is registered.
+ */
+function planComponents(ns, { as, delimiter = DELIMITER, from = 'module' } = {}) {
+  if (as != null) assertNamespace(as);
+  assertDelimiter(delimiter);
+  return componentsOf(ns, from).map(([name, value]) => ({
+    tag: as != null ? bindingName(as, name, delimiter) : kebabCase(name),
+    namespace: as ?? null,
+    export: name,
+    value,
+  }));
+}
+
+/**
  * Register every component of a namespace. With `as`, tags are
- * `<as>--<export>`; without it, the export names themselves (which then must
- * be valid custom element names). This is what compiled `register` modules call.
+ * `<as><delimiter><export>` (delimiter "--" unless given); without it, the
+ * export names themselves (which then must be valid custom element names).
+ * This is what compiled `register` modules call.
  * @returns {Record<string, Function>} tag → registered class
  */
-export function registerComponents(ns, { as, from = 'module', registry, window: win = globalThis } = {}) {
-  if (as != null) assertNamespace(as);
-  const elements = {};
-  for (const [name, value] of componentsOf(ns, from)) {
-    const tag = as != null ? bindingName(as, name) : kebabCase(name);
-    elements[tag] = defineElement(tag, toComponent(value, { window: win, what: `components['${name}'] of '${from}'` }), { registry, window: win });
-  }
-  return elements;
+export function registerComponents(ns, options = {}) {
+  return Object.fromEntries(registerAll(ns, options).map((b) => [b.tag, b.element]));
+}
+
+function registerAll(ns, { as, delimiter, from = 'module', registry, window: win = globalThis } = {}) {
+  return planComponents(ns, { as, delimiter, from }).map(({ tag, namespace, export: name, value }) => ({
+    tag, namespace, export: name,
+    element: defineElement(tag, toComponent(value, { window: win, what: `components['${name}'] of '${from}'` }), { registry, window: win }),
+  }));
 }
 
 /**
  * Bind a loaded module the way `<html-import>` does.
  *  - with `bindings`: only those exports (`{ export, element?, adopt? }`)
- *  - otherwise, with `as`: every component as `<as>--<export>`
+ *  - otherwise, with `as`: every component as `<as><delimiter><export>`
  *  - otherwise: nothing (the module was loaded for its side effects)
+ * `tags` records what each registered tag was made from, so nothing needs to
+ * split a tag to find its namespace and export (with delimiter "-", it can't).
  * @param {object} ns module namespace (runtime-loaded HTML, compiled, or plain JS)
- * @param {{ as?: string, bindings?: object[], from?: string, registry?: CustomElementRegistry, window?: any, root?: Document|ShadowRoot }} [options]
- * @returns {{ elements: Record<string, Function>, values: Record<string, unknown> }}
+ * @param {{ as?: string, delimiter?: string, bindings?: object[], from?: string, registry?: CustomElementRegistry, window?: any, root?: Document|ShadowRoot }} [options]
+ * @returns {{ elements: Record<string, Function>, values: Record<string, unknown>, tags: Record<string, { tag: string, namespace: string|null, export: string }> }}
  */
-export function bindModule(ns, { as, bindings = [], from = 'module', registry, window: win = globalThis, root } = {}) {
+export function bindModule(ns, { as, delimiter = DELIMITER, bindings = [], from = 'module', registry, window: win = globalThis, root } = {}) {
   if (as != null) assertNamespace(as);
-  const out = { elements: {}, values: {} };
+  assertDelimiter(delimiter);
+  const out = { elements: {}, values: {}, tags: {} };
+  const record = ({ tag, namespace, export: name, element }) => {
+    out.elements[tag] = element;
+    out.tags[tag] = { tag, namespace, export: name };
+  };
   if (bindings.length) {
     for (const b of bindings) {
-      const r = applyBinding(ns, b, { as, from, registry, window: win, root });
+      const r = applyBinding(ns, b, { as, delimiter, from, registry, window: win, root });
       out.values[r.export] = r.value;
-      if (r.tag) out.elements[r.tag] = r.element;
+      if (r.tag) record(r);
     }
   } else if (as != null) {
-    out.elements = registerComponents(ns, { as, from, registry, window: win });
+    for (const r of registerAll(ns, { as, delimiter, from, registry, window: win })) record(r);
   }
   return out;
 }

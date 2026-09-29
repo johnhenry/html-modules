@@ -5,7 +5,8 @@ export {
   applyBinding, bindModule, registerComponents, manifest,
 } from './runtime.js';
 export {
-  DELIMITER, bindingName, parseBindingName, camelCase, kebabCase, isKebabName, isValidElementName,
+  DELIMITER, bindingName, parseBindingName, camelCase, kebabCase, isKebabName, isValidElementName, isValidDelimiter,
+  elementNameProblem,
 } from './names.js';
 export { readHTMLModule, recordFromRaw } from './record.js';
 export { scanHTMLModule } from './scan.js';

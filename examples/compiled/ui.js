@@ -52,5 +52,5 @@ export {
   $x_callout as callout,
   $x_meta as meta,
   $components as components,
-  $x_callout as default,
 };
+export default $x_callout;

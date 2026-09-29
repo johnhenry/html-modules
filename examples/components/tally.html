@@ -1,0 +1,15 @@
+<!--
+  A module whose own import uses a compact delimiter: icons.html imported
+  as="ic" delimiter="-" gives <ic-check> and <ic-star> inside this module.
+  A module's imports use "--" unless they say otherwise; the page's choice of
+  delimiter never changes the tags a module's templates were written with.
+-->
+<html-import src="./icons.html" as="ic" delimiter="-"></html-import>
+
+<html-export name="done">
+  <style>
+    :host { display: flex; align-items: center; gap: 0.4rem; }
+    ic-check { color: var(--ok, #1f7a4a); }
+  </style>
+  <template><ic-check></ic-check><slot></slot></template>
+</html-export>

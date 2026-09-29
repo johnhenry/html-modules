@@ -47,7 +47,7 @@ test('unexported markup stays private, and exports inside templates are not expo
 
 test('shadow="closed", default-only exports and data with +json types', () => {
   const html = `<html-export name="secret" shadow="closed"><template>s</template></html-export>
-    <html-export default><template>d</template></html-export>
+    <html-export name="default"><template>d</template></html-export>
     <html-export name="feed"><script type="application/ld+json">[1,2]</script></html-export>`;
   for (const r of both(html)) {
     assert.equal(r.exports[0].shadow, 'closed');
@@ -115,7 +115,7 @@ test('format errors are SyntaxErrors with the module URL', () => {
     ['<html-export name="a" shadow="open"><style>p{}</style></html-export>', /"shadow" only applies/],
     ['<html-export name="a"><script type="application/json">{nope</script></html-export>', /invalid JSON/],
     ['<html-export name="a"><script type="module">1</script></html-export>', /exactly one <script type="application\/json">/],
-    ['<html-export default><template>x</template></html-export><html-export name="b" default><template>y</template></html-export>', /More than one default/],
+    ['<html-export name="default"><template>x</template></html-export><html-export name="b" default><template>y</template></html-export>', /More than one default/],
     ['<html-export src="./x.html" default></html-export>', /cannot be the default/],
     ['<html-export src="./x.html" import="a"></html-export>', /needs a name/],
     ['<html-import as="ui"></html-import>', /requires a "src" attribute/],

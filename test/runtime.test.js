@@ -173,7 +173,7 @@ test('bindModule: namespace, selective bindings, element=, adopt, default, data'
   assert.deepEqual(Object.keys(some.elements), ['brand-card', 'ns2--custom-card', 'default-card']);
   assert.deepEqual(some.values.config, { size: 3 });
   assert.equal(win.document.head.querySelectorAll('style').length, 1);
-  assert.deepEqual(bindModule(ns, { window: win }), { elements: {}, values: {} }, 'no as and no bindings: load only');
+  assert.deepEqual(bindModule(ns, { window: win }), { elements: {}, values: {}, tags: {} }, 'no as and no bindings: load only');
   assert.throws(() => applyBinding(ns, { export: 'default' }, { as: 'z', window: win }), /needs element=/);
   assert.throws(() => applyBinding(ns, { export: 'theme', element: 'x-theme' }, { from: './ui.html', window: win }), /Cannot register 'theme' from '.\/ui.html' as <x-theme>: it is a stylesheet, not a component/);
   assert.throws(() => applyBinding(ns, { export: 'config', adopt: true }, { window: win }), /Cannot adopt 'config'.*not a stylesheet/);

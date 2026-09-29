@@ -55,6 +55,12 @@
           <div><pre data-source="./compiled/ui.js"></pre></div>
         </div>
       </details>
+      <details><summary class="small">components/tip.html → compiled/tip.js: a default-only module becomes <code>export default</code></summary>
+        <div class="split">
+          <div><pre data-source="./components/tip.html"></pre></div>
+          <div><pre data-source="./compiled/tip.js"></pre></div>
+        </div>
+      </details>
     </section>
 
     <section class="card">
@@ -80,6 +86,20 @@ customElements.get('card');         <span class="muted">// undefined: nothing se
           <p class="label"><code>--format register --as reg</code>: registers on import</p>
 <pre><code>import './compiled/icons.register.js';   <span class="muted">// defines &lt;reg--star&gt;, &lt;reg--heart&gt;, …</span></code></pre>
           <div class="row" style="font-size:1.4rem"><reg--star></reg--star><reg--heart style="color:var(--bad)"></reg--heart><reg--check style="color:var(--ok)"></reg--check><reg--plus></reg--plus></div>
+        </div>
+        <div>
+          <p class="label"><code>--format register --as ico --delimiter -</code></p>
+<pre><code>import './compiled/icons.dash.register.js';   <span class="muted">// defines &lt;ico-star&gt;, &lt;ico-heart&gt;, …</span></code></pre>
+          <div class="row" style="font-size:1.4rem"><ico-star></ico-star><ico-heart style="color:var(--bad)"></ico-heart><ico-check style="color:var(--ok)"></ico-check><ico-plus></ico-plus></div>
+        </div>
+      </div>
+      <div class="split" style="margin-top:1rem">
+        <div>
+          <p class="label"><code>export default</code>: <code>name="default"</code> compiles to a default export</p>
+<pre><code>import tip from './compiled/tip.js';
+
+tip.define('compiled-tip');</code></pre>
+          <compiled-tip>From <code>compiled/tip.js</code>'s default export.</compiled-tip>
         </div>
         <div><ul id="use-checks"></ul></div>
       </div>
@@ -120,14 +140,22 @@ customElements.get('card');         <span class="muted">// undefined: nothing se
     import { renderChecks, esc, errorText } from './shared/site.js';
     import { card, components } from './compiled/ui.js';
     import './compiled/icons.register.js';
+    import './compiled/icons.dash.register.js';
+    import tip, * as tipModule from './compiled/tip.js';
 
     card.define('esm-card');
+    tip.define('compiled-tip');
+    const tipSource = await fetch('./compiled/tip.js', { cache: 'no-cache' }).then((r) => r.text());
     await document.getElementById('cui').ready;
     renderChecks(document.getElementById('use-checks'), [
       ['importing compiled/ui.js registered nothing (<code>customElements.get("card")</code> is undefined)', customElements.get('card') === undefined && customElements.get('x--card') === undefined],
       ['<code>card.define("esm-card")</code> registered the compiled definition', customElements.get('esm-card').component === card],
       ['<code>&lt;html-import src="./compiled/ui.js" as="cui"&gt;</code> used the same definitions', customElements.get('cui--card').component === components.card],
       ['the register build defined <code>&lt;reg--star&gt;</code> on import', !!customElements.get('reg--star')],
+      ['the <code>--delimiter -</code> build defined <code>&lt;ico-star&gt;</code>', !!customElements.get('ico-star') && !customElements.get('ico--star')],
+      ['<code>compiled/tip.js</code> has <code>export default</code>, and its definition has no name', /\nexport default \$default;\n/.test(tipSource) && tip.name === null],
+      ['… which is not in its <code>components</code> manifest', Object.keys(tipModule.components).length === 0],
+      ['<code>tip.define("compiled-tip")</code> registered it', customElements.get('compiled-tip').component === tip],
     ]);
 
     // Compare the two frames once both have rendered.

@@ -21,6 +21,8 @@ const broken = {
   'errors/no-template.html': /needs a <template>/,
   'errors/dup-export.html': /Duplicate export "card"/,
   'errors/bad-name.html': /Invalid export name "FancyCard"/,
+  'errors/default-alone.html': /write name="default"/,
+  'errors/two-defaults.html': /More than one default export/,
   'errors/cycle-a.html': /Circular HTML module dependency/,
   'errors/cycle-b.html': /Circular HTML module dependency/,
 };

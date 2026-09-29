@@ -32,10 +32,10 @@ JS-authored component protocol.
 | §6 No direct `import "./ui.html"` from JS | Held | **Keep**. JS gets `HTMLModules.load()` and the compiler instead. |
 | §7 Core concepts: module, export, import, component definition, import binding (include later) | Module, export, import only | **Add** the component definition and the binding as first-class objects. HTML Include is deferred (see below). |
 | §8 HTML module = ordinary HTML with one or more exports | Held (any HTML) | **Keep**. |
-| §9 Export syntax `<html-export name="…"><template>…</template></html-export>`, preferred over `<template export>` and `data-*`; metadata such as `shadow` only with concrete semantics | Used `export="…"` attributes on built-in elements, which §9.1 explicitly rejects | **Change** to `<html-export name>`. Implemented metadata with concrete semantics only: `shadow="open\|closed"`, `delegates-focus`, `default`. `<style>` children of an export become the definition's `styles` (one constructed sheet shared by every instance). |
+| §9 Export syntax `<html-export name="…"><template>…</template></html-export>`, preferred over `<template export>` and `data-*`; metadata such as `shadow` only with concrete semantics | Used `export="…"` attributes on built-in elements, which §9.1 explicitly rejects | **Change** to `<html-export name>`. Implemented metadata with concrete semantics only: `shadow="open\|closed"`, `delegates-focus`, `default`. Default exports are spelled `name="default"` (see the extension below). `<style>` children of an export become the definition's `styles` (one constructed sheet shared by every instance). |
 | §10 Templates as the V1 payload, native `<slot>` | Held (template stamped into an open shadow root) | **Keep**, moved into the shared runtime. |
 | §11 `<html-import src as>` = `import * as ui`; `as` is a namespace, not a rename | `<module-import from namespace=>` bound a JS-style local, not elements | **Change**: `<html-import src="./ui.html" as="ui">` registers every component export as `ui--<export>`. |
-| §12 `--` namespace delimiter | Absent | **Add**. Namespaces and export names are lower-case kebab words, so neither can contain `--` and every tag splits unambiguously. Note: §12 says `.` is not permitted in custom element names; it is (`ui.custom-card` registers in current browsers, as the namespaces example shows live). The real problem with `.` is one-word exports: `ui.card` has no hyphen. `--` is still the right choice, and the docs give that reason instead. |
+| §12 `--` namespace delimiter | Absent | **Add**. Namespaces and export names are lower-case kebab words, so neither can contain `--` and every tag splits unambiguously. Note: §12 says `.` is not permitted in custom element names; it is (`ui.custom-card` registers in current browsers, as the namespaces example shows live). The real problem with `.` is one-word exports: `ui.card` has no hyphen. `--` is still the right choice, and the docs give that reason instead. `--` stays the default; making it configurable is an extension (below). |
 | §13 Identity vs registration name | Partly (`element=` chose the tag, but a template had no identity of its own) | **Add**: a definition carries its module-local `name`; the importer chooses the tag. The same definition can be bound as `ui--custom-card` and `admin--custom-card`. |
 | §14 One constructor cannot be registered twice; use generated subclasses | Held (`renamedSubclass`) | **Keep**, moved into `definition.define()`: every registration is a fresh subclass of the definition's base element. |
 | §15 Runtime loading: resolve, fetch, DOMParser, discover exports, create definitions, bind, register | Held, apart from definitions and namespaces | **Change** the pipeline to produce definitions. |
@@ -96,6 +96,48 @@ side effects and to warm the cache. Bindings added later, or before the module h
 applied when it is ready; elements already in the page upgrade natively. Failures (a missing export,
 an invalid tag, a non-element bound to `element=`) fire an `error` event on the binding, which bubbles
 through the import.
+
+## Extension beyond the PRD: configurable namespace delimiter
+
+The PRD (§12) fixes the delimiter at `--`. It stays the default everywhere, and can now be changed:
+
+- per import: `<html-import src="./ui.html" as="ui" delimiter="-">` registers `<ui-custom-card>`;
+- per call: `HTMLModules.import(src, { as, delimiter })`, `HTMLModules.bind(ns, { as, delimiter })`,
+  `bindModule(ns, { as, delimiter })`, `registerComponents(ns, { as, delimiter })`;
+- per instance: `createHTMLModules({ delimiter })` (the attribute and the options override it);
+- in the compiler's register format: `compileHTMLModule(source, { format: 'register', as, delimiter })`,
+  `html-module --format register --as ui --delimiter -`.
+
+Rules. A delimiter is non-empty and made of characters allowed in custom element names (no upper case or
+whitespace). Each resulting tag must be a valid custom element name; `delimiter="."` with a one-word export gives
+`ui.card`, which has no hyphen, and fails with a `SyntaxError` naming the tag and the reason, through the usual
+pathway (`error` events, rejections; a namespace import checks all its tags before registering any). With `-`,
+tags can be ambiguous (`ui-custom-card`), so nothing parses tags: bindings record `{ tag, namespace, export }`
+(`el.tags`, and `tags` in `bind()` / `import()` results). `parseBindingName(tag, delimiter)` survives only as a
+display helper that returns `null` for a tag that does not split exactly one way. Module records carry an
+import's `delimiter` when it is written, so the DOM reader and the scanner agree; inside modules an import without
+one uses `--`, never the page's instance default, so a module's templates always match the tags they get.
+
+## Default export spellings
+
+The PRD does not specify how a default export is written. The first implementation used a boolean `default`
+attribute (`<html-export default>`, with `name` optional). That changed to mirror JS:
+
+| Markup | Meaning |
+| --- | --- |
+| `<html-export name="default">` | the default export (canonical), `export default` |
+| `<html-export name>` (empty name) | the same; beware templating that renders `name=""` |
+| `<html-export name="card" default>` | `card` and also the default, `export { card, card as default }` |
+| `<html-export default>` | error: points to `name="default"` |
+| no `name` and no `src` | error mentioning `name="default"` |
+| two defaults (`name="default"` twice, or with `name="x" default`) | error |
+| `name="default" default`, `default="yes"` | error |
+| a re-export (`src`) with `default`, `name="default"` or an empty name | error: re-exports are never the default |
+
+`default` and `components` remain reserved as named exports. The default is never star re-exported, a
+default-only component is not in the `components` manifest and is not registered by `as=` (the importer names it
+with `<html-binding export="default" element="…">`), and components, stylesheets (`adopt`) and data can all be
+bound as the default. The compiler emits `export default …`.
 
 ## Deferred
 

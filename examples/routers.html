@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Routing with mport · web-module-graph</title>
+  <title>Routing with mport · html-modules</title>
   <script>try { const t = localStorage.getItem('wmg-examples-theme'); if (t) document.documentElement.dataset.theme = t; } catch {}</script>
   <!-- mport v2 from the local checkout (node_modules/mport is a symlink to it; see the README). -->
   <script type="importmap">
@@ -24,7 +24,7 @@
 </head>
 <body>
   <header class="site-header">
-    <a class="home" href="./index.html">web-module-graph</a>
+    <a class="home" href="./index.html">html-modules</a>
     <span class="crumb">Routing with mport</span>
     <span class="spacer"></span>
     <button class="theme-toggle" type="button">Dark mode</button>
@@ -33,7 +33,7 @@
   <main class="page">
     <h1>Routing with mport v2</h1>
     <p class="lede">
-      A Router answers one question: where does this specifier live? web-module-graph keeps the order (import map, then
+      A Router answers one question: where does this specifier live? html-modules keeps the order (import map, then
       router, then the host) and the non-package routes: static aliases, HTML-module paths, app schemes. Packages go to
       <a href="https://github.com/johnhenry/mport">mport v2</a> through <code>fromMport(createRouter(...))</code>: version
       ranges, <code>npm:</code>/<code>jsr:</code>, mirrors, strategies, health, traces and lockfiles. Everything here runs
@@ -84,7 +84,7 @@ const pinned = createRouter({ '*': fallback(transformCdn, verified(mirror('backu
 
     <section class="card">
       <h2>Static aliases: <code>basicRouter</code> patterns</h2>
-      <p class="small">What stays in web-module-graph: names that are not packages. Exact keys beat globs, longer globs beat shorter ones, <code>'*'</code> is last; a function target gets the specifier and <code>{ referrer }</code>.</p>
+      <p class="small">What stays in html-modules: names that are not packages. Exact keys beat globs, longer globs beat shorter ones, <code>'*'</code> is last; a function target gets the specifier and <code>{ referrer }</code>.</p>
 <pre><code>basicRouter({ routes: {
   '*': 'https://modules.example/', '@internal/*': 'https://internal.example/', 'app*': 'https://app.example',
   'partial:': (rest) => `/partials/${rest}.html`, exact: 'https://exact.example/',

@@ -1,4 +1,4 @@
-# web-module-graph
+# html-modules
 
 One module graph for JavaScript **and** HTML in the browser.
 
@@ -16,14 +16,14 @@ Plain ESM, no runtime dependencies, no build step. mport is an optional peer dep
 ## Install
 
 ```bash
-npm install @johnhenry/web-module-graph   # (not yet published)
+npm install html-modules   # (not yet published)
 npm install mport@^2                      # optional: package/CDN routing
 ```
 
 In a page, one script sets up the elements. Bare specifiers then resolve through the page's import map:
 
 ```html
-<script type="module" src="/node_modules/@johnhenry/web-module-graph/src/browser.js"></script>
+<script type="module" src="/node_modules/html-modules/src/browser.js"></script>
 ```
 
 ## HTML modules
@@ -101,7 +101,7 @@ The semantics follow ESM: `export *` skips `default`, local exports shadow star 
 
 ```js
 import { createRouter, fallback, race, esmSh, jsDelivr, unpkg, jsr } from 'mport';
-import { createLoader, fromMport, basicRouter, chainRouters } from '@johnhenry/web-module-graph';
+import { createLoader, fromMport, basicRouter, chainRouters } from 'html-modules';
 
 const packages = createRouter({
   '*': fallback(race(esmSh(), jsDelivr({ esm: true })), unpkg()),
@@ -128,9 +128,9 @@ The loader resolves a specifier through `importMap` first (which can also remap 
 ## Architecture: what mport owns
 
 ```
- specifier ──► loader ──► 1. importMap        (pins, a compiled map, URL keys)        web-module-graph
+ specifier ──► loader ──► 1. importMap        (pins, a compiled map, URL keys)        html-modules
                           2. router
-                             ├─ basicRouter / functions / importMapRouter             web-module-graph
+                             ├─ basicRouter / functions / importMapRouter             html-modules
                              │    static aliases, HTML-module paths, app schemes,
                              │    targets that depend on the referrer
                              └─ fromMport(createRouter(routes))                         mport v2
@@ -138,11 +138,11 @@ The loader resolves a specifier through `importMap` first (which can also remap 
                                   registry lookups, providers, strategies
                                   (fallback, race, adaptive, prefer, verified, cache),
                                   probing, health / circuit breaker, traces, lockfiles
-                          3. hostResolve      (import.meta.resolve: the page's map)    web-module-graph
-          ──► format (type → resolution.type → .html) ──► JS import() or HTML module    web-module-graph
+                          3. hostResolve      (import.meta.resolve: the page's map)    html-modules
+          ──► format (type → resolution.type → .html) ──► JS import() or HTML module    html-modules
 ```
 
-web-module-graph keeps what is specific to it: HTML modules, the loader, the declarative elements, the resolution order (import map first), routers for things that are not packages, and HTML-module `type` in resolutions. Everything about packages and CDNs is mport's.
+html-modules keeps what is specific to it: HTML modules, the loader, the declarative elements, the resolution order (import map first), routers for things that are not packages, and HTML-module `type` in resolutions. Everything about packages and CDNs is mport's.
 
 ## Routers
 
@@ -167,7 +167,7 @@ interface Resolution {
 | `chainRouters(...)`, `toRouter(fn)`, `isRouter(x)` | Composition helpers: the first non-null resolution wins. |
 | `mportRouter(options)` | **Deprecated.** See the migration notes. |
 
-mport is not imported by web-module-graph itself: you import it, create the router, and hand it to `fromMport()`. In a browser, map `mport` in the page's import map (for example to `/node_modules/mport/src/index.mjs`) or import it from a CDN.
+mport is not imported by html-modules itself: you import it, create the router, and hand it to `fromMport()`. In a browser, map `mport` in the page's import map (for example to `/node_modules/mport/src/index.mjs`) or import it from a CDN.
 
 ```js
 import { createRouter, fallback, custom, local } from 'mport';
@@ -189,7 +189,7 @@ const pinned = fromMport(createRouter(routes, { lock: JSON.parse(lockText) }));
 ```js
 // modules.config.js — a config object, or ({ lock }) => config
 import { createRouter, fallback, esmSh, jsDelivr, unpkg, jsr } from 'mport';
-import { basicRouter, chainRouters, fromMport } from '@johnhenry/web-module-graph/routers';
+import { basicRouter, chainRouters, fromMport } from 'html-modules/routers';
 
 export default ({ lock }) => ({
   router: chainRouters(
@@ -203,8 +203,8 @@ export default ({ lock }) => ({
 ```
 
 ```bash
-web-module-graph build --out importmap.json --lock modules.lock.json   # --html for a <script type="importmap">; --relock
-web-module-graph resolve react@^19 --trace
+html-modules build --out importmap.json --lock modules.lock.json   # --html for a <script type="importmap">; --relock
+html-modules resolve react@^19 --trace
 ```
 
 - Package keys drop the version, as in mport (`react@^19` → `react`); other keys are the specifier as written.

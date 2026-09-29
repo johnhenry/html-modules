@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { pathToFileURL } from 'node:url';
-import { main } from '../bin/web-module-graph.js';
+import { main } from '../bin/html-modules.js';
 
 const routerURL = new URL('../src/routers/index.js', import.meta.url).href;
 const mportURL = import.meta.resolve('mport');
@@ -58,7 +58,7 @@ test('usage on missing command', async () => {
 
 test('bin runs as an executable', async () => {
   const dir = await project();
-  const bin = new URL('../bin/web-module-graph.js', import.meta.url).pathname;
+  const bin = new URL('../bin/html-modules.js', import.meta.url).pathname;
   const { stdout } = await promisify(execFile)(process.execPath, [bin, 'build'], { cwd: dir });
   assert.equal(JSON.parse(stdout).imports['react@19'], 'https://esm.sh/react@19');
 });

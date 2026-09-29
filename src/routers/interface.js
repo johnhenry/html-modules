@@ -1,7 +1,7 @@
 /**
  * The Router interface: the seam between the module graph and routing.
  *
- * web-module-graph asks a Router where a specifier lives. Package and CDN
+ * html-modules asks a Router where a specifier lives. Package and CDN
  * routing (versions, registries, mirrors, strategies, health, lockfiles) is
  * mport v2's job: wrap an mport router with `fromMport()`. `basicRouter()`
  * (static aliases), `importMapRouter()` and plain functions cover the rest.

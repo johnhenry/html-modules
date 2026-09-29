@@ -1,5 +1,5 @@
 {
-  "name": "@johnhenry/web-module-graph",
+  "name": "html-modules",
   "version": "0.0.0",
   "description": "A unified JS + HTML module graph for the browser: HTML modules with named/default/namespace exports, declarative <module-import>/<module-binding> Web Components, import-map compilation, and a router seam whose package/CDN routing is delegated to mport v2.",
   "author": "John Henry <john@iamjohnhenry.com>",
@@ -18,7 +18,7 @@
     "./routers": "./src/routers/index.js"
   },
   "bin": {
-    "web-module-graph": "./bin/web-module-graph.js"
+    "html-modules": "./bin/html-modules.js"
   },
   "files": [
     "src",

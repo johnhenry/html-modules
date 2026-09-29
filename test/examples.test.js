@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join, relative, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createLoader, exportNames } from '../src/index.js';
-import { main } from '../bin/web-module-graph.js';
+import { main } from '../bin/html-modules.js';
 import { makeWindow } from './helpers.js';
 import { checklist, pages, uncovered, allItems } from '../examples/shared/catalog.js';
 

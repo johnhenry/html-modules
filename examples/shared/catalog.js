@@ -130,11 +130,11 @@ export const checklist = [
     ['mp.live', 'mport v2 routing across real public CDNs'],
   ] },
   { group: 'CLI', items: [
-    ['cli.build', 'web-module-graph build (import map)'],
+    ['cli.build', 'html-modules build (import map)'],
     ['cli.lock', '--lock writes an mport-format lockfile'],
     ['cli.pin', 'the lockfile is passed back to the config and pins mport (--relock ignores it)'],
     ['cli.html', '--html <script type="importmap">'],
-    ['cli.resolve', 'web-module-graph resolve (--trace)'],
+    ['cli.resolve', 'html-modules resolve (--trace)'],
     ['cli.config', 'config: static aliases + fromMport chain, scopes, importMap merge'],
   ] },
   { group: 'Error paths', items: [
@@ -226,7 +226,7 @@ export const pages = [
   },
   {
     id: 'cli', href: 'cli.html', title: 'Compiled import map (CLI)', offline: true,
-    summary: 'An import map and mport-format lockfile produced by `web-module-graph build` from static aliases chained with mport v2, then used at runtime and fed back to mport to pin versions.',
+    summary: 'An import map and mport-format lockfile produced by `html-modules build` from static aliases chained with mport v2, then used at runtime and fed back to mport to pin versions.',
     covers: ['cli.build', 'cli.lock', 'cli.pin', 'cli.html', 'cli.resolve', 'cli.config', 'im.compile', 'im.scopes', 'rt.import-map', 'rt.basic', 'rt.basic-fn', 'mp.adapter', 'mp.specifiers', 'mp.fallback', 'mp.lock'],
   },
   {

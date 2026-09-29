@@ -1,5 +1,5 @@
 /**
- * mport v2 as a web-module-graph Router.
+ * mport v2 as a html-modules Router.
  *
  * mport (https://github.com/johnhenry/mport) owns package and CDN resolution:
  * specifier parsing (`react@^19`, `npm:`, `jsr:`, `github:`), registry lookups,
@@ -9,7 +9,7 @@
  *
  * This module does not import mport. You create the router with mport's
  * `createRouter()` and hand it to `fromMport()`, so the core of
- * web-module-graph stays dependency-free and mport stays an optional peer.
+ * html-modules stays dependency-free and mport stays an optional peer.
  *
  *   import { createRouter, race, esmSh, jsDelivr } from 'mport';
  *   const loader = createLoader({
@@ -55,7 +55,7 @@ export function isMportRouter(value) {
 }
 
 /**
- * Wrap an mport v2 router as a web-module-graph Router.
+ * Wrap an mport v2 router as a html-modules Router.
  *
  * The resolution is mport's, unchanged (`url`, `provider`, `version`,
  * `integrity`, `module`, `build`, `registry`, `name`, `range`, `path`, `key`,

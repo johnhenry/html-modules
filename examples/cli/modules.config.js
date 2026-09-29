@@ -1,9 +1,9 @@
-// Config for `web-module-graph build`. Run from the package root:
+// Config for `html-modules build`. Run from the package root:
 //
-//   node bin/web-module-graph.js build --config examples/cli/modules.config.js \
+//   node bin/html-modules.js build --config examples/cli/modules.config.js \
 //     --out examples/cli/importmap.json --lock examples/cli/modules.lock.json
-//   node bin/web-module-graph.js build --config examples/cli/modules.config.js --html --out examples/cli/importmap.html
-//   node bin/web-module-graph.js resolve @tokens greet@^1 jsr:@demo/scoped@^2 @lib/ --config examples/cli/modules.config.js
+//   node bin/html-modules.js build --config examples/cli/modules.config.js --html --out examples/cli/importmap.html
+//   node bin/html-modules.js resolve @tokens greet@^1 jsr:@demo/scoped@^2 @lib/ --config examples/cli/modules.config.js
 //
 // Two routers, in order:
 //  1. basicRouter: static aliases for HTML modules. "@lib" is not a package

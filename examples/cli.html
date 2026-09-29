@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Compiled import map · web-module-graph</title>
+  <title>Compiled import map · html-modules</title>
   <script>try { const t = localStorage.getItem('wmg-examples-theme'); if (t) document.documentElement.dataset.theme = t; } catch {}</script>
   <!-- mport v2 from the local checkout (node_modules/mport is a symlink to it; see the README). -->
   <script type="importmap">
@@ -17,7 +17,7 @@
 </head>
 <body>
   <header class="site-header">
-    <a class="home" href="./index.html">web-module-graph</a>
+    <a class="home" href="./index.html">html-modules</a>
     <span class="crumb">Compiled import map (CLI)</span>
     <span class="spacer"></span>
     <button class="theme-toggle" type="button">Dark mode</button>
@@ -27,7 +27,7 @@
     <h1>Compile routing to an import map</h1>
     <p class="lede">
       The CLI asks a router once, ahead of time, and writes a standard import map and a lockfile in mport's format. The files on this page were
-      produced by <code>web-module-graph build</code> from <a href="./cli/modules.config.js"><code>cli/modules.config.js</code></a>:
+      produced by <code>html-modules build</code> from <a href="./cli/modules.config.js"><code>cli/modules.config.js</code></a>:
       a <code>basicRouter</code> for HTML-module aliases (one of them depends on the scope), chained with <code>fromMport(createRouter(...))</code>
       for packages (ranges resolved through an offline registry, a "down" mirror skipped by a file-system probe). The test suite checks they are up to date.
     </p>
@@ -36,10 +36,10 @@
     <section class="card">
       <h2>Commands</h2>
 <pre><code># from the package root
-node bin/web-module-graph.js build --config examples/cli/modules.config.js \
+node bin/html-modules.js build --config examples/cli/modules.config.js \
   --out examples/cli/importmap.json --lock examples/cli/modules.lock.json
-node bin/web-module-graph.js build --config examples/cli/modules.config.js --html --out examples/cli/importmap.html
-node bin/web-module-graph.js resolve @tokens greet@^1 jsr:@demo/scoped@^2 @lib/ --config examples/cli/modules.config.js</code></pre>
+node bin/html-modules.js build --config examples/cli/modules.config.js --html --out examples/cli/importmap.html
+node bin/html-modules.js resolve @tokens greet@^1 jsr:@demo/scoped@^2 @lib/ --config examples/cli/modules.config.js</code></pre>
       <p class="small">The config's default export is a function, <code>({ lock }) =&gt; config</code>. When the <code>--lock</code> file already exists the CLI passes it in, and the config hands it to mport (<code>createRouter(routes, { lock })</code>), so a rebuild pins the same versions and builds without asking the registry. <code>--relock</code> ignores it. When the router is a plain mport router, the CLI calls mport's own <code>router.build()</code>; for a chain like this one it uses <code>compileImportMap()</code> with mport's <code>compileImportMap</code> and <code>mergeImportMaps</code>.</p>
     </section>
 

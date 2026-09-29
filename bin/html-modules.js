@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * web-module-graph CLI
+ * html-modules CLI
  *
- *   web-module-graph build   [--config modules.config.js] [--out importmap.json] [--lock modules.lock.json] [--relock] [--html]
- *   web-module-graph resolve <specifier...> [--config modules.config.js] [--lock file] [--trace]
+ *   html-modules build   [--config modules.config.js] [--out importmap.json] [--lock modules.lock.json] [--relock] [--html]
+ *   html-modules resolve <specifier...> [--config modules.config.js] [--lock file] [--trace]
  *
  * The config module's default export is `{ router, specifiers, scopes?, importMap? }`,
  * or a function `({ lock }) => config` that receives the existing lockfile
@@ -26,8 +26,8 @@ import { toRouter } from '../src/routers/interface.js';
 import { isMportRouter } from '../src/routers/mport.js';
 
 const usage = `Usage:
-  web-module-graph build [--config modules.config.js] [--out importmap.json] [--lock file] [--relock] [--html]
-  web-module-graph resolve <specifier...> [--config modules.config.js] [--lock file] [--trace]`;
+  html-modules build [--config modules.config.js] [--out importmap.json] [--lock file] [--relock] [--html]
+  html-modules resolve <specifier...> [--config modules.config.js] [--lock file] [--trace]`;
 
 const loadMport = () => import('mport').catch(() => null);
 const readJSON = (path) => readFile(path, 'utf8').then(JSON.parse, () => undefined);
@@ -87,7 +87,7 @@ export async function main(argv = process.argv.slice(2), { stdout = process.stdo
   return 1;
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href || process.argv[1]?.endsWith('web-module-graph')) {
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href || process.argv[1]?.endsWith('html-modules')) {
   main().then((code) => (process.exitCode = code), (err) => {
     console.error(err?.message ?? err);
     process.exitCode = 1;

@@ -17,6 +17,8 @@
 import {
   DELIMITER, assertDelimiter, assertElementName, assertNamespace, bindingName, camelCase, kebabCase,
 } from './names.js';
+import { assertOption, reportLoudly } from './settings.js';
+import { componentRootCreated, lazyTargets, watchLazy } from './lazy.js';
 
 const COMPONENT = Symbol.for('html-modules.component');
 const STYLESHEET = Symbol.for('html-modules.stylesheet');
@@ -41,8 +43,9 @@ export class HTMLComponent {
    * @param {'open'|'closed'} [spec.shadow]  shadow root mode (default "open")
    * @param {boolean} [spec.delegatesFocus]
    * @param {string[]} [spec.styles]         CSS text, adopted into every shadow root (one sheet per definition)
-   * @param {Array<{module: object, from: string, as?: string, delimiter?: string, bindings?: object[]}>} [spec.imports]
+   * @param {Array<{module: object, from: string, as?: string, delimiter?: string, conflict?: string, errors?: string, load?: string, lazy?: () => Promise<object>, bindings?: object[]}>} [spec.imports]
    *                                         modules this component uses, bound before it is registered
+   *                                         (an entry with no `module` and a `lazy` loader is bound when one of its tags is first used)
    * @param {Function} [spec.element]        a JS-authored HTMLElement subclass instead of a template
    * @param {string} [spec.url]              where it came from, for messages
    */
@@ -127,10 +130,15 @@ function templateElementClass(def, win) {
     constructor() {
       super();
       // A server-rendered (declarative) shadow root is kept, not re-stamped.
-      if (this.shadowRoot?.childNodes.length) return;
+      if (this.shadowRoot?.childNodes.length) {
+        componentRootCreated(this, this.shadowRoot, win);
+        return;
+      }
       const root = this.shadowRoot ?? this.attachShadow({ mode: def.shadow, delegatesFocus: def.delegatesFocus });
       applyComponentStyles(root, def, win);
       root.append((this.ownerDocument ?? win.document).importNode(content(), true));
+      // Lazy imports watch component shadow roots too (see lazy.js).
+      componentRootCreated(this, root, win);
     }
   };
   Object.defineProperty(cls, 'name', { value: pascal(def.name) });
@@ -278,27 +286,72 @@ function describeDefinition(def) {
  * Register an element-like value under `tag`. Every registration is a fresh
  * subclass, so one definition can have many tags (PRD §14). Registering the
  * same definition under the same tag again returns the existing class.
+ * A tag already defined by something else is an error, or, with
+ * `conflict: 'reuse'`, keeps the existing definition and returns its class.
+ * @param {string} tag
+ * @param {unknown} value
+ * @param {{ registry?: CustomElementRegistry, window?: any, conflict?: 'error'|'reuse' }} [options]
  * @returns {CustomElementConstructor}
  */
-export function defineElement(tag, value, { registry, window: win = globalThis } = {}) {
+export function defineElement(tag, value, options) {
+  return registerTag(tag, value, options).element;
+}
+
+/** defineElement(), also saying whether an existing definition was reused. */
+function registerTag(tag, value, { registry, window: win = globalThis, conflict = 'error' } = {}) {
   registry ??= win.customElements ?? globalThis.customElements;
   assertElementName(tag);
+  assertOption('conflict', conflict);
   const def = toComponent(value, { window: win, what: `<${tag}>` });
   if (!registrations.has(registry)) registrations.set(registry, new Map());
   const seen = registrations.get(registry);
   const existing = registry.get(tag);
   if (existing) {
-    if (seen.get(tag) === def) return existing;
+    if (seen.get(tag) === def) return { element: existing, reused: false };
+    if (conflict === 'reuse') return { element: existing, reused: true };
     const by = seen.get(tag);
-    throw new Error(`Cannot bind <${tag}>: it is already defined${by ? ` by ${describeDefinition(by)}` : ''}`);
+    throw new Error(`Cannot bind <${tag}>: it is already defined${by ? ` by ${describeDefinition(by)}` : ''} (conflict="reuse" keeps the existing definition instead)`);
   }
-  for (const dep of def.imports) bindModule(dep.module, { ...dep, registry, window: win });
+  bindImports(def, registry, win);
   const Base = def.elementFor(win);
   const Registered = class extends Base {};
   Object.defineProperty(Registered, 'name', { value: Base.name });
   registry.define(tag, Registered);
   seen.set(tag, def);
-  return Registered;
+  return { element: Registered, reused: false };
+}
+
+const lazyDeps = new WeakMap(); // registry → Set of lazy import entries already being watched
+
+/**
+ * Bind a definition's module imports before it is registered. Eager imports
+ * are bound now; a lazy one (no `module`, a `lazy` loader) is watched for,
+ * and loaded and bound when one of its tags is first used. A failure is
+ * thrown to whoever is registering the component, and with `errors: 'throw'`
+ * also reported with reportError().
+ */
+function bindImports(def, registry, win) {
+  for (const dep of def.imports) {
+    const options = { as: dep.as, delimiter: dep.delimiter, bindings: dep.bindings, from: dep.from, conflict: dep.conflict, registry, window: win };
+    if (dep.module === undefined && typeof dep.lazy === 'function') {
+      if (!lazyDeps.has(registry)) lazyDeps.set(registry, new WeakSet());
+      if (lazyDeps.get(registry).has(dep)) continue;
+      lazyDeps.get(registry).add(dep);
+      watchLazy(win, lazyTargets({ ...dep, delimiter: dep.delimiter ?? DELIMITER }), (el) => {
+        Promise.resolve().then(dep.lazy).then((ns) => bindModule(ns, options)).catch((error) => {
+          el.dispatchEvent(new win.CustomEvent('error', { bubbles: true, composed: true, detail: { error, from: dep.from, lazy: true } }));
+          if (dep.errors === 'throw') reportLoudly(error, win);
+        });
+      });
+      continue;
+    }
+    try {
+      bindModule(dep.module, options);
+    } catch (error) {
+      if (dep.errors === 'throw') reportLoudly(error, win);
+      throw error;
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -340,10 +393,11 @@ export function componentsOf(ns, from = 'module') {
  * Apply one binding `{ export, element?, adopt? }` of an import.
  * `namespace` is the import's `as` when the tag was made from it, and null
  * when `element=` chose the tag (or nothing was registered): the mapping is
- * recorded here, never parsed back out of the tag.
- * @returns {{ export: string, value: unknown, tag: string|null, namespace: string|null, element: Function|null, adopted: boolean }}
+ * recorded here, never parsed back out of the tag. `reused: true` is added
+ * when `conflict: 'reuse'` kept a different, existing definition of the tag.
+ * @returns {{ export: string, value: unknown, tag: string|null, namespace: string|null, element: Function|null, adopted: boolean, reused?: true }}
  */
-export function applyBinding(ns, binding, { as, delimiter = DELIMITER, from = 'module', registry, window: win = globalThis, root } = {}) {
+export function applyBinding(ns, binding, { as, delimiter = DELIMITER, from = 'module', registry, window: win = globalThis, root, conflict } = {}) {
   const name = binding.export;
   if (!name) throw new SyntaxError('<html-binding> requires an "export" attribute');
   const value = lookupExport(ns, name, from);
@@ -368,7 +422,9 @@ export function applyBinding(ns, binding, { as, delimiter = DELIMITER, from = 'm
   }
   if (tag) {
     result.tag = tag;
-    result.element = defineElement(tag, value, { registry, window: win });
+    const { element, reused } = registerTag(tag, value, { registry, window: win, conflict });
+    result.element = element;
+    if (reused) result.reused = true;
   }
   return result;
 }
@@ -401,10 +457,10 @@ export function registerComponents(ns, options = {}) {
   return Object.fromEntries(registerAll(ns, options).map((b) => [b.tag, b.element]));
 }
 
-function registerAll(ns, { as, delimiter, from = 'module', registry, window: win = globalThis } = {}) {
+function registerAll(ns, { as, delimiter, from = 'module', registry, window: win = globalThis, conflict } = {}) {
   return planComponents(ns, { as, delimiter, from }).map(({ tag, namespace, export: name, value }) => ({
     tag, namespace, export: name,
-    element: defineElement(tag, toComponent(value, { window: win, what: `components['${name}'] of '${from}'` }), { registry, window: win }),
+    ...registerTag(tag, toComponent(value, { window: win, what: `components['${name}'] of '${from}'` }), { registry, window: win, conflict }),
   }));
 }
 
@@ -415,26 +471,29 @@ function registerAll(ns, { as, delimiter, from = 'module', registry, window: win
  *  - otherwise: nothing (the module was loaded for its side effects)
  * `tags` records what each registered tag was made from, so nothing needs to
  * split a tag to find its namespace and export (with delimiter "-", it can't).
+ * `conflict: 'reuse'` keeps tags that are already defined by something else
+ * (recorded with `reused: true`) instead of throwing.
  * @param {object} ns module namespace (runtime-loaded HTML, compiled, or plain JS)
- * @param {{ as?: string, delimiter?: string, bindings?: object[], from?: string, registry?: CustomElementRegistry, window?: any, root?: Document|ShadowRoot }} [options]
- * @returns {{ elements: Record<string, Function>, values: Record<string, unknown>, tags: Record<string, { tag: string, namespace: string|null, export: string }> }}
+ * @param {{ as?: string, delimiter?: string, bindings?: object[], from?: string, registry?: CustomElementRegistry, window?: any, root?: Document|ShadowRoot, conflict?: 'error'|'reuse' }} [options]
+ * @returns {{ elements: Record<string, Function>, values: Record<string, unknown>, tags: Record<string, { tag: string, namespace: string|null, export: string, reused?: true }> }}
  */
-export function bindModule(ns, { as, delimiter = DELIMITER, bindings = [], from = 'module', registry, window: win = globalThis, root } = {}) {
+export function bindModule(ns, { as, delimiter = DELIMITER, bindings = [], from = 'module', registry, window: win = globalThis, root, conflict } = {}) {
   if (as != null) assertNamespace(as);
   assertDelimiter(delimiter);
+  if (conflict !== undefined) assertOption('conflict', conflict);
   const out = { elements: {}, values: {}, tags: {} };
-  const record = ({ tag, namespace, export: name, element }) => {
+  const record = ({ tag, namespace, export: name, element, reused }) => {
     out.elements[tag] = element;
-    out.tags[tag] = { tag, namespace, export: name };
+    out.tags[tag] = { tag, namespace, export: name, ...(reused && { reused: true }) };
   };
   if (bindings.length) {
     for (const b of bindings) {
-      const r = applyBinding(ns, b, { as, delimiter, from, registry, window: win, root });
+      const r = applyBinding(ns, b, { as, delimiter, from, registry, window: win, root, conflict });
       out.values[r.export] = r.value;
       if (r.tag) record(r);
     }
   } else if (as != null) {
-    for (const r of registerAll(ns, { as, delimiter, from, registry, window: win })) record(r);
+    for (const r of registerAll(ns, { as, delimiter, from, registry, window: win, conflict })) record(r);
   }
   return out;
 }

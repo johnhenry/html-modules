@@ -7,23 +7,56 @@
  *   await HTMLModules.import('./ui.html', { as: 'ui' });    // <html-import src="./ui.html" as="ui">
  *   await HTMLModules.import('./ui.html', { as: 'ui', bindings: [{ export: 'custom-card', element: 'x-card' }] });
  *   await HTMLModules.import('./ui.html', { as: 'ui', delimiter: '-' });   // <ui-custom-card>
+ *   await HTMLModules.import('./ui.html', { as: 'ui', conflict: 'reuse' }); // keep tags that are already defined
+ *   const h = HTMLModules.import('./ui.html', { as: 'ui', load: 'lazy' }); // a handle: nothing fetched yet
+ *   await h.ready;                                           // …until a <ui--…> element appears, or h.load()
  */
 import { createLoader } from './loader.js';
 import { bindModule } from './runtime.js';
-import { DELIMITER, assertDelimiter } from './names.js';
+import { IMPORT_DEFAULTS, checkOptions, reportLoudly } from './settings.js';
+import { lazyTargets, watchLazy } from './lazy.js';
 
 /**
  * @param {object} [options]  loader options (`fetch`, `parseHTML`, `hostResolve`, `baseURL`,
- *                            `importModule`, `onEvent`) plus:
+ *                            `importModule`, `onEvent`) plus these defaults for this instance's imports
+ *                            (lowest precedence: `<html-import>` attributes and the page's
+ *                            `<html-import-settings>` override them; they never apply inside modules):
  * @param {any} [options.window]                   the window whose DOM and registry to use
  * @param {CustomElementRegistry} [options.registry]
- * @param {string} [options.delimiter]            namespace delimiter for this instance's imports (default "--");
- *                                                `<html-import delimiter>` and the `delimiter` option override it
+ * @param {string} [options.delimiter]            namespace delimiter (default "--")
+ * @param {string} [options.base]                 base URL for resolving import specifiers, relative to `baseURL`
+ *                                                (default: the importing document's base URL)
+ * @param {'error'|'reuse'} [options.conflict]    a tag already defined by something else: error (default) or keep it
+ * @param {'eager'|'lazy'} [options.load]         default for `<html-import>` elements (default "eager");
+ *                                                `import()` is lazy only when the call says `load: 'lazy'`
+ * @param {'event'|'throw'} [options.errors]      also reportError() failures (default "event": events and rejections only)
  */
-export function createHTMLModules({ window: win = globalThis, registry, delimiter = DELIMITER, ...loaderOptions } = {}) {
-  assertDelimiter(delimiter);
+export function createHTMLModules({
+  window: win = globalThis, registry, delimiter, base, conflict, load, errors, ...loaderOptions
+} = {}) {
+  checkOptions({ delimiter, base, conflict, load, errors }, ' in createHTMLModules()');
   const loader = createLoader({ window: win, ...loaderOptions });
   const reg = () => registry ?? win.customElements;
+  const options = Object.freeze({
+    delimiter: delimiter ?? IMPORT_DEFAULTS.delimiter,
+    conflict: conflict ?? IMPORT_DEFAULTS.conflict,
+    load: load ?? IMPORT_DEFAULTS.load,
+    errors: errors ?? IMPORT_DEFAULTS.errors,
+  });
+  let resolvedBase;
+  const instanceBase = () => {
+    if (base === undefined) return undefined;
+    resolvedBase ??= loader.baseURL ? new URL(base, loader.baseURL).href : new URL(base).href;
+    return resolvedBase;
+  };
+
+  const bind = (module, { as, delimiter: d = options.delimiter, bindings, from, root, conflict: c = options.conflict } = {}) =>
+    bindModule(module, { as, delimiter: d, bindings, from, conflict: c, registry: reg(), window: win, root: root ?? win.document });
+
+  async function importNow(src, { as, delimiter: d, bindings, base: b, type, root, conflict: c }) {
+    const module = await api.load(src, { base: b, type });
+    return { module, ...bind(module, { as, delimiter: d, bindings, from: src, root, conflict: c }) };
+  }
 
   const api = {
     loader,
@@ -31,37 +64,104 @@ export function createHTMLModules({ window: win = globalThis, registry, delimite
     cache: loader.cache,
 
     /** The default namespace delimiter of this instance. */
-    delimiter,
+    delimiter: options.delimiter,
+
+    /** This instance's import defaults: `{ delimiter, conflict, load, errors }`. */
+    options,
+
+    /** This instance's base URL for import specifiers (absolute), or undefined. */
+    get base() {
+      return instanceBase();
+    },
 
     /** Resolve a specifier as `<html-import src>` would. */
-    resolve: (src, base) => loader.resolve(src, base),
+    resolve: (src, b) => loader.resolve(src, b ?? instanceBase()),
 
     /**
      * Load an HTML (or JS) module and return its namespace, without registering anything.
      * @param {string} src
      * @param {{ base?: string, type?: 'html'|'js' }} [options]
      */
-    load: (src, { base, type } = {}) => loader.load(src, base, { type }),
+    load: (src, { base: b, type } = {}) => loader.load(src, b ?? instanceBase(), { type }),
 
     /**
      * Bind a loaded namespace: see `bindModule()`.
      * @param {object} module
-     * @param {{ as?: string, delimiter?: string, bindings?: Array<{ export: string, element?: string, adopt?: boolean }>, from?: string, root?: Document|ShadowRoot }} [options]
+     * @param {{ as?: string, delimiter?: string, bindings?: Array<{ export: string, element?: string, adopt?: boolean }>, from?: string, root?: Document|ShadowRoot, conflict?: 'error'|'reuse' }} [options]
      */
-    bind: (module, { as, delimiter: d = delimiter, bindings, from, root } = {}) =>
-      bindModule(module, { as, delimiter: d, bindings, from, registry: reg(), window: win, root: root ?? win.document }),
+    bind,
 
     /**
      * Load and bind in one step: the programmatic `<html-import>`.
+     *
+     * Eager (the default) returns a Promise of `{ module, elements, values, tags }`.
+     * With `load: 'lazy'` nothing is fetched yet: it returns a handle
+     * `{ ready, load(), cancel(), state }` right away (not a Promise, so `await`
+     * does not wait for use). `ready` settles when the module has been loaded
+     * and bound: when an element with one of its tags appears in the document
+     * or a component's shadow root, or when `load()` is called.
      * @param {string} src
-     * @param {{ as?: string, delimiter?: string, bindings?: object[], base?: string, type?: 'html'|'js', root?: Document|ShadowRoot }} [options]
-     * @returns {Promise<{ module: object, elements: Record<string, Function>, values: Record<string, unknown>, tags: Record<string, { tag: string, namespace: string|null, export: string }> }>}
+     * @param {{ as?: string, delimiter?: string, bindings?: object[], base?: string, type?: 'html'|'js', root?: Document|ShadowRoot,
+     *           conflict?: 'error'|'reuse', load?: 'eager'|'lazy', errors?: 'event'|'throw' }} [options]
      */
-    async import(src, { as, delimiter: d = delimiter, bindings, base, type, root } = {}) {
-      if (d !== delimiter) assertDelimiter(d);
-      const module = await api.load(src, { base, type });
-      return { module, ...api.bind(module, { as, delimiter: d, bindings, from: src, root }) };
+    import(src, { as, delimiter: d = options.delimiter, bindings, base: b, type, root, conflict: c = options.conflict, load: l = 'eager', errors: e = options.errors } = {}) {
+      const call = { as, delimiter: d, bindings, base: b, type, root, conflict: c };
+      const loud = (promise) => {
+        if (e === 'throw') promise.catch((error) => reportLoudly(error, win));
+        return promise;
+      };
+      try {
+        checkOptions({ delimiter: d, conflict: c, load: l, errors: e }, ' in HTMLModules.import()');
+      } catch (error) {
+        return loud(Promise.reject(error));
+      }
+      if (l !== 'lazy') return loud(importNow(src, call));
+      return lazyImport(src, call, loud);
     },
   };
+
+  function lazyImport(src, call, loud) {
+    let resolve;
+    let reject;
+    const ready = new Promise((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    let state = 'waiting';
+    let started = false;
+    let watcher = null;
+    const start = () => {
+      if (!started) {
+        started = true;
+        watcher?.cancel();
+        state = 'loading';
+        loud(importNow(src, call)).then(
+          (result) => { state = 'loaded'; resolve(result); },
+          (error) => { state = 'error'; reject(error); },
+        );
+      }
+      return ready;
+    };
+    const handle = {
+      src,
+      ready,
+      /** Load now, whether or not a tag has been used. Returns `ready`. */
+      load: start,
+      /** Stop watching (only before loading starts); `ready` then stays pending until `load()`. */
+      cancel() {
+        if (state !== 'waiting') return;
+        watcher?.cancel();
+        state = 'cancelled';
+      },
+      /** "waiting" | "cancelled" | "loading" | "loaded" | "error" */
+      get state() {
+        return state;
+      },
+    };
+    watcher = watchLazy(win, lazyTargets({ as: call.as, delimiter: call.delimiter, bindings: call.bindings }), () => start());
+    return handle;
+  }
+
   return api;
 }
+

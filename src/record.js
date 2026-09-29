@@ -21,6 +21,13 @@
  *   <html-export name="custom-card" default>…</html-export>       → named, and also the default export
  *                                                                   (`export { customCard, customCard as default }`)
  *   <html-import src="./icons.html" as="icon" delimiter="-">      → tags <icon-star>, … inside this module
+ *   <html-import-settings delimiter="-" base="./lib/" load="lazy">  → importSettings: defaults for this module's imports
+ *   <html-module-settings shadow="closed" delegates-focus>        → moduleSettings: defaults for its component exports
+ *
+ * Settings elements come before the elements they configure (<html-import>,
+ * <html-export>), at most one of each per module. Export defaults are baked
+ * into each component record (`shadow`, `delegatesFocus`); import defaults stay
+ * in `importSettings` and are applied with `moduleImportOptions()`.
  *
  * An export record's `name` is its named-export name, or null for the
  * default-only export (`name="default"` or a bare `name`); `default: true`
@@ -32,17 +39,22 @@
  * module's own templates always know their tags).
  *
  * @typedef {{ export: string, element?: string, adopt?: boolean }} BindingRecord
- * @typedef {{ src: string, as?: string, delimiter?: string, type?: string, bindings: BindingRecord[] }} ImportRecord
+ * @typedef {{ src: string, as?: string, delimiter?: string, type?: string, conflict?: 'error'|'reuse', load?: 'eager'|'lazy', errors?: 'event'|'throw', bindings: BindingRecord[] }} ImportRecord
  * @typedef {{ kind: 'component', name: string|null, default?: true, template: string, shadow: 'open'|'closed', delegatesFocus: boolean, styles: string[] }
  *         | { kind: 'stylesheet', name: string|null, default?: true, css: string }
  *         | { kind: 'data', name: string|null, default?: true, value: unknown }
  *         | { kind: 'reexport', src: string, name?: string, import?: string }} ExportRecord
- * @typedef {{ url: string, imports: ImportRecord[], exports: ExportRecord[] }} ModuleRecord
+ * @typedef {{ url: string, imports: ImportRecord[], exports: ExportRecord[],
+ *   importSettings?: { delimiter?: string, base?: string, conflict?: string, load?: string, errors?: string },
+ *   moduleSettings?: { shadow?: 'open'|'closed', delegatesFocus?: boolean } }} ModuleRecord
  *
  * A "raw element" is the neutral input both readers produce:
- * @typedef {{ tag: string, attrs: Record<string, string>, children: Array<{ tag: string, attrs: Record<string, string>, html?: string, text?: string }> }} RawElement
+ * @typedef {{ tag: string, order?: number, attrs: Record<string, string>, children: Array<{ tag: string, attrs: Record<string, string>, html?: string, text?: string }> }} RawElement
  */
-import { assertDelimiter, assertExportName, assertNamespace } from './names.js';
+import { assertExportName, assertNamespace } from './names.js';
+import {
+  EXPORT_DEFAULTS, IMPORT_DEFAULTS, booleanAttribute, readImportOptions, readImportSettings, readModuleSettings,
+} from './settings.js';
 
 const JSON_TYPE = /^(application|text)\/([\w.+-]+\+)?json$/i;
 const has = (attrs, name) => Object.prototype.hasOwnProperty.call(attrs, name);
@@ -75,17 +87,13 @@ export function importRecord(raw, url = '') {
       throw new SyntaxError(`${error.message}${where}`);
     }
   }
-  const delimiter = has(raw.attrs, 'delimiter') ? raw.attrs.delimiter : undefined;
-  if (delimiter !== undefined) {
-    try {
-      assertDelimiter(delimiter);
-    } catch (error) {
-      throw new SyntaxError(`${error.message}${where}`);
-    }
-  }
+  const { delimiter, conflict, load, errors } = readImportOptions(raw.attrs, where);
   const type = nonEmpty(raw.attrs.type);
   const bindings = raw.children.filter((c) => c.tag === 'html-binding').map((c) => bindingRecord(c.attrs, where));
-  return { src, ...(as && { as }), ...(delimiter !== undefined && { delimiter }), ...(type && { type }), bindings };
+  return {
+    src, ...(as && { as }), ...(delimiter !== undefined && { delimiter }), ...(type && { type }),
+    ...(conflict && { conflict }), ...(load && { load }), ...(errors && { errors }), bindings,
+  };
 }
 
 /**
@@ -116,7 +124,7 @@ function exportName(raw, where) {
   return { name, isDefault: modifier };
 }
 
-function exportRecord(raw, where) {
+function exportRecord(raw, where, defaults = EXPORT_DEFAULTS) {
   const { attrs } = raw;
   const src = nonEmpty(attrs.src);
   if (src) {
@@ -137,9 +145,13 @@ function exportRecord(raw, where) {
   const base = { name, ...(isDefault && { default: true }) };
   if (templates.length > 1) throw new SyntaxError(`${describe(raw)} has ${templates.length} <template> elements; an export has one${where}`);
   if (templates.length) {
-    const shadow = nonEmpty(attrs.shadow) ?? 'open';
+    // Per-export attributes override the module's <html-module-settings>.
+    const shadow = nonEmpty(attrs.shadow) ?? defaults.shadow ?? EXPORT_DEFAULTS.shadow;
     if (shadow !== 'open' && shadow !== 'closed') throw new SyntaxError(`${describe(raw)}: shadow="${shadow}" must be "open" or "closed"${where}`);
-    return { kind: 'component', ...base, template: templates[0].html ?? '', shadow, delegatesFocus: has(attrs, 'delegates-focus'), styles };
+    const delegatesFocus = has(attrs, 'delegates-focus')
+      ? booleanAttribute('delegates-focus', attrs['delegates-focus'], ` on ${describe(raw)}${where}`)
+      : defaults.delegatesFocus ?? EXPORT_DEFAULTS.delegatesFocus;
+    return { kind: 'component', ...base, template: templates[0].html ?? '', shadow, delegatesFocus, styles };
   }
   for (const a of ['shadow', 'delegates-focus']) {
     if (has(attrs, a)) throw new SyntaxError(`${describe(raw)}: "${a}" only applies to an export with a <template>${where}`);
@@ -159,19 +171,64 @@ function exportRecord(raw, where) {
   throw new SyntaxError(`${describe(raw)} needs a <template> (a component), <style> (a stylesheet) or <script type="application/json"> (data)${where}`);
 }
 
+/** The one settings element of a kind, checked for count and placement (it must precede every `before` element). */
+function settingsElement(list, before, what, where) {
+  if (!list?.length) return null;
+  if (list.length > 1) throw new SyntaxError(`More than one <${list[0].tag}>${where}: a module has at most one`);
+  const [el] = list;
+  if (el.order !== undefined && before.some((b) => b.order !== undefined && b.order < el.order)) {
+    throw new SyntaxError(`<${el.tag}> must come before any <${what}>${where}`);
+  }
+  return el;
+}
+
+/**
+ * The options a module's own import is bound with: its attributes, then the
+ * module's <html-import-settings>. Only values that were written are returned;
+ * the rest are the built-in defaults (a page's options never reach a module).
+ * @param {ModuleRecord} record
+ * @param {ImportRecord} i
+ * @returns {{ delimiter?: string, conflict?: string, load?: string, errors?: string }}
+ */
+export function moduleImportOptions(record, i) {
+  const s = record.importSettings ?? {};
+  const out = {};
+  for (const name of ['delimiter', 'conflict', 'load', 'errors']) {
+    const v = i[name] ?? s[name];
+    if (v !== undefined) out[name] = v;
+  }
+  return out;
+}
+
 /**
  * Validate raw elements and build a module record.
- * @param {{ imports: RawElement[], exports: RawElement[] }} raw
+ * @param {{ imports: RawElement[], exports: RawElement[], importSettings?: RawElement[], moduleSettings?: RawElement[] }} raw
  * @param {string} [url]
  * @returns {ModuleRecord}
  */
-export function recordFromRaw({ imports, exports }, url = '') {
+export function recordFromRaw({ imports, exports, importSettings: iset = [], moduleSettings: mset = [] }, url = '') {
   const where = url ? ` in ${url}` : '';
-  const record = { url, imports: imports.map((i) => importRecord(i, url)), exports: [] };
+  const iel = settingsElement(iset, imports, 'html-import', where);
+  const mel = settingsElement(mset, exports, 'html-export', where);
+  const importSettings = iel ? readImportSettings(iel.attrs, where) : null;
+  const moduleSettings = mel ? readModuleSettings(mel.attrs, where) : null;
+  const record = {
+    url,
+    imports: imports.map((i) => importRecord(i, url)),
+    exports: [],
+    ...(importSettings && { importSettings }),
+    ...(moduleSettings && { moduleSettings }),
+  };
+  for (const i of record.imports) {
+    const load = i.load ?? importSettings?.load ?? IMPORT_DEFAULTS.load;
+    if (load === 'lazy' && i.bindings.some((b) => b.adopt)) {
+      throw new SyntaxError(`<html-import src="${i.src}"> is lazy but adopts a stylesheet${where}: a module's components need their stylesheets when they render, so write load="eager" on this import`);
+    }
+  }
   const names = new Set();
   let firstDefault = null;
   for (const raw of exports) {
-    const e = exportRecord(raw, where);
+    const e = exportRecord(raw, where, moduleSettings ?? undefined);
     if (e.name) {
       if (names.has(e.name)) throw new SyntaxError(`Duplicate export "${e.name}"${where}`);
       names.add(e.name);
@@ -185,10 +242,11 @@ export function recordFromRaw({ imports, exports }, url = '') {
   return record;
 }
 
-function rawOf(el) {
+function rawOf(el, order) {
   const attrs = (node) => Object.fromEntries([...node.attributes].map((a) => [a.name, a.value]));
   return {
     tag: el.localName,
+    order,
     attrs: attrs(el),
     children: [...el.children].map((c) => ({
       tag: c.localName,
@@ -207,8 +265,8 @@ function rawOf(el) {
  * @returns {ModuleRecord}
  */
 export function readHTMLModule(doc, url = '') {
-  return recordFromRaw({
-    imports: [...doc.querySelectorAll('html-import')].map(rawOf),
-    exports: [...doc.querySelectorAll('html-export')].map(rawOf),
-  }, url);
+  const raw = { imports: [], exports: [], importSettings: [], moduleSettings: [] };
+  const into = { 'html-import': raw.imports, 'html-export': raw.exports, 'html-import-settings': raw.importSettings, 'html-module-settings': raw.moduleSettings };
+  [...doc.querySelectorAll(Object.keys(into).join(', '))].forEach((el, order) => into[el.localName].push(rawOf(el, order)));
+  return recordFromRaw(raw, url);
 }

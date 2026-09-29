@@ -12,11 +12,18 @@
  * format adds a call that registers every component on import.
  *
  * Dependencies (`<html-import>` and `<html-export src>`) become static imports
- * with ".html" rewritten to ".js", so compile them too.
+ * with ".html" rewritten to ".js", so compile them too. A module's
+ * `<html-import-settings base>` is applied to those specifiers first.
+ *
+ * Settings: `<html-module-settings>` defaults are already part of each
+ * component record; `<html-import-settings>` options reach the `$imports`
+ * entries (delimiter, conflict, errors, and `load` for fidelity: compiled
+ * dependencies are static imports, so registration is always eager).
  */
 import { scanHTMLModule } from './scan.js';
-import { readHTMLModule } from './record.js';
+import { moduleImportOptions, readHTMLModule } from './record.js';
 import { DELIMITER, assertDelimiter, assertNamespace, bindingName, camelCase } from './names.js';
+import { assertOption } from './settings.js';
 
 const str = (v) => JSON.stringify(v);
 
@@ -24,6 +31,31 @@ const str = (v) => JSON.stringify(v);
 export const rewriteSpecifier = (src) => src.replace(/\.html?(?=[?#]|$)/i, '.js');
 
 const basename = (url) => String(url).split(/[\\/]/).pop();
+
+const URL_LIKE = /^(?:\.{0,2}\/)/;
+const DUMMY = 'http://html-modules.invalid/r/0/1/2/3/4/5/6/7/8/9/';
+
+/**
+ * Apply a module's `<html-import-settings base>` to one of its dependency
+ * specifiers, keeping it relative where it can: ("./card.html", "./vendor/ui@1/")
+ * → "./vendor/ui@1/card.html"; ("./card.html", "../lib/") → "../lib/card.html";
+ * with an absolute base, the absolute URL. Bare and absolute specifiers are
+ * left alone, as the runtime leaves them.
+ */
+export function rebaseSpecifier(src, base) {
+  if (!base || !URL_LIKE.test(src)) return src;
+  const module = new URL('module.html', DUMMY);
+  const target = new URL(src, new URL(base, module));
+  if (target.origin !== module.origin) return target.href;
+  const tail = target.search + target.hash;
+  if (src.startsWith('/') || base.startsWith('/')) return target.pathname + tail;
+  const from = module.pathname.split('/').slice(1, -1);
+  const to = target.pathname.split('/').slice(1);
+  let common = 0;
+  while (common < from.length && common < to.length - 1 && from[common] === to[common]) common++;
+  const rel = [...Array(from.length - common).fill('..'), ...to.slice(common)].join('/');
+  return (rel.startsWith('../') ? rel : `./${rel}`) + tail;
+}
 
 /**
  * @param {string} source HTML module source
@@ -33,6 +65,7 @@ const basename = (url) => String(url).split(/[\\/]/).pop();
  * @param {'esm'|'register'} [options.format]
  * @param {string} [options.as]             register format: namespace to register under (default: the export names)
  * @param {string} [options.delimiter]      register format: namespace delimiter (default "--"), e.g. "-" for <ui-card>
+ * @param {'error'|'reuse'} [options.conflict]  register format: keep tags that are already defined instead of throwing
  * @param {(src: string) => string} [options.rewrite]   dependency specifier rewrite (default ".html" → ".js")
  * @param {(html: string, url: string) => Document} [options.parse]  use a DOM parser instead of the built-in scanner
  * @returns {string} JavaScript module source
@@ -46,10 +79,13 @@ export function compileHTMLModule(source, { url = 'module.html', parse, ...optio
  * Generate an ES module from a module record.
  * @param {import('./record.js').ModuleRecord} record
  */
-export function compileRecord(record, { runtime = 'html-modules/runtime', format = 'esm', as, delimiter = DELIMITER, rewrite = rewriteSpecifier } = {}) {
+export function compileRecord(record, { runtime = 'html-modules/runtime', format = 'esm', as, delimiter = DELIMITER, conflict = 'error', rewrite = rewriteSpecifier } = {}) {
   if (format !== 'esm' && format !== 'register') throw new TypeError(`Unknown format "${format}": use "esm" or "register"`);
   if (as != null) assertNamespace(as);
   assertDelimiter(delimiter);
+  assertOption('conflict', conflict);
+  const base = record.importSettings?.base;
+  const specifier = (src) => rewrite(rebaseSpecifier(src, base));
   if (format === 'register' && as != null) {
     // Check the tags this module's own components will get now, rather than on import.
     for (const e of record.exports) if (e.kind === 'component' && e.name) bindingName(as, e.name, delimiter);
@@ -70,7 +106,10 @@ export function compileRecord(record, { runtime = 'html-modules/runtime', format
   let defaultLocal = null;
 
   if (record.imports.length) {
-    const items = record.imports.map((i) => `  { module: ${dep(i.src)}, from: ${str(i.src)}${i.as ? `, as: ${str(i.as)}` : ''}${i.delimiter !== undefined ? `, delimiter: ${str(i.delimiter)}` : ''}, bindings: ${str(i.bindings)} }`);
+    const items = record.imports.map((i) => {
+      const options = Object.entries(moduleImportOptions(record, i)).map(([k, v]) => `, ${k}: ${str(v)}`).join('');
+      return `  { module: ${dep(i.src)}, from: ${str(i.src)}${i.as ? `, as: ${str(i.as)}` : ''}${options}, bindings: ${str(i.bindings)} }`;
+    });
     body.push(`const $imports = [\n${items.join(',\n')},\n];`);
   }
   const imports = record.imports.length ? '$imports' : '[]';
@@ -94,7 +133,7 @@ export function compileRecord(record, { runtime = 'html-modules/runtime', format
       case 'reexport':
         if (!e.name) {
           stars.push(`[${dep(e.src)}, ${str(e.src)}]`);
-          starLines.push(`export * from ${str(rewrite(e.src))};`);
+          starLines.push(`export * from ${str(specifier(e.src))};`);
           continue;
         }
         helpers.add('lookupExport');
@@ -114,14 +153,19 @@ export function compileRecord(record, { runtime = 'html-modules/runtime', format
   exported.push(['$components', 'components']);
   if (format === 'register') {
     helpers.add('registerComponents');
-    const opts = [...(as != null ? [`as: ${str(as)}`] : []), ...(as != null && delimiter !== DELIMITER ? [`delimiter: ${str(delimiter)}`] : []), 'from: import.meta.url'];
+    const opts = [
+      ...(as != null ? [`as: ${str(as)}`] : []),
+      ...(as != null && delimiter !== DELIMITER ? [`delimiter: ${str(delimiter)}`] : []),
+      ...(conflict !== 'error' ? [`conflict: ${str(conflict)}`] : []),
+      'from: import.meta.url',
+    ];
     body.push(`registerComponents({ components: $components }, { ${opts.join(', ')} });`);
   }
 
   const out = [
     `// Compiled from ${basename(record.url || 'module.html')} by html-module. Do not edit; recompile instead.`,
     `import { ${[...helpers].sort().join(', ')} } from ${str(runtime)};`,
-    ...[...deps].map(([src, id]) => `import * as ${id} from ${str(rewrite(src))};`),
+    ...[...deps].map(([src, id]) => `import * as ${id} from ${str(specifier(src))};`),
     ...starLines,
     '',
     ...body,

@@ -5,7 +5,8 @@
  *   <html-import src="./ui.html" as="ui"></html-import>
  *   <ui--custom-card>Hello!</ui--custom-card>
  *
- * Defines <html-import>, <html-binding> and <html-export>, and exposes the
+ * Defines <html-import>, <html-binding>, <html-export>, <html-import-settings>
+ * and <html-module-settings>, and exposes the
  * shared programmatic API as `HTMLModules` (also on globalThis). Bare
  * specifiers resolve through the page's import map (import.meta.resolve).
  */
@@ -15,5 +16,7 @@ import { defineHTMLModuleElements } from './elements.js';
 export const HTMLModules = createHTMLModules({
   hostResolve: (specifier) => import.meta.resolve(specifier),
 });
-export const { HTMLImport, HTMLBinding, HTMLExport } = defineHTMLModuleElements({ modules: HTMLModules });
+export const {
+  HTMLImport, HTMLBinding, HTMLExport, HTMLImportSettings, HTMLModuleSettings,
+} = defineHTMLModuleElements({ modules: HTMLModules });
 globalThis.HTMLModules ??= HTMLModules;

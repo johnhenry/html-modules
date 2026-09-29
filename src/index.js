@@ -8,9 +8,13 @@ export {
   DELIMITER, bindingName, parseBindingName, camelCase, kebabCase, isKebabName, isValidElementName, isValidDelimiter,
   elementNameProblem,
 } from './names.js';
-export { readHTMLModule, recordFromRaw } from './record.js';
+export { readHTMLModule, recordFromRaw, moduleImportOptions } from './record.js';
+export {
+  IMPORT_DEFAULTS, EXPORT_DEFAULTS, readImportSettings, readModuleSettings, readImportOptions, resolveImportOptions,
+} from './settings.js';
+export { lazyTargets, watchLazy, componentRoot } from './lazy.js';
 export { scanHTMLModule } from './scan.js';
 export { createLoader, linkHTMLModule, createNamespace } from './loader.js';
 export { createHTMLModules } from './html-modules.js';
 export { defineHTMLModuleElements } from './elements.js';
-export { compileHTMLModule, compileRecord, rewriteSpecifier } from './compiler.js';
+export { compileHTMLModule, compileRecord, rewriteSpecifier, rebaseSpecifier } from './compiler.js';

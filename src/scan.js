@@ -12,6 +12,7 @@ import { recordFromRaw } from './record.js';
 const VOID = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr', 'keygen']);
 const RAW_TEXT = new Set(['script', 'style', 'textarea', 'title', 'xmp', 'iframe', 'noembed', 'noframes']);
 const COLLECT = new Set(['html-export', 'html-import']);
+const SETTINGS = { 'html-import-settings': 'importSettings', 'html-module-settings': 'moduleSettings' };
 const ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
 
 const decode = (s) => s.replace(/&(#x[0-9a-f]+|#[0-9]+|[a-z]+);/gi, (m, e) => {
@@ -64,11 +65,13 @@ function readAttributes(src, i) {
 }
 
 /**
- * Scan HTML source into raw `<html-export>` / `<html-import>` elements.
+ * Scan HTML source into raw `<html-export>` / `<html-import>` elements, and the
+ * settings elements `<html-import-settings>` / `<html-module-settings>`.
  * @param {string} src
  */
 export function scanRawElements(src) {
-  const out = { imports: [], exports: [] };
+  const out = { imports: [], exports: [], importSettings: [], moduleSettings: [] };
+  let order = 0; // document order of the collected elements, for placement rules
   const stack = []; // open elements outside templates
   let collecting = null; // { raw, depth }
   let template = null; // { depth, start, child }
@@ -134,8 +137,13 @@ export function scanRawElements(src) {
       template = { depth: 1, start: i, child };
       continue;
     }
+    if (Object.hasOwn(SETTINGS, tag)) {
+      // Recorded wherever they appear (as a DOM's querySelectorAll would find them);
+      // they collect no children of their own.
+      out[SETTINGS[tag]].push({ tag, order: order++, attrs, children: [] });
+    }
     if (COLLECT.has(tag) && !collecting) {
-      const raw = { tag, attrs, children: [] };
+      const raw = { tag, order: order++, attrs, children: [] };
       (tag === 'html-export' ? out.exports : out.imports).push(raw);
       stack.push(tag);
       collecting = { raw, depth: stack.length };

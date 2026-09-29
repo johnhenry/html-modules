@@ -12,7 +12,7 @@
  *   specifiers go to `hostResolve` (in browsers, `import.meta.resolve`, which
  *   applies the page's own import map). No other routing happens here.
  */
-import { readHTMLModule } from './record.js';
+import { moduleImportOptions, readHTMLModule } from './record.js';
 import {
   defineHTMLComponent, defineHTMLStylesheet, lookupExport, manifest,
 } from './runtime.js';
@@ -25,14 +25,20 @@ const URL_LIKE = /^(?:\.{0,2}\/)/;
  * Build a module namespace from a record and its loaded dependencies. The
  * shape matches a compiled module: camelCase named exports, `default`, and a
  * `components` manifest keyed by export name.
+ * Each import carries the options it is bound with (its attributes, then the
+ * module's <html-import-settings>). A lazy import that was not loaded gets a
+ * `lazy` loader from `options.lazy(src, type)` instead of a `module`.
  * @param {import('./record.js').ModuleRecord} record
  * @param {Map<string, object>} modules src (as written) → loaded namespace
+ * @param {{ lazy?: (src: string, type?: string) => () => Promise<object> }} [options]
  */
-export function linkHTMLModule(record, modules) {
+export function linkHTMLModule(record, modules, { lazy } = {}) {
   const { url } = record;
-  const imports = record.imports.map((i) => ({
-    module: modules.get(i.src), from: i.src, ...(i.as && { as: i.as }), ...(i.delimiter !== undefined && { delimiter: i.delimiter }), bindings: i.bindings,
-  }));
+  const imports = record.imports.map((i) => {
+    const entry = { module: modules.get(i.src), from: i.src, ...(i.as && { as: i.as }), ...moduleImportOptions(record, i), bindings: i.bindings };
+    if (entry.module === undefined && entry.load === 'lazy' && lazy) entry.lazy = lazy(i.src, i.type);
+    return entry;
+  });
   const named = new Map();
   const manifestLocals = {};
   const stars = [];
@@ -154,8 +160,8 @@ export function createLoader({
     return null;
   }
 
-  async function loadDependency(importer, src, type) {
-    const url = resolve(src, importer);
+  async function loadDependency(importer, src, type, referrer = importer) {
+    const url = resolve(src, referrer);
     const cycle = waitPath(url, importer);
     if (cycle) throw new Error(`Circular HTML module dependency: ${[importer, ...cycle].join(' -> ')}`);
     if (!waitsFor.has(importer)) waitsFor.set(importer, new Set());
@@ -173,11 +179,13 @@ export function createLoader({
     const res = await fetchImpl(url);
     if (!res.ok) throw new Error(`Failed to fetch HTML module ${url}: ${res.status}`);
     const record = readHTMLModule(parse(await res.text(), url), url);
+    // The module's <html-import-settings base> is resolved against the module's own URL.
+    const referrer = record.importSettings?.base ? new URL(record.importSettings.base, url).href : url;
     const wanted = new Map();
-    for (const i of record.imports) wanted.set(i.src, i.type);
+    for (const i of record.imports) if (moduleImportOptions(record, i).load !== 'lazy') wanted.set(i.src, i.type);
     for (const e of record.exports) if (e.kind === 'reexport' && !wanted.has(e.src)) wanted.set(e.src, undefined);
-    const modules = new Map(await Promise.all([...wanted].map(async ([src, type]) => [src, await loadDependency(url, src, type)])));
-    return linkHTMLModule(record, modules);
+    const modules = new Map(await Promise.all([...wanted].map(async ([src, type]) => [src, await loadDependency(url, src, type, referrer)])));
+    return linkHTMLModule(record, modules, { lazy: (src, type) => () => loadDependency(url, src, type, referrer) });
   }
 
   function start(url, type) {
@@ -206,5 +214,5 @@ export function createLoader({
     return start(resolve(specifier, referrer || baseURL), type);
   }
 
-  return { load, resolve, cache };
+  return { load, resolve, cache, baseURL };
 }

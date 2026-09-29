@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Supersede an in-flight run when new commits land on the same ref -- the
+# whole family shares this block so a rapid push sequence never queues N
+# redundant runs.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # engines.node >=26.0.0 -- test the floor version directly rather
+        # than a matrix of now-unsupported older majors.
+        node-version: [26]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - run: npm ci
+      # Every source file parses and the public entry points import.
+      - run: npm run check
+      # Includes test/examples.test.js, which is the drift gate for the
+      # committed examples/compiled/ output (see the comment below).
+      - run: npm test
+      - name: Examples smoke test
+        run: npm run examples
+      - name: Pack list
+        run: npm pack --dry-run
+
+  # No separate generated-<what> job: examples/compiled/ is generated
+  # (npm run examples:compile) and committed, but it does NOT ship (files is
+  # src + bin), and "examples/compiled/ is up to date" in
+  # test/examples.test.js already fails npm test when it drifts.

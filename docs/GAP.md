@@ -118,6 +118,38 @@ display helper that returns `null` for a tag that does not split exactly one way
 import's `delimiter` when it is written, so the DOM reader and the scanner agree; inside modules an import without
 one uses `--`, never the page's instance default, so a module's templates always match the tags they get.
 
+## Extension beyond the PRD: settings elements and lazy loading
+
+The PRD fixes the delimiter at `--` (§12) and has no settings element: every import is configured on its own
+element, and every module loads when its import connects. Two elements now set defaults for one document, and
+imports can load lazily.
+
+| Addition | What it does |
+| --- | --- |
+| `<html-import-settings delimiter base conflict load errors>` | defaults for the `<html-import>` elements of the document it is in: a page, or (read into the module record by both the DOM reader and the scanner) an HTML module |
+| `<html-module-settings shadow delegates-focus>` | defaults for the component exports of the module it is in; baked into each component record, so runtime and compiled definitions agree |
+| `conflict="reuse"` | keep a tag's existing, different definition instead of failing; recorded as `reused: true` in `el.tags` |
+| `errors="throw"` | also `reportError()` binding and loading failures, for development |
+| `base` | resolve a document's import (and re-export) specifiers against a folder, relative to the document's (or module's) own URL; the compiler rebases dependency specifiers the same way |
+| `load="lazy"` | fetch a module only when one of its tags is used, watching the document and html-modules component shadow roots; `el.load()`, `el.state`, module-level lazy imports, `HTMLModules.import(src, { load: 'lazy' })` handles |
+
+Rules, in brief (the README has them in full):
+
+- **Scope is lexical.** A page's settings apply to that page's `<html-import>` elements, a module's to that module's
+  own imports and exports. Page settings and `createHTMLModules()` options never reach modules: as with the
+  delimiter rule above, a module's templates must keep matching the tags its author wrote.
+- **Placement.** Before any `<html-import>` (or `<html-export>`), at most one per document. Late or duplicate
+  settings are errors; in a page they are ignored and never retroactively change started imports; in a module they
+  are `SyntaxError`s.
+- **Precedence.** Per-import attribute > the document's `<html-import-settings>` > `createHTMLModules()` options
+  (pages only) > built-in defaults. `base` is document-level only.
+- **Validation.** Unknown attributes (other than `id`, `class`, `data-*`) and bad values are errors that list the
+  valid values. Invalid page settings fail that page's imports, rather than letting them run with other options.
+- **`<html-module-settings>` in a page** is an error event, not a silent no-op: a page has no exports.
+- **Lazy loading is a runtime concern.** Compiled dependencies are static imports, so compiled registration is
+  eager; `load` is carried in `$imports` for fidelity only. What lazy loading does not observe (shadow roots made by
+  other code, iframes, template contents) is documented; `el.load()` covers those cases.
+
 ## Default export spellings
 
 The PRD does not specify how a default export is written. The first implementation used a boolean `default`

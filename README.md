@@ -46,6 +46,8 @@ This implements the PRD *Declarative HTML Modules*. [`docs/GAP.md`](docs/GAP.md)
 - [Namespaces and delimiters](#namespaces-and-delimiters)
 - [Selective imports: `<html-binding>`](#selective-imports-html-binding)
 - [Identity vs registration name](#identity-vs-registration-name)
+- [Settings](#settings)
+- [Lazy loading](#lazy-loading)
 - [JavaScript API](#javascript-api)
 - [JavaScript-authored components](#javascript-authored-components)
 - [The compiler](#the-compiler)
@@ -130,7 +132,8 @@ The tag is `<as><delimiter><export>`, and the delimiter is `--` unless you choos
 
 **Asynchronous upgrade.** Elements may appear before, or long after, the import that defines them. Until then
 they are ordinary unknown elements (style them with `:not(:defined)`); when the module arrives, the browser
-upgrades them in place. No `MutationObserver` is involved.
+upgrades them in place. No `MutationObserver` is involved (except for [lazy imports](#lazy-loading), which watch
+for their first element).
 
 The same module can be imported under several namespaces (`as="shop"`, `as="admin"`); it is fetched and parsed
 once. An import with no `as` and no bindings only loads the module, for its side effects or to warm the cache.
@@ -139,22 +142,29 @@ once. An import with no `as` and no bindings only loads the module, for its side
 
 | | |
 | --- | --- |
-| `src` | module URL: relative to the document, absolute, or a bare specifier resolved through the page's import map |
+| `src` | module URL: relative to the document (or its [`base`](#settings)), absolute, or a bare specifier resolved through the page's import map |
 | `as` | namespace |
-| `delimiter` | namespace delimiter for this import (default: the instance's, normally `--`) |
+| `delimiter` | namespace delimiter for this import (default `--`; see [Settings](#settings) for the precedence) |
+| `conflict` | `error` (default) or `reuse`: what to do when a tag is already defined by something else |
+| `load` | `eager` (default) or `lazy`: fetch only when one of its tags is used ([Lazy loading](#lazy-loading)) |
+| `errors` | `event` (default) or `throw`: also `reportError()` failures |
 | `type` | `html` or `js`, to override detection by extension (`.html`/`.htm` are HTML; anything else is JS) |
-| `el.module` | Promise of the module namespace |
-| `el.ready` | Promise of `{ module, elements, bindings }` once bound; rejects on failure |
+| `el.module` | Promise of the module namespace (a lazy import waits rather than loading) |
+| `el.ready` | Promise of `{ module, elements, bindings, tags }` once bound; rejects on failure |
+| `el.load()` | load now, even a lazy import none of whose tags is in use; returns `el.ready` |
+| `el.state` | `idle`, `waiting` (lazy, watching for its tags), `loading`, `loaded` or `error` |
 | `el.elements` | tags registered so far → classes |
 | `el.bindings` | bound export names → values (components, stylesheets, data) |
-| `el.tags` | registered tags → `{ tag, namespace, export }` (`namespace` is `null` for `element=`) |
+| `el.tags` | registered tags → `{ tag, namespace, export }` (`namespace` is `null` for `element=`; `reused: true` when `conflict="reuse"` kept an existing definition) |
+| `el.settings` | the options in use: `{ delimiter, conflict, load, errors, base }` |
 | `el.delimiter` | the delimiter in use |
 | `load` / `error` events | on the import; `error` has `detail.error` and bubbles |
 
 ## Namespaces and delimiters
 
 A namespace import registers each component as `<namespace><delimiter><export>`. The delimiter is `--` by default,
-and can be changed per import, per call, or for a whole `HTMLModules` instance:
+and can be changed per import, for a whole document (`<html-import-settings delimiter="-">`, see
+[Settings](#settings)), per call, or for a whole `HTMLModules` instance:
 
 ```html
 <html-import src="./ui.html" as="ui"></html-import>                  <!-- <ui--custom-card> -->
@@ -186,9 +196,10 @@ are rejected. What changes:
   usual way: an `error` event on the import or binding, or a rejection. A namespace import checks every tag before
   registering any. Two-word exports (`ui.custom-card`) work.
 
-**Inside modules**, an `<html-import>` uses `--` unless it has its own `delimiter`; the page's instance default
-does not apply there, so a module's templates always know the tags they were written with. The delimiter is part
-of the module record, so the DOM reader and the compiler's scanner agree on it.
+**Inside modules**, an `<html-import>` uses `--` unless it (or the module's own `<html-import-settings>`) says
+otherwise; the page's settings and the instance default do not apply there, so a module's templates always know the
+tags they were written with. The delimiter is part of the module record, so the DOM reader and the compiler's
+scanner agree on it.
 
 `parseBindingName(tag, delimiter = '--')` remains as a display helper: it returns `{ namespace, name }` when a tag
 splits into two kebab names exactly one way, and `null` otherwise (for example `ui-custom-card` with `-`).
@@ -238,6 +249,130 @@ customElements.define('fancy-card', class extends ui.card.element { /* behaviour
 Defining the same definition under the same tag again is a no-op; defining a *different* component under a
 taken tag throws.
 
+## Settings
+
+Two optional elements set defaults for one document. They are an extension beyond the PRD (which fixes `--` and
+has no settings element); see [`docs/GAP.md`](docs/GAP.md#extension-beyond-the-prd-settings-elements-and-lazy-loading).
+
+```html
+<html-import-settings delimiter="-" base="./vendor/ui@2/" conflict="reuse" load="lazy" errors="throw"></html-import-settings>
+
+<html-import src="./kit.html" as="ui"></html-import>          <!-- ./vendor/ui@2/kit.html, <ui-button>, lazy, … -->
+<html-import src="./icons.html" as="icon" load="eager"></html-import>   <!-- an attribute overrides the settings -->
+```
+
+```html
+<!-- inside an HTML module -->
+<html-module-settings shadow="closed" delegates-focus></html-module-settings>
+<html-export name="safe"><template>…</template></html-export>                           <!-- closed, delegates focus -->
+<html-export name="glass" shadow="open" delegates-focus="false"><template>…</template></html-export>
+```
+
+### `<html-import-settings>`
+
+Defaults for the `<html-import>` elements of the document it appears in. Every attribute is optional:
+
+| Attribute | Values | Meaning |
+| --- | --- | --- |
+| `delimiter` | a delimiter (default `--`) | as on `<html-import>` |
+| `base` | a URL | a base URL for resolving every `<html-import src>` (and `<html-export src>` re-exports, in a module) in this document, like `<base href>` but only for HTML imports. It is resolved against the document's own URL (a module's URL, inside a module), not against `<base href>`, and changes nothing else: links, images and the JavaScript API are unaffected. Bare specifiers still go to the import map. Give a folder a trailing slash (`./vendor/ui@2/`) |
+| `conflict` | `error` (default), `reuse` | when a tag this import wants is already defined by a *different* definition: `error` is an error event / rejection naming the tag and who defined it; `reuse` keeps the existing definition, records the binding as `{ tag, namespace, export, reused: true }` and does not fail. The same definition under the same tag again is always a no-op |
+| `load` | `eager` (default), `lazy` | see [Lazy loading](#lazy-loading) |
+| `errors` | `event` (default), `throw` | with `throw`, binding and loading failures are also passed to `reportError()` (so they show in the console and `window.onerror`), in addition to the `error` events and rejections. For development |
+
+`id`, `class` and `data-*` attributes are allowed; any other attribute, and any bad value, is an error whose message
+lists the valid values.
+
+### `<html-module-settings>`
+
+Only meaningful inside an HTML module. It sets the defaults of the module's component exports:
+
+| Attribute | Values | Meaning |
+| --- | --- | --- |
+| `shadow` | `open` (default), `closed` | the default shadow root mode |
+| `delegates-focus` | boolean: present, `"true"` or `"false"` | the default `delegatesFocus` |
+
+An export's own `shadow` and `delegates-focus` attributes override them (`delegates-focus="false"` turns a default
+off). The defaults become part of each component definition, so runtime-loaded and compiled modules agree.
+In a page, `<html-module-settings>` has nothing to configure: it is an error (an `error` event on the element, and
+`reportError()` under `errors: 'throw'`), not silently ignored.
+
+### Rules
+
+- **Scope is lexical.** A page's `<html-import-settings>` applies only to that page's `<html-import>` elements. A
+  module's settings apply only to that module's own imports and exports. Page settings never leak into modules,
+  and neither do the instance options, so a module's templates keep matching the tags its author wrote (a module
+  without settings uses `--`, eager, and so on). `<html-import>` elements inside shadow roots use their
+  `ownerDocument`'s settings.
+- **Placement.** A settings element must come before every `<html-import>` (for `<html-import-settings>`) or
+  `<html-export>` (for `<html-module-settings>`) in its document, and there is at most one of each. In a page, a
+  late or second one is an `error` event on that element and is ignored; it never retroactively changes imports that
+  have started (a document's settings are read when its first import starts). In a module, the same mistakes are
+  `SyntaxError`s when the module loads or compiles.
+- **Invalid values.** In a page, an `<html-import-settings>` with an unknown attribute or a bad value fires `error`
+  on itself, and every import of the document fails with the same error (rather than silently using other
+  options). In a module, it is a `SyntaxError`.
+- **Per-import overrides.** `delimiter`, `conflict`, `load` and `errors` can also be set on an individual
+  `<html-import>`. `base` is document-level only: `<html-import base>` is an error.
+- **Precedence**, for each option:
+
+  | | Pages | Inside modules |
+  | --- | --- | --- |
+  | 1 | the `<html-import>` attribute | the `<html-import>` attribute |
+  | 2 | the document's `<html-import-settings>` | the module's `<html-import-settings>` |
+  | 3 | `createHTMLModules({ delimiter, base, conflict, load, errors })` | (never) |
+  | 4 | built-in defaults: `--`, no base, `error`, `eager`, `event` | built-in defaults |
+
+  The JavaScript API (`HTMLModules.import()`, `bind()`) is not in any document: its call options override the
+  instance options, and document settings do not apply to it. The instance `load` option applies to
+  `<html-import>` elements only; `import()` is lazy only when the call says `load: 'lazy'`.
+
+## Lazy loading
+
+With `load="lazy"` (on an import, or for a document in `<html-import-settings>`), nothing is fetched until one of
+the import's tags is actually used. Then the module loads, its tags are registered, and the waiting elements
+upgrade in place.
+
+```html
+<html-import-settings load="lazy"></html-import-settings>
+<html-import src="./ui.html" as="ui"></html-import>                  <!-- fetched when the first <ui--…> appears -->
+<html-import src="./tip.html">                                     <!-- fetched when a <my-tip> appears -->
+  <html-binding export="default" element="my-tip"></html-binding>
+</html-import>
+```
+
+- **What it waits for.** A namespace import waits for any tag starting with `<as><delimiter>` (its export names are
+  not known before loading, so the prefix is matched; with `delimiter="-"`, `ui-` also matches `ui-kit-card`). With
+  `<html-binding>` children it waits for exactly the tags they bind (`element=`, or `<as><delimiter><export>`).
+  An import with nothing to wait for (no `as`, no element bindings) loads only when `el.load()` is called.
+- **Where it looks.** One `MutationObserver` per window on the document (plus a scan of what is already there when
+  the import connects, so elements already in the page load it straight away), and every shadow root created by an
+  html-modules component, open or closed: the runtime reports each instance's shadow root as it stamps it, so a
+  component whose template uses a lazily imported tag triggers the load. The observer runs only while some lazy
+  import is waiting.
+- **What it does not see.** Shadow roots created by other code (a JS component's own `attachShadow()`), other
+  documents (iframes), and `<template>` contents until they are cloned into a watched tree. Use `el.load()` for
+  those.
+- **API.** `el.ready` resolves when the module has been loaded and bound; `el.load()` forces loading;
+  `el.module` waits (it does not load); `el.state` is `waiting` until then; `load` and `error` fire as usual.
+  Disconnecting a lazy import before it loads cancels the watching (`state` becomes `idle`); reconnecting resumes
+  it.
+- **In modules.** A module's own lazy import (`<html-import-settings load="lazy">` or `load="lazy"` on the
+  import) is not fetched with the module; it loads when one of its tags first appears (typically in one of the
+  module's components' shadow roots). A failure fires `error` (bubbling, composed) on the element that used the
+  tag. A lazy module import cannot `adopt` a stylesheet (the components need it when they render): that is a
+  `SyntaxError`; write `load="eager"` on that import.
+- **JavaScript.** `HTMLModules.import(src, { as, load: 'lazy' })` returns a handle right away instead of a promise:
+  `{ ready, load(), cancel(), state }`.
+
+  ```js
+  const ui = HTMLModules.import('./ui.html', { as: 'ui', load: 'lazy' });
+  ui.state;           // "waiting": nothing fetched
+  await ui.ready;     // resolves once a <ui--…> appears, or after ui.load()
+  ```
+- **The compiler does not lazy-load.** Compiled dependencies are static `import`s, so `load` is a runtime concern:
+  compiled output carries it in `$imports` for fidelity, but registration is eager.
+
 ## JavaScript API
 
 `src/browser.js` defines the elements and exposes the shared instance as `HTMLModules` (exported, and on
@@ -251,6 +386,8 @@ const ui = await HTMLModules.load('./ui.html');
 
 await HTMLModules.import('./ui.html', { as: 'ui' });                                    // = <html-import as="ui">
 await HTMLModules.import('./ui.html', { as: 'ui', delimiter: '-' });                    // = <html-import as="ui" delimiter="-">
+await HTMLModules.import('./ui.html', { as: 'ui', conflict: 'reuse', errors: 'throw' });
+const lazy = HTMLModules.import('./ui.html', { as: 'ui', load: 'lazy' });               // a handle: { ready, load(), cancel(), state }
 await HTMLModules.import('./ui.html', { bindings: [{ export: 'card', element: 'x-card' }] });
 HTMLModules.bind(ui, { as: 'admin' });                                                  // bind a loaded module
 HTMLModules.resolve('./ui.html');                                                       // → absolute URL
@@ -281,15 +418,17 @@ card.element;                          // the base class, to extend
 
 | Export | Purpose |
 | --- | --- |
-| `createHTMLModules({ window, registry, delimiter, baseURL, hostResolve, fetch, parseHTML, importModule, onEvent })` | a runtime instance; `delimiter` is its default namespace delimiter (`--`); the hooks serve tests and server-side use. `onEvent` receives `fetch`, `load` and `error` events |
-| `defineHTMLModuleElements({ modules, window, registry })` | define `<html-import>`, `<html-binding>`, `<html-export>` over an instance |
+| `createHTMLModules({ window, registry, delimiter, base, conflict, load, errors, baseURL, hostResolve, fetch, parseHTML, importModule, onEvent })` | a runtime instance; `delimiter`, `base`, `conflict`, `load` and `errors` are its import defaults (below document settings; never inside modules), exposed as `.options` and `.base`; the hooks serve tests and server-side use. `onEvent` receives `fetch`, `load` and `error` events |
+| `defineHTMLModuleElements({ modules, window, registry })` | define `<html-import>`, `<html-binding>`, `<html-export>`, `<html-import-settings>`, `<html-module-settings>` over an instance |
 | `defineHTMLComponent(spec \| Class)`, `HTMLComponent` | component definitions |
 | `defineHTMLStylesheet({ name, css })`, `HTMLStylesheet` | stylesheet exports: `.sheetFor(window)`, `.adopt(root)` |
-| `bindModule(ns, { as, delimiter, bindings, root })` → `{ elements, values, tags }`, `applyBinding`, `registerComponents`, `defineElement` | binding and registration |
+| `bindModule(ns, { as, delimiter, bindings, root, conflict })` → `{ elements, values, tags }`, `applyBinding`, `registerComponents`, `defineElement` | binding and registration; `conflict: 'reuse'` keeps existing tags |
 | `lookupExport`, `componentsOf`, `manifest`, `adoptStylesheet` | helpers used by the loader and compiled output |
-| `readHTMLModule(doc)`, `scanHTMLModule(source)` | read a module into its JSON record, from a DOM or from text |
+| `readHTMLModule(doc)`, `scanHTMLModule(source)`, `moduleImportOptions(record, import)` | read a module into its JSON record (with `importSettings` / `moduleSettings`), from a DOM or from text |
+| `readImportSettings`, `readModuleSettings`, `readImportOptions`, `resolveImportOptions`, `IMPORT_DEFAULTS`, `EXPORT_DEFAULTS` | the settings vocabulary and its validation |
+| `lazyTargets(spec)`, `watchLazy(window, targets, fire)`, `componentRoot(host)` | lazy loading: the tags an import waits for, the watcher, and the (also closed) shadow root of a component instance |
 | `bindingName(ns, name, delimiter?)`, `parseBindingName(tag, delimiter?)`, `DELIMITER`, `isValidDelimiter`, `isValidElementName`, `elementNameProblem` | the naming rules |
-| `compileHTMLModule`, `compileRecord` | the compiler |
+| `compileHTMLModule`, `compileRecord`, `rebaseSpecifier` | the compiler |
 
 ## JavaScript-authored components
 
@@ -330,6 +469,7 @@ npx html-module ui.html -o dist/ui.js
 npx html-module a.html b.html --runtime ./vendor/html-modules/runtime.js
 npx html-module ui.html --format register --as ui    # → ui.register.js, registers <ui--…> on import
 npx html-module ui.html --format register --as ui --delimiter -    # registers <ui-…>
+npx html-module ui.html --format register --as ui --conflict reuse # keeps tags that are already defined
 npx html-module ui.html --stdout
 ```
 
@@ -358,6 +498,13 @@ export { $x_card as card, $components as components };
   and `name="card" default` → `export default $x_card;` next to the named export.
 - **Dependencies** (`<html-import>`, `<html-export src>`) become static imports with `.html` rewritten to `.js`
   (`rewrite` option), so compile those modules too. Star re-exports become `export * from`.
+- **Settings.** A module's `<html-module-settings>` defaults are part of each component definition. Its
+  `<html-import-settings>` behaves as at runtime: `base` is applied to dependency specifiers before the `.js`
+  rewrite, keeping them relative (`./kit.html` with `base="./vendor/ui@1/"` → `./vendor/ui@1/kit.js`), and
+  `delimiter`, `conflict` and `errors` (plus `load`, for fidelity) are carried into `$imports`, which the runtime
+  binds with. `load="lazy"` does not make compiled code lazy: dependencies are static imports. For the register
+  format, `conflict` (`--conflict reuse`) applies to the module's own registrations; `errors` does not apply there,
+  since a failing registration already throws while the module evaluates.
 - The compiler reads source with a small dependency-free scanner that produces the same module record as the
   browser's DOM reader (tested against every example). Pass `parse` to use a DOM parser instead.
 - Runtime-loaded and compiled modules render identically; the test suite and the compiler example check this.
@@ -367,6 +514,8 @@ export { $x_card as card, $components as components };
 - `src` resolves like a module specifier: relative to the importing document (or, inside a module, the importing
   module), or absolute. Bare specifiers go to `hostResolve`; in the browser that is `import.meta.resolve`, so the
   page's own `<script type="importmap">` applies. Import maps only map URLs; they never parse HTML.
+- A document's `<html-import-settings base>` replaces the document (or module) URL as the base for its relative
+  specifiers; see [Settings](#settings).
 - Modules are cached by resolved URL as promises, so repeated and concurrent imports share one fetch and parse.
   Failed loads are evicted and can be retried.
 - Circular dependencies between HTML modules are rejected with the cycle in the message, whether the modules
@@ -385,7 +534,17 @@ export { $x_card as card, $components as components };
 | Two default exports in one module | `SyntaxError: More than one default export: … and …` | `<html-import>` |
 | Circular dependency | `Error: Circular HTML module dependency: a -> b -> a` | `<html-import>` |
 | JS module with no components imported with `as` | `TypeError` | `<html-import>` |
-| Tag already bound to a different component | `Error: Cannot bind <ui--card>: it is already defined by "card" from …` | `<html-import>` or `<html-binding>` |
+| Tag already bound to a different component (with `conflict="error"`) | `Error: Cannot bind <ui--card>: it is already defined by "card" from … (conflict="reuse" keeps the existing definition instead)` | `<html-import>` or `<html-binding>` |
+| `<html-import-settings>` after an `<html-import>`, or a second one | `SyntaxError: <html-import-settings> must come before any <html-import> …` / `More than one <html-import-settings> …` | the settings element (it is ignored); in a module, `<html-import>` |
+| `<html-module-settings>` after an `<html-export>`, or a second one, in a module | `SyntaxError` naming the rule and the module | `<html-import>` |
+| Unknown attribute or bad value on a settings element | `SyntaxError: Invalid load="soon" on <html-import-settings>: use "eager" or "lazy"`, `Unknown attribute "x" … use "delimiter", "base", …` | the settings element, and every `<html-import>` of that page; in a module, `<html-import>` |
+| Bad `conflict`, `load` or `errors` on an `<html-import>` | `SyntaxError: Invalid conflict="merge" on <html-import>: use "error" or "reuse"` | `<html-import>` |
+| `base` on an `<html-import>` | `SyntaxError: "base" cannot be set on <html-import> …` | `<html-import>` |
+| Bad `delegates-focus` value on an export | `SyntaxError: Invalid delegates-focus="…"` | `<html-import>` |
+| A lazy module import that adopts a stylesheet | `SyntaxError: … is lazy but adopts a stylesheet …` | `<html-import>` |
+| `<html-module-settings>` in a page | `SyntaxError: <html-module-settings> only applies inside an HTML module …` | the element |
+| A module's own lazy import fails | the load error | the element that used its tag (bubbles, composed) |
+| Bad option in `createHTMLModules()` or `HTMLModules.import()` | `SyntaxError` naming the valid values | thrown / rejected |
 | Missing export | `SyntaxError: The requested module '…' does not provide an export named '…'` | `<html-binding>` |
 | Invalid tag in `element=` | `SyntaxError` | `<html-binding>` |
 | Stylesheet or data bound with `element=` | `TypeError: … it is a stylesheet, not a component` | `<html-binding>` |
@@ -407,12 +566,14 @@ listed with reasons in [`docs/GAP.md`](docs/GAP.md#deferred).
 ```
 src/
   names.js         export names, namespaces and delimiters
+  settings.js      the settings vocabulary, validation and precedence
   runtime.js       HTML Component Definitions → custom elements; binding (shared by runtime and compiled code)
   record.js        module records; readHTMLModule() from a DOM
   scan.js          scanHTMLModule() from source text
   loader.js        resolve, fetch, parse, cache, link dependencies
+  lazy.js          lazy loading: what an import waits for, and the watcher
   html-modules.js  createHTMLModules(): load / import / bind
-  elements.js      <html-import>, <html-binding>, <html-export>
+  elements.js      <html-import>, <html-binding>, <html-export>, and the settings elements
   compiler.js      compileHTMLModule()
   browser.js       the one-script bootstrap
 bin/html-module.js the compiler CLI

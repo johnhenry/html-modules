@@ -8,6 +8,9 @@ const OTHER_ORIGIN_PORT = 4174; // the same files on a second origin: a "less-tr
 
 export default defineConfig({
   testDir: 'test/browser',
+  // Generous per-test budget: every wait in the specs is event- or poll-based, so this only matters when a loaded machine
+  // (a shared CI runner, or a laptop running several agents: observed load average 200+) starves a page load for 30s.
+  timeout: 60_000,
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,

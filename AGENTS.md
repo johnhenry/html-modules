@@ -25,7 +25,7 @@ compiler/CLI and the numbered examples, so a green `npm test` does not prove any
    reported by the page as *unsupported* (`renderChecks` takes `'unsupported'`), not as a failure.
 7. A genuinely fresh clone: `git clone . /tmp/html-modules-verifyN && cd $_ && npm ci && npm test && npm run examples`.
 
-CI (`.github/workflows/ci.yml`) runs steps 1-5 in this order on Node 26, plus a `browsers` job (step 6, all three engines). Locally, Node 24 also works (npm prints an
+CI (`.github/workflows/ci.yml`) calls the family's reusable `johnhenry/workflows` `ci.yml@v1` for steps 2-5 (Node 26; `npm ci` is its default install) plus a local `browsers` job (step 6, all three engines). Locally, Node 24 also works (npm prints an
 `EBADENGINE` warning only); the floor is a contract, not an install gate.
 
 ## Repo-specific gotchas
@@ -117,6 +117,19 @@ loader or a bundler, and with no runtime dependencies. See the README's `## Non-
 
 ## Releases
 
-Bump `version` in `package.json` in a PR, add the `CHANGELOG.md` entry, merge, then `gh release create v<version>`:
-the release event triggers `.github/workflows/publish.yml`, which runs the same gate and is idempotent (skips if the
-version is already on npm). It needs a scope-capable `NPM_TOKEN` secret on the repo.
+Bump `version` in `package.json` in a PR, add the `CHANGELOG.md` entry, merge, then `gh release create v<version>`.
+`.github/workflows/publish.yml` calls the shared `johnhenry/workflows` `npm-publish.yml@v1` (install, the full gate
+including the three-engine browser suite, then the `npm view` guard and `npm publish --provenance --access public`). It
+fires on `release: published`, on `push: tags: v*` (a redundant second chance: a release created right after a push can
+drop the release event for a job that is only `uses:`) and on `workflow_dispatch`, which is how to retry. The `npm view`
+guard skips a version already on npm and treats the E404 of a never-published package as "publish it".
+
+First release checklist (nothing has been published yet; `package.json` is `0.0.0`):
+1. The `NPM_TOKEN` repo secret exists and can publish to the `@johnhenry` scope (never put it in a file or a command).
+2. `package.json` `repository.url` is `git+https://github.com/johnhenry/html-modules.git` (provenance checks it against the
+   publishing repo) and `homepage`, `exports`/`types`, `files`, `engines` (>=26) are as shipped; `@johnhenry/safe-fragment` is an
+   optional peer, and its git devDependency is the only non-registry dependency (dev only, not installed by consumers).
+3. Choose the first version (bump from `0.0.0`), add the dated, commit-linked `CHANGELOG.md` entry, merge through green CI.
+4. `npm pack --dry-run` and `npm publish --dry-run`: only `src/`, `types/`, `bin/`, README, LICENSE, CHANGELOG, package.json.
+5. `gh release create v<version>`; watch the Publish run (`gh run watch <id> --exit-status`); then `npm view @johnhenry/html-modules`.
+6. If two runs race on a first publish, one may show a red `403 cannot publish over`; the other published, so check npm first.

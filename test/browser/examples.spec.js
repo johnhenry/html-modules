@@ -14,10 +14,11 @@ for (const page of [{ id: 'index', href: 'index.html' }, ...pages]) {
     p.on('console', (m) => { if (m.type() === 'error') problems.push(`console.error: ${m.text()}`); });
     p.on('requestfailed', (r) => problems.push(`requestfailed: ${r.url()} ${r.failure()?.errorText}`));
     await p.goto(`/examples/${page.href}`, { waitUntil: 'load' });
-    // Pages settle asynchronously (loads, lazy imports, timers): wait until no check is pending, then a beat more.
-    if (reportsChecks(page.href)) await p.waitForSelector('.checks .status', { timeout: 15_000 });
-    await p.waitForFunction(() => !document.querySelector('.checks .status.pending'), null, { timeout: 15_000 });
-    await p.waitForTimeout(300);
+    // Pages settle asynchronously (loads, lazy imports, timers): wait until no check is pending, then until the network
+    // is idle (a late lazy import or fetch would still be in flight), instead of a fixed sleep.
+    if (reportsChecks(page.href)) await p.waitForSelector('.checks .status', { timeout: 30_000 });
+    await p.waitForFunction(() => !document.querySelector('.checks .status.pending'), null, { timeout: 30_000 });
+    await p.waitForLoadState('networkidle');
     const failed = await p.$$eval('.checks .status.fail', (els) => els.map((e) => e.parentElement?.textContent?.trim()));
     expect(failed, 'failed checks').toEqual([]);
     const reported = await p.$$eval('.checks .status.pass, .checks .status.unsupported', (els) => els.length);

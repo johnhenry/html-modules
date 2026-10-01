@@ -46,7 +46,8 @@ test.afterEach(async () => {
 const open = async (page) => {
   await page.goto(url);
   await page.waitForFunction(() => window.__ready && document.getElementById('card')?.shadowRoot?.querySelector('h2'));
-  await page.waitForTimeout(200);
+  // The HMR socket is connected once Vite has registered the client (no fixed sleep).
+  await expect.poll(() => server.ws.clients.size).toBeGreaterThan(0);
 };
 
 test('an edit is applied in place through Vite HMR', async ({ page }) => {

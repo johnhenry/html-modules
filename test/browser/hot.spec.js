@@ -34,7 +34,8 @@ const hot = (page) => page.evaluate(() => new Promise((resolve) => document.addE
 const open = async (page) => {
   await page.goto(dev.url);
   await page.waitForFunction(() => document.getElementById('card')?.shadowRoot?.querySelector('h2'));
-  await page.waitForTimeout(150); // the watcher is armed
+  // The watcher is armed once the page's event stream is registered on the server (no fixed sleep).
+  await expect.poll(() => dev.clients.size).toBe(1);
 };
 
 test('a template and style edit is applied in place: same element, listeners and light DOM; new stamp, new adopted sheet', async ({ page }) => {
@@ -95,8 +96,12 @@ test('elements created after the edit use the new definition, and bindings keep 
 test('a change that cannot be applied in place reloads the page; an unrelated html file is ignored', async ({ page }) => {
   await open(page);
   await page.evaluate(() => { window.__marker = 1; });
+  // An HTML file the page never loaded is announced first, then a style-only edit of the loaded module is applied in
+  // place: the hot event for the second proves the first was processed, and a reload from it would have lost the marker.
   await writeFile(file('other.html'), '<p>not a module this page loaded</p>');
-  await page.waitForTimeout(400);
+  const updated = hot(page);
+  await writeFile(file('c.html'), moduleSource({ css: ':host { color: rgb(0, 0, 255); }' }));
+  expect(await updated).toMatchObject({ reload: false });
   expect(await page.evaluate(() => window.__marker), 'an HTML file the page never loaded does not reload it').toBe(1);
   const reloaded = page.waitForEvent('load');
   await writeFile(file('c.html'), moduleSource({ shadow: 'shadow="closed"' }));

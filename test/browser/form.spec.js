@@ -2,11 +2,16 @@
 // (linkedom has no ElementInternals or <form> association; test/form.test.js covers the logic with a fake.)
 import { test, expect } from '@playwright/test';
 
+// The page has rendered its checks and none is pending: the components are defined and upgraded.
+const settled = async (page) => {
+  await page.waitForSelector('.checks .status');
+  await page.waitForFunction(() => !document.querySelector('.checks .status.pending'));
+};
 const formData = (page) => page.evaluate(() => Object.fromEntries(new FormData(document.getElementById('form'))));
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/examples/forms.html');
-  await page.waitForSelector('.checks .status');
+  await settled(page);
 });
 
 test('typing into the component\'s control reaches FormData; a closed-root component participates', async ({ page }) => {
@@ -38,8 +43,7 @@ test('reset restores defaults, including a typed value', async ({ page }) => {
   await page.locator('#stars').evaluate((el) => el.shadowRoot.querySelector('[data-n="2"]').click());
   expect(await formData(page)).toMatchObject({ who: 'Hopper', rating: '2' });
   await page.getByRole('button', { name: 'Reset' }).click();
-  await page.waitForTimeout(50);
-  expect(await formData(page)).toEqual({ who: 'Ada', pin: '1234' });
+  await expect.poll(() => formData(page)).toEqual({ who: 'Ada', pin: '1234' });
   expect(await page.locator('#who input').inputValue()).toBe('Ada');
 });
 
@@ -49,9 +53,11 @@ test('form state is restored on history navigation (formStateRestoreCallback), w
   await page.locator('#plain').evaluate((el) => { el.value = 'plain-kept'; }); // the control experiment: no html-modules
   await page.goto('/examples/index.html');
   await page.goBack();
-  await page.waitForSelector('.checks .status');
-  await page.waitForTimeout(200);
-  const browserRestores = (await page.locator('#plain').evaluate((el) => el.value)) === 'plain-kept';
+  await settled(page);
+  // Restoration happens after the page is back, at a time the engine picks: give it a bounded, polled window rather than
+  // a fixed sleep. An engine that restores nothing simply runs the window out (2s) and takes the unsupported branch.
+  const browserRestores = await expect.poll(() => page.locator('#plain').evaluate((el) => el.value), { timeout: 2000 }).toBe('plain-kept').then(() => true, () => false);
+  if (browserRestores) await expect.poll(() => formData(page)).toMatchObject({ who: 'Restored', rating: '3', plain: 'plain-kept' });
   const d = await formData(page);
   info.annotations.push({ type: 'state-restore', description: browserRestores ? `restored ${JSON.stringify(d)}` : 'this engine did not restore even a plain form-associated custom element in an automated back navigation' });
   if (browserRestores) {

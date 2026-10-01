@@ -5,47 +5,33 @@ on:
     branches: [main]
   pull_request:
 
-# Supersede an in-flight run when new commits land on the same ref -- the
-# whole family shares this block so a rapid push sequence never queues N
-# redundant runs.
-concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
+  # The family gate (install, checks, tests, examples, types, pack) is the shared reusable workflow. It carries the
+  # concurrency-cancel block itself, and node-versions is the engines floor (26). `npm ci` is the reusable's default
+  # install: the safe-fragment git devDependency is recorded as git+https in package-lock.json, which CI can clone
+  # (npm rewrites it to git+ssh on a local `npm install`; AGENTS.md says to change it back).
   test:
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        # engines.node >=26.0.0 -- test the floor version directly rather
-        # than a matrix of now-unsupported older majors.
-        node-version: [26]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node-version }}
-          cache: npm
-      - run: npm ci
-      # Every source file parses and the public entry points import.
-      - run: npm run check
-      # Includes test/examples.test.js, which is the drift gate for the
-      # committed examples/compiled/ output (see the comment below).
-      - run: npm test
-      # A strict typed consumer of every entry point compiles against the shipped declarations (types/).
-      - name: Type-check a typed usage file
-        run: npm run types:check
-      - name: Examples smoke test
-        run: npm run examples
-      - name: Pack list
-        run: npm pack --dry-run
+    uses: johnhenry/workflows/.github/workflows/ci.yml@v1
+    with:
+      node-versions: '["26"]'
+      os: '["ubuntu-latest"]'
+      gate-commands: |
+        npm run check
+        npm test
+        npm run types:check
+        npm run examples
+        npm pack --dry-run
 
-  # Real browsers: linkedom (the unit-test DOM) has no constructable stylesheets, Trusted Types or custom-element
-  # upgrade semantics inside shadow roots, so rendering, styles, forms and security are proven in Chromium, Firefox
-  # and WebKit against every examples/*.html page and the targeted specs in test/browser/.
+  # Deviation from the shared workflow: real browsers. linkedom (the unit-test DOM) has no constructable stylesheets,
+  # Trusted Types or custom-element upgrade semantics inside shadow roots, so rendering, styles, forms and security are
+  # proven in Chromium, Firefox and WebKit against every examples/*.html page and the targeted specs in test/browser/.
+  # It stays a local job (Playwright browsers, benchmark, trace artifact); it has its own concurrency group because the
+  # reusable workflow's group is named from github.workflow too and a shared name would cancel the called run.
   browsers:
     runs-on: ubuntu-latest
+    concurrency:
+      group: ci-browsers-${{ github.ref }}
+      cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -66,7 +52,6 @@ jobs:
           path: test-results/
           retention-days: 7
 
-  # No separate generated-<what> job: examples/compiled/ is generated
-  # (npm run examples:compile) and committed, but it does NOT ship (files is
-  # src + bin), and "examples/compiled/ is up to date" in
-  # test/examples.test.js already fails npm test when it drifts.
+  # No separate generated-<what> job: examples/compiled/ is generated (npm run examples:compile) and committed, but it
+  # does NOT ship (files is src + bin), and "examples/compiled/ is up to date" in test/examples.test.js already fails
+  # npm test when it drifts, so the reusable workflow's drift-check stays off.

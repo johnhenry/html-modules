@@ -18,6 +18,7 @@ import {
 } from './runtime.js';
 import { camelCase } from './names.js';
 import { checkFetchOptions, parseIntegrity } from './settings.js';
+import { configureWindow, trustedHTML } from './policy.js';
 
 const STRENGTH = { sha256: 0, sha384: 1, sha512: 2 };
 const SUBTLE_NAME = { sha256: 'SHA-256', sha384: 'SHA-384', sha512: 'SHA-512' };
@@ -138,6 +139,8 @@ export function createNamespace(entries) {
  * @param {typeof fetch} [options.fetch]
  * @param {'omit'|'same-origin'|'include'} [options.credentials]  fetch `credentials` for HTML modules (default: the platform's)
  * @param {'cors'|'same-origin'|'no-cors'} [options.mode]          fetch `mode` for HTML modules (default: the platform's)
+ * @param {{ createHTML(html: string): unknown } | false} [options.trustedTypes]  Trusted Types policy for the HTML parsed and stamped in `window` (default: a policy named "html-modules" where `window.trustedTypes` exists; `false`: never)
+ * @param {string} [options.nonce]   CSP nonce for the `<style>` elements used where constructable stylesheets are unavailable
  * @param {(html: string, url: string) => Document} [options.parseHTML]  default: the window's DOMParser
  * @param {(url: string) => Promise<object>} [options.importModule]      default: native import()
  * @param {any} [options.window]
@@ -149,17 +152,20 @@ export function createLoader({
   fetch: fetchImpl = (...a) => globalThis.fetch(...a),
   credentials,
   mode,
+  trustedTypes,
+  nonce,
   parseHTML,
   importModule = (url) => import(url),
   window: win = globalThis,
   onEvent = () => {},
 } = {}) {
   checkFetchOptions({ credentials, mode }, ' in createLoader()');
+  if (trustedTypes !== undefined || nonce !== undefined) configureWindow(win, { trustedTypes, nonce });
   /** @type {Map<string, Promise<object>>} */
   const cache = new Map();
   const parse = parseHTML ?? ((html) => {
     if (!win?.DOMParser) throw new TypeError('No DOMParser available; pass `parseHTML` to createLoader()');
-    return new win.DOMParser().parseFromString(html, 'text/html');
+    return new win.DOMParser().parseFromString(trustedHTML(html, win), 'text/html');
   });
 
   /** Resolve a specifier to an absolute URL string. */

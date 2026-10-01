@@ -23,6 +23,9 @@ import { lazyTargets, watchLazy } from './lazy.js';
  *                            `<html-import-settings>` override them; they never apply inside modules):
  * @param {'omit'|'same-origin'|'include'} [options.credentials]  fetch `credentials` for HTML modules (default: the platform's)
  * @param {'cors'|'same-origin'|'no-cors'} [options.mode]          fetch `mode` for HTML modules (default: the platform's)
+ * @param {{ createHTML(html: string): unknown } | false} [options.trustedTypes]  Trusted Types policy for the HTML parsed and stamped in `window`
+ *                                                (default: a policy named "html-modules" where `window.trustedTypes` exists; `false`: never)
+ * @param {string} [options.nonce]                 CSP nonce for the `<style>` elements used where constructable stylesheets are unavailable
  * @param {any} [options.window]                   the window whose DOM and registry to use
  * @param {CustomElementRegistry} [options.registry]
  * @param {string} [options.delimiter]            namespace delimiter (default "--")

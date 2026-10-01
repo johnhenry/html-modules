@@ -9,6 +9,7 @@ tag.**
 
 - Definitions: [`HTMLComponent` / `defineHTMLComponent`](#htmlcomponent), [`isHTMLComponent`](#ishtmlcomponentvalue)
 - Stylesheets: [`HTMLStylesheet` / `defineHTMLStylesheet`](#htmlstylesheet), [`adoptStylesheet`](#adoptstylesheetroot-value-options), [`isHTMLStylesheet`, `isStylesheet`](#ishtmlstylesheetvalue-isstylesheetvalue)
+- Page security: [`configureRuntime`](#configureruntimewindow-options)
 - Registration: [`defineElement`](#defineelementtag-value-options), [`toComponent`](#tocomponentvalue-options), [`isElementLike`](#iselementlikevalue-window)
 - Binding: [`bindModule`](#bindmodule), [`applyBinding`](#applybinding), [`registerComponents`](#registercomponentsns-options)
 - Namespaces: [`lookupExport`](#lookupexportns-name-from), [`componentsOf`](#componentsofns-from), [`manifest`](#manifestlocals-stars), [`namespaceComponents`](#namespacecomponentsname-ns)
@@ -124,8 +125,22 @@ adoptStylesheet(root: Document | ShadowRoot, value: HTMLStylesheet | CSSStyleShe
 Adopt a stylesheet into a document or shadow root. Adopting the same sheet into the same root again is a no-op.
 Where `adoptedStyleSheets` is available, the window's constructed sheet is appended to it. Otherwise (for an
 `HTMLStylesheet`) a `<style data-html-module="<name>">` is appended once to `document.head` (for a document) or the
-shadow root. `window` defaults to the root's window. Throws `TypeError: adoptStylesheet: not a stylesheet`, or
+shadow root. `window` defaults to the root's window; the fallback `<style>` gets the window's configured `nonce`. Throws `TypeError: adoptStylesheet: not a stylesheet`, or
 `TypeError: This document cannot adopt a CSSStyleSheet` for a raw `CSSStyleSheet` where adoption is unsupported.
+
+## `configureRuntime(window, options)`
+
+```ts
+configureRuntime(window, options: { trustedTypes?: { createHTML(html: string): unknown } | false, nonce?: string }): void
+```
+
+Per-window page-security settings (only the keys given change). `trustedTypes` is the policy wrapping the template HTML
+the runtime stamps (`false`: never; default: a policy named `html-modules` where `window.trustedTypes` exists);
+`nonce` goes on the fallback `<style>` elements `adoptStylesheet` inserts. `createHTMLModules({ trustedTypes, nonce })`
+calls this for its window; call it yourself when only compiled modules run in the page. Throws `TypeError: Invalid
+trustedTypes: pass a Trusted Types policy (an object with createHTML(html)), or false to never use Trusted Types` /
+`TypeError: Invalid nonce "<v>": pass the page's CSP nonce as a non-empty string`. See
+[Trusted Types and CSP](javascript.md#trusted-types-and-csp).
 
 ## `isHTMLStylesheet(value)`, `isStylesheet(value)`
 

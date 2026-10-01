@@ -47,6 +47,8 @@ createHTMLModules(options?: {
   fetch?: typeof fetch;                  // = globalThis.fetch
   credentials?: 'omit' | 'same-origin' | 'include';   // fetch option for HTML modules; = the platform's default
   mode?: 'cors' | 'same-origin' | 'no-cors';          // fetch option for HTML modules; = the platform's default
+  trustedTypes?: { createHTML(html: string): unknown } | false;  // = a policy named "html-modules" where window.trustedTypes exists
+  nonce?: string;                        // CSP nonce for the <style> fallback; no default
   parseHTML?: (html: string, url: string) => Document;   // = new window.DOMParser().parseFromString(html, 'text/html')
   importModule?: (url: string) => Promise<object>;       // = (url) => import(url)
   onEvent?: (event: { type: 'fetch' | 'load' | 'error', url: string, kind?: 'html' | 'js', error?: unknown }) => void;
@@ -67,6 +69,8 @@ createHTMLModules(options?: {
 | `fetch` | `globalThis.fetch` | Fetches HTML modules, called as `fetch(url)` or, when `credentials` / `mode` are set, `fetch(url, { credentials, mode })`. Only `ok`, `status` and `text()` of the response are used, plus `arrayBuffer()` when an `integrity` is checked. |
 | `credentials` | the platform's | The `credentials` passed to `fetch()` for HTML modules (JavaScript modules go through `import()`, which has no such option). Overridable per `load()` / `import()`. See [Security model](../../README.md#security-model). |
 | `mode` | the platform's | The `mode` passed to `fetch()` for HTML modules. `navigate` is not allowed, and `no-cors` gives an opaque response a module cannot be read from, so it is only useful with a custom `fetch`. |
+| `trustedTypes` | `"html-modules"` policy, if `window.trustedTypes` exists | A Trusted Types policy object (`{ createHTML(html) }`) used for the HTML the library parses and stamps in this window; `false` never uses Trusted Types. See [Trusted Types and CSP](#trusted-types-and-csp). |
+| `nonce` | none | The CSP nonce set on the `<style>` elements used where constructable stylesheets are unavailable. |
 | `parseHTML` | the window's `DOMParser` | Parses fetched HTML into a `Document`. Without either, loading an HTML module throws `` TypeError: No DOMParser available; pass `parseHTML` to createLoader() ``. |
 | `importModule` | native `import()` | Loads JavaScript modules. |
 | `onEvent` | no-op | Observes the loader: `{ type: 'fetch', url }` before an HTML module is fetched; `{ type: 'load', url, kind }` and `{ type: 'error', url, kind, error }` when any module (HTML or JS) settles. |
@@ -172,6 +176,28 @@ does not unregister anything already registered).
 ### `loader`
 
 The underlying [`createLoader()`](#createloaderoptions) object: `{ load, resolve, cache, baseURL }`.
+
+## Trusted Types and CSP
+
+Under `Content-Security-Policy: require-trusted-types-for 'script'`, assigning a string to `template.innerHTML` or
+passing one to `DOMParser.parseFromString` throws. The two places html-modules does this (the loader parsing a
+fetched module, and a component stamping its template) wrap the HTML first:
+
+- With the **`trustedTypes`** option (a policy object with `createHTML(html)`), through your policy. `false` opts out.
+- Otherwise, where `window.trustedTypes` exists, through a policy named **`html-modules`**, created on first use. It is a
+  pass-through (the markup is the module source you chose to load), so allow it with
+  `trusted-types html-modules`; add `'allow-duplicates'` if two copies of the library may create it. If the name is
+  not allowed, or the policy exists already, creating it fails quietly and the HTML is passed as a string, so a page
+  that enforces Trusted Types and has not allowed the name fails on the browser's own `TrustedHTML` error: pass
+  `trustedTypes: yourPolicy`.
+- Without `window.trustedTypes`, as a plain string.
+
+A custom `parseHTML` is yours and is not wrapped. For compiled modules (which never call `createHTMLModules`) use
+[`configureRuntime(window, { trustedTypes, nonce })`](runtime.md#configureruntimewindow-options).
+
+`nonce` is put on the `<style data-html-module>` elements inserted where constructable stylesheets are unavailable
+(adopted sheets are not subject to `style-src` nonces). A `<style>` in a module's source is never inserted into the
+page, so no other `nonce` is needed. `script-src` is not involved: html-modules inserts no `<script>`.
 
 ## Lazy loading
 
@@ -289,8 +315,8 @@ defineHTMLModuleElements({ modules });
 ## `createLoader(options)`
 
 ```ts
-createLoader(options?: { baseURL?, hostResolve?, fetch?, parseHTML?, importModule?, window?, onEvent? }):
-  { load(specifier, referrer?, { type? }?): Promise<namespace>, resolve(specifier, referrer?): string,
+createLoader(options?: { baseURL?, hostResolve?, fetch?, credentials?, mode?, trustedTypes?, nonce?, parseHTML?, importModule?, window?, onEvent? }):
+  { load(specifier, referrer?, { type?, integrity?, credentials?, mode? }?): Promise<namespace>, resolve(specifier, referrer?): string,
     cache: Map<string, Promise<namespace>>, baseURL: string | undefined }
 ```
 

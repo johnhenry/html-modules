@@ -19,6 +19,16 @@ import {
 } from './names.js';
 import { assertOption, reportLoudly } from './settings.js';
 import { componentRootCreated, lazyTargets, watchLazy } from './lazy.js';
+import { configureWindow, nonceFor, trustedHTML } from './policy.js';
+
+/**
+ * Configure page-security options for a window: a Trusted Types policy for the HTML the runtime parses
+ * (`{ createHTML(html) }`, or `false` for none), and the CSP `nonce` for the fallback `<style>` elements.
+ * See `createHTMLModules({ trustedTypes, nonce })`, which calls this for its window.
+ * @param {any} win
+ * @param {{ trustedTypes?: { createHTML(html: string): unknown } | false, nonce?: string }} options
+ */
+export const configureRuntime = configureWindow;
 
 const COMPONENT = Symbol.for('html-modules.component');
 const STYLESHEET = Symbol.for('html-modules.stylesheet');
@@ -120,7 +130,7 @@ const pascal = (name) => (name ? camelCase(name).replace(/^./, (c) => c.toUpperC
 function templateElementClass(def, win) {
   let template;
   const content = () => {
-    template ??= Object.assign(win.document.createElement('template'), { innerHTML: def.template });
+    template ??= Object.assign(win.document.createElement('template'), { innerHTML: trustedHTML(def.template, win) });
     return template.content;
   };
   const cls = class extends win.HTMLElement {
@@ -211,7 +221,8 @@ const adoptedFallback = new WeakMap(); // root → Set<stylesheet> (roots withou
 /**
  * Adopt a stylesheet export (HTMLStylesheet or CSSStyleSheet) into a document
  * or shadow root. Adopting the same sheet twice is a no-op. Where constructable
- * stylesheets are unavailable, a <style> element is inserted instead.
+ * stylesheets are unavailable, a <style> element is inserted instead (with the window's CSP `nonce`, if one is
+ * configured: see `configureRuntime()`).
  */
 export function adoptStylesheet(root, value, { window: win } = {}) {
   if (!isStylesheet(value)) throw new TypeError('adoptStylesheet: not a stylesheet');
@@ -229,6 +240,8 @@ export function adoptStylesheet(root, value, { window: win } = {}) {
   const doc = root.ownerDocument ?? root;
   const style = doc.createElement('style');
   if (value.name) style.setAttribute('data-html-module', value.name);
+  const nonce = nonceFor(win);
+  if (nonce) style.setAttribute('nonce', nonce);
   style.textContent = value.css;
   const parent = root.head ?? root;
   parent.append(style);

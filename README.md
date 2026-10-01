@@ -761,7 +761,10 @@ done with your page's authority.
 - **Registration is all or nothing and never silent.** Tags are checked before any is registered, an existing tag is
   never redefined, and every failure is an `error` event, a rejection or a throw
   ([Errors](#errors)).
-- **Trusted Types and CSP are supported** where the page asks for them: see [Trusted Types and CSP](docs/api/javascript.md#trusted-types-and-csp).
+- **Trusted Types and CSP are supported.** The two HTML sinks (`DOMParser.parseFromString` for fetched modules,
+  `template.innerHTML` for a component's template) go through a `trustedTypes` policy you pass, or a policy named
+  `html-modules`; a `nonce` option covers the `<style>` fallback. html-modules inserts no `<script>` and uses no `eval`.
+  See [Trusted Types and CSP](docs/api/javascript.md#trusted-types-and-csp).
 
 **What is still yours:**
 

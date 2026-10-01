@@ -52,6 +52,25 @@ Fixes found by an audit of the first build. Nothing is published yet, so these a
 
 ### Security
 
+- **An opt-in template sanitizer for modules from less-trusted origins** (issue #3). `sanitize` is a function every component
+  template passes through at load time, before any definition exists (`(html, { def, url, window, report }) => string |
+  TrustedHTML | DocumentFragment`, sync or async): `createHTMLModules({ sanitize })`, `HTMLModules.sanitize = fn`, the
+  `sanitize` option of `import()` / `load()` / `hotReload()` (`false` opts out), and `<html-import>.sanitize` (a property: a
+  function is not an attribute, so there is no `<html-import-settings sanitize>`). It runs in the loader, because the
+  runtime stamps templates synchronously, and sees templates only, never module source (which would strip `<html-export>` and
+  `<html-import>`). A `DocumentFragment` result is stamped without being parsed again (`HTMLComponent` accepts one as its
+  `template`); a string still goes through the Trusted Types policy; `{{attr}}` bindings survive. A sanitized module
+  sanitizes the HTML modules it imports with the same function and cannot import JavaScript (refused with a named error), a module
+  is cached per sanitizer (`#sanitize=<n>`), and what a sanitizer removed is a `sanitize` event (`onEvent`, and
+  `html-modules:sanitize` on the document). Stylesheets, compiled output and what scripts add later are not sanitized
+  (README, `## Security model`). `@johnhenry/html-modules/safe-fragment` adapts `@johnhenry/safe-fragment` without depending on it
+  (`safeFragmentSanitizer({ profile })`, `registerTemplateProfile()`: `ui-v1` plus `<slot>`, `part`, `slot` and `ui--*`
+  custom elements); `docs/api/sanitize.md` says what a template loses under each profile. Tested against the real library in
+  Chromium, Firefox and WebKit with a module served from a second origin (`img onerror`, `javascript:` links,
+  `iframe srcdoc`, handlers and `<script>` run in a control and are gone sanitized; benign templates render unchanged; Trusted
+  Types), and shown in `examples/sanitize.html`. safe-fragment is a devDependency pinned to `ee01b49`; because its git install is
+  empty (no `dist/`, no `prepare`), `scripts/vendor-safe-fragment.js` bundles it for the tests. Filed upstream:
+  safe-fragment#9 (report noise), #10 (git install), #11 (`<style>`, `<slot>`, ids), #12 (Trusted Types violations). `71bb40e`.
 - **`## Security model` in the README**, and the options behind it: `integrity` (Subresource Integrity, verified with
   SubtleCrypto against the fetched bytes; on `<html-import>`, a module's own imports, `load()` and `import()`; HTML
   modules only, and fail-closed), and fetch `credentials` / `mode` on `createHTMLModules()` and `load()`. `653529c`.

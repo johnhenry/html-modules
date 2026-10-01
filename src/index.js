@@ -17,6 +17,7 @@
 /** @typedef {import('./types.js').ComponentImport} ComponentImport */
 /** @typedef {import('./types.js').ComponentSpec} ComponentSpec */
 /** @typedef {import('./types.js').CompileOptions} CompileOptions */
+/** @typedef {import('./types.js').Sanitizer} Sanitizer */
 /** @typedef {import('./record.js').ModuleRecord} ModuleRecord */
 /** @typedef {import('./record.js').ImportRecord} ImportRecord */
 /** @typedef {import('./record.js').ExportRecord} ExportRecord */

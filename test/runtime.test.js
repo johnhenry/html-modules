@@ -37,7 +37,7 @@ test('a definition is inert data with a module-local identity', () => {
   });
   assert.ok(Object.isFrozen(def));
   assert.equal(defineHTMLComponent(def), def);
-  assert.throws(() => defineHTMLComponent({ name: 'x' }), /pass a `template` string or an `element` class/);
+  assert.throws(() => defineHTMLComponent({ name: 'x' }), /pass a `template` string \(or a DocumentFragment\) or an `element` class/);
   assert.throws(() => defineHTMLComponent({ template: '', shadow: 'none' }), SyntaxError);
 });
 

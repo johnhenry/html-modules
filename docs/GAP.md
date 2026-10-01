@@ -180,6 +180,7 @@ reference.
 | Addition | Why |
 | --- | --- |
 | `integrity` (SRI, SubtleCrypto), `credentials`, `mode`; the README's `## Security model` | A module URL is as trusted as a `<script src>`: pinning and fetch options are the available levers. JavaScript modules cannot be verified by `import()` and are refused rather than trusted. |
+| `sanitize` (a template sanitizer hook), `@johnhenry/html-modules/safe-fragment` | The residual risk of the row above, for modules from less-trusted origins: opt-in, fail-closed, [described below](#extension-beyond-the-prd-an-opt-in-template-sanitizer). |
 | `trustedTypes` policy, `nonce`, `configureRuntime()` | `template.innerHTML` and the loader's parse of a fetched module throw under `require-trusted-types-for 'script'`; the `<style>` fallback needs a nonce under a strict `style-src`. |
 | Relative `url()`s in a module's CSS rewritten to absolute against the module; `@import` is a `SyntaxError` | `url()` in a module's CSS belongs to the module. Browsers ignore `CSSStyleSheet`'s `baseURL`, so the CSS text is rewritten. `replaceSync()` silently drops `@import`. |
 | A lazy import with nothing to wait for is an error | It could never load. (Before, `el.load()` was the only way; `HTMLModules.load()` does that now.) |
@@ -220,6 +221,21 @@ module loader (the PRD's non-goals), only a static server with a change feed. Se
 `CustomElementRegistry` that the component's shadow roots are created with, so two versions of a library that share inner tag
 names coexist. Feature-detected (`supportsScopedRegistries()`), with a warned fallback to the global registry; page-level
 use is rejected because a page's tags live in the document's registry. See [HTML syntax](api/html-syntax.md#scoped-registries).
+
+## Extension beyond the PRD: an opt-in template sanitizer
+
+The PRD's trust model is "a module URL is as trusted as a `<script src>`", which leaves no way to take markup-only
+components from a less-trusted origin (issue #3). `sanitize` is a **hook, not a sanitizer**: a function every component
+template passes through at load time (`createHTMLModules({ sanitize })`, `import(src, { sanitize })`, `<html-import>.sanitize`;
+sync or async; returns a string, `TrustedHTML` or a `DocumentFragment` that is stamped without being parsed again). It runs
+in the loader, after the record is read and before definitions exist, because the runtime's `viewOf()` is synchronous and
+a custom element definition cannot wait; it never sees module source (so `<html-export>` and `<html-import>` survive), a
+sanitized module sanitizes what it imports and **cannot import JavaScript**, and a module is cached per sanitizer.
+`@johnhenry/html-modules/safe-fragment` adapts `@johnhenry/safe-fragment` (an optional peer, not a dependency) and
+derives a profile with `<slot>`, `part` and `ui--*` custom elements. Deliberately not done: a `sanitize` attribute or
+`<html-import-settings>` entry (a function is not a setting; the compiler and scanner would have to agree on it), sanitizing
+stylesheets (safe-fragment has no CSS support: [safe-fragment#11](https://github.com/johnhenry/safe-fragment/issues/11)) or compiled
+output, and bundling a sanitizer. See [Sanitizing templates](api/sanitize.md).
 
 ## Extension beyond the PRD: TypeScript declarations
 

@@ -2,13 +2,14 @@
 import {
   HTMLComponent, defineHTMLComponent, defineHTMLStylesheet, readHTMLModule, scanHTMLModule, compileHTMLModule, createHTMLModules,
   bindModule, hotReplaceModule, supportsScopedRegistries, camelCase, bindingName, IMPORT_DEFAULTS,
-  type ModuleRecord, type ExportRecord, type ImportRecord, type ModuleNamespace, type HTMLModulesInstance, type ComponentSpec, type ImportResult,
+  type Sanitizer, type ModuleRecord, type ExportRecord, type ImportRecord, type ModuleNamespace, type HTMLModulesInstance, type ComponentSpec, type ImportResult,
 } from '@johnhenry/html-modules';
 import { HTMLModules, HTMLImport, type HTMLImportElement } from '@johnhenry/html-modules/browser';
 import { defineElement, renderDeclarative, manifest, type BindResult } from '@johnhenry/html-modules/runtime';
 import { compileRecord, rebaseSpecifier, type CompileOptions } from '@johnhenry/html-modules/compiler';
 import { createDevServer } from '@johnhenry/html-modules/dev';
 import htmlModules from '@johnhenry/html-modules/vite';
+import { safeFragmentSanitizer, registerTemplateProfile } from '@johnhenry/html-modules/safe-fragment';
 
 // Records.
 const record: ModuleRecord = scanHTMLModule('<html-export name="card"><template>x</template></html-export>', 'ui.html');
@@ -56,6 +57,22 @@ const ready: Promise<ImportResult> = handle.ready;
 const reloaded: Promise<{ reload: boolean; reasons: string[]; updated: string[]; elements: number }> = modules.hotReload('./ui.html');
 void [loaded, eager, state, ready, reloaded];
 
+// Sanitizing component templates: a function, sync or async, returning a string, TrustedHTML or a DocumentFragment.
+const sanitize: Sanitizer = async (html, { def, url, window, report }) => {
+  report({ removed: [`${def.name} of ${url}`] });
+  const template = (window as Window).document.createElement('template');
+  template.innerHTML = html;
+  return template.content;
+};
+const sanitizing: HTMLModulesInstance = createHTMLModules({ sanitize });
+sanitizing.sanitize = (html) => html.replace(/ on\w+="[^"]*"/g, '');
+const sanitized: Promise<ModuleNamespace> = sanitizing.load('./ui.html', { sanitize: false });
+const sanitizedImport: Promise<ImportResult> = sanitizing.import('./ui.html', { as: 'ui', sanitize });
+void [sanitized, sanitizedImport];
+const fromSafeFragment: Sanitizer = safeFragmentSanitizer({ profile: { namespaces: ['ui'], attributes: ['tone'] }, onReport: (report) => void report });
+const profileName: string = registerTemplateProfile({ getProfile: () => ({}), deriveProfile: () => ({}), registerProfile: () => ({}) }, { namespaces: ['ui'] });
+void [fromSafeFragment, profileName];
+
 // The browser entry point.
 const loadedByPage: Promise<ModuleNamespace> = HTMLModules.load('./ui.html');
 const el: HTMLImportElement = document.createElement('html-import') as HTMLImportElement;
@@ -63,6 +80,7 @@ const result = await el.ready;
 const tags: string[] = Object.keys(result.tags);
 const phase: 'idle' | 'waiting' | 'loading' | 'loaded' | 'error' = el.state;
 const importClass: typeof HTMLImport = HTMLImport;
+el.sanitize = sanitize;
 void [loadedByPage, tags, phase, importClass];
 
 // The compiler.

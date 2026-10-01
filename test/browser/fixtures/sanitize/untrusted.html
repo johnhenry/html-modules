@@ -1,0 +1,21 @@
+<!-- A module from a less-trusted origin: its templates carry every execution vector the sanitizer is for.
+     Each payload records itself in window.__pwned, so a page can tell which ones ran. -->
+<html-export name="card" props="label">
+  <template>
+    <h2 part="title">{{label}}</h2>
+    <p class="body"><slot>fallback</slot></p>
+    <a class="docs" href="/docs/{{label}}">docs</a>
+    <a class="js" href="javascript:window.__pwned.push('javascript: link')">a script link</a>
+    <img class="img" src="/package.json" alt="x" onerror="window.__pwned.push('img onerror')">
+    <iframe class="frame" srcdoc="&lt;script&gt;parent.__pwned.push('iframe srcdoc')&lt;/script&gt;"></iframe>
+    <button class="btn" type="button" onclick="window.__pwned.push('onclick')">go</button>
+    <script>window.__pwned.push('script element')</script>
+    <style>p { color: red }</style>
+    <ui--badge class="badge" part="badge" tone="warm">new</ui--badge>
+  </template>
+  <style>:host { display: block }</style>
+</html-export>
+
+<html-export name="badge" props="tone">
+  <template><b part="badge-text"><slot></slot></b></template>
+</html-export>

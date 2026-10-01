@@ -56,7 +56,21 @@ export type ImportOptions = {
     integrity?: string;
     credentials?: 'omit' | 'same-origin' | 'include';
     mode?: 'cors' | 'same-origin' | 'no-cors';
+    /**
+     * sanitize this module's component templates (and those of the HTML modules it imports) with this function; `false`: not even the instance's
+     */
+    sanitize?: Sanitizer | false;
 };
+export type Sanitizer = (html: string, context: {
+    def: Readonly<Record<string, any>>;
+    url: string;
+    window: any;
+    report: (details: unknown) => void;
+}) => string | DocumentFragment | {
+    toString(): string;
+} | Promise<string | DocumentFragment | {
+    toString(): string;
+}>;
 export type LazyImportHandle = {
     src: string;
     /**
@@ -87,14 +101,24 @@ export type Loader = {
         credentials?: string;
         mode?: string;
         cache?: RequestCache;
+        sanitize?: Sanitizer | false;
     }) => Promise<ModuleNamespace>;
     unload: (specifier: string, referrer?: string, options?: {
         type?: 'html' | 'js';
     }) => boolean;
-    reload: (specifier: string, referrer?: string) => Promise<{
+    reload: (specifier: string, referrer?: string, options?: {
+        sanitize?: Sanitizer | false;
+    }) => Promise<{
         previous: ModuleNamespace | undefined;
         next: ModuleNamespace;
     }>;
+    cached: (specifier: string, referrer?: string, options?: {
+        sanitize?: Sanitizer | false;
+    }) => boolean;
+    /**
+     * the sanitizer applied to component templates by default; assignable
+     */
+    sanitize: Sanitizer | undefined;
     resolve: (specifier: string, referrer?: string) => string;
     cache: Map<string, Promise<ModuleNamespace>>;
     baseURL: string | undefined;
@@ -128,6 +152,10 @@ export type CreateHTMLModulesOptions = {
      */
     nonce?: string;
     /**
+     * sanitize every component template of the HTML modules this instance loads (see `Sanitizer`); overridable per import
+     */
+    sanitize?: Sanitizer | false;
+    /**
      * default: parses into a detached element (no CSP-checked document)
      */
     parseHTML?: (html: string, url: string) => ParentNode;
@@ -136,10 +164,12 @@ export type CreateHTMLModulesOptions = {
      */
     importModule?: (url: string) => Promise<object>;
     onEvent?: (event: {
-        type: 'fetch' | 'load' | 'error';
+        type: 'fetch' | 'load' | 'error' | 'sanitize';
         url: string;
         kind?: string;
         error?: unknown;
+        name?: string | null;
+        details?: unknown;
     }) => void;
     /**
      * the window whose DOM and registry to use
@@ -187,6 +217,10 @@ export type HTMLModulesInstance = {
      * absolute base URL for import specifiers
      */
     base: string | undefined;
+    /**
+     * the sanitizer applied to component templates by default; assignable (affects loads that start afterwards)
+     */
+    sanitize: Sanitizer | undefined;
     resolve: (src: string, base?: string) => string;
     load: (src: string, options?: {
         base?: string;
@@ -194,6 +228,7 @@ export type HTMLModulesInstance = {
         integrity?: string;
         credentials?: 'omit' | 'same-origin' | 'include';
         mode?: 'cors' | 'same-origin' | 'no-cors';
+        sanitize?: Sanitizer | false;
     }) => Promise<ModuleNamespace>;
     unload: (src: string, options?: {
         base?: string;
@@ -201,6 +236,7 @@ export type HTMLModulesInstance = {
     }) => boolean;
     hotReload: (src: string, options?: {
         base?: string;
+        sanitize?: Sanitizer | false;
     }) => Promise<HotReloadResult>;
     bind: (module: ModuleNamespace, options?: {
         as?: string;
@@ -240,6 +276,7 @@ export type HTMLImportElement = HTMLElement & {
     as: string;
     type: string;
     integrity: string;
+    sanitize: Sanitizer | false | undefined;
     delimiter: string | null;
     conflict: string | null;
     loadMode: string | null;
@@ -319,9 +356,9 @@ export type ComponentSpec = {
      */
     name?: string | null;
     /**
-     * template HTML (the content of the `<template>`)
+     * template HTML (the content of the `<template>`), or a DocumentFragment of it (stamped without being parsed)
      */
-    template?: string;
+    template?: string | DocumentFragment;
     shadow?: 'open' | 'closed';
     delegatesFocus?: boolean;
     /**
@@ -413,6 +450,18 @@ export type CompileOptions = {
  * @property {string} [integrity]              Subresource Integrity metadata (HTML modules only)
  * @property {'omit' | 'same-origin' | 'include'} [credentials]
  * @property {'cors' | 'same-origin' | 'no-cors'} [mode]
+ * @property {Sanitizer | false} [sanitize]    sanitize this module's component templates (and those of the HTML modules it imports) with this function; `false`: not even the instance's
+ */
+/**
+ * A template sanitizer: `createHTMLModules({ sanitize })`, `HTMLModules.import(src, { sanitize })`, `<html-import>.sanitize`.
+ * It receives each component template of a freshly loaded HTML module (never the module source) and returns the
+ * markup to stamp: a string, a `TrustedHTML`, or a `DocumentFragment` (stamped without being parsed again), or a
+ * Promise of one. `def` is the component's record (`name`, `shadow`, `props`, … and its unsanitized `template`);
+ * `report(details)` announces what was removed as a `sanitize` event (`onEvent`, and `html-modules:sanitize` on the document).
+ * @callback Sanitizer
+ * @param {string} html
+ * @param {{ def: Readonly<Record<string, any>>, url: string, window: any, report: (details: unknown) => void }} context
+ * @returns {string | DocumentFragment | { toString(): string } | Promise<string | DocumentFragment | { toString(): string }>}
  */
 /**
  * The handle `HTMLModules.import(src, { load: 'lazy' })` returns right away.
@@ -430,9 +479,11 @@ export type CompileOptions = {
 /**
  * The loader behind an HTMLModules instance: resolve, fetch, parse, cache.
  * @typedef {object} Loader
- * @property {(specifier: string, referrer?: string, options?: { type?: 'html' | 'js', integrity?: string, credentials?: string, mode?: string, cache?: RequestCache }) => Promise<ModuleNamespace>} load
+ * @property {(specifier: string, referrer?: string, options?: { type?: 'html' | 'js', integrity?: string, credentials?: string, mode?: string, cache?: RequestCache, sanitize?: Sanitizer | false }) => Promise<ModuleNamespace>} load
  * @property {(specifier: string, referrer?: string, options?: { type?: 'html' | 'js' }) => boolean} unload
- * @property {(specifier: string, referrer?: string) => Promise<{ previous: ModuleNamespace | undefined, next: ModuleNamespace }>} reload
+ * @property {(specifier: string, referrer?: string, options?: { sanitize?: Sanitizer | false }) => Promise<{ previous: ModuleNamespace | undefined, next: ModuleNamespace }>} reload
+ * @property {(specifier: string, referrer?: string, options?: { sanitize?: Sanitizer | false }) => boolean} cached
+ * @property {Sanitizer | undefined} sanitize  the sanitizer applied to component templates by default; assignable
  * @property {(specifier: string, referrer?: string) => string} resolve
  * @property {Map<string, Promise<ModuleNamespace>>} cache
  * @property {string | undefined} baseURL
@@ -447,9 +498,10 @@ export type CompileOptions = {
  * @property {'cors' | 'same-origin' | 'no-cors'} [mode]         fetch `mode` for HTML modules
  * @property {{ createHTML(html: string): unknown } | false} [trustedTypes]  Trusted Types policy for the HTML parsed and stamped (default: a policy named "html-modules" where `window.trustedTypes` exists; `false`: never)
  * @property {string} [nonce]                  CSP nonce for the `<style>` elements used where constructable stylesheets are unavailable
+ * @property {Sanitizer | false} [sanitize]    sanitize every component template of the HTML modules this instance loads (see `Sanitizer`); overridable per import
  * @property {(html: string, url: string) => ParentNode} [parseHTML]  default: parses into a detached element (no CSP-checked document)
  * @property {(url: string) => Promise<object>} [importModule]      default: native `import()`
- * @property {(event: { type: 'fetch' | 'load' | 'error', url: string, kind?: string, error?: unknown }) => void} [onEvent]
+ * @property {(event: { type: 'fetch' | 'load' | 'error' | 'sanitize', url: string, kind?: string, error?: unknown, name?: string | null, details?: unknown }) => void} [onEvent]
  * @property {any} [window]                    the window whose DOM and registry to use
  * @property {CustomElementRegistry} [registry]
  * @property {string} [delimiter]              namespace delimiter (default "--")
@@ -466,10 +518,11 @@ export type CompileOptions = {
  * @property {string} delimiter                the default namespace delimiter
  * @property {Readonly<{ delimiter: string, conflict: 'error' | 'reuse', load: 'eager' | 'lazy', errors: 'event' | 'throw' }>} options
  * @property {string | undefined} base         absolute base URL for import specifiers
+ * @property {Sanitizer | undefined} sanitize  the sanitizer applied to component templates by default; assignable (affects loads that start afterwards)
  * @property {(src: string, base?: string) => string} resolve
- * @property {(src: string, options?: { base?: string, type?: 'html' | 'js', integrity?: string, credentials?: 'omit' | 'same-origin' | 'include', mode?: 'cors' | 'same-origin' | 'no-cors' }) => Promise<ModuleNamespace>} load
+ * @property {(src: string, options?: { base?: string, type?: 'html' | 'js', integrity?: string, credentials?: 'omit' | 'same-origin' | 'include', mode?: 'cors' | 'same-origin' | 'no-cors', sanitize?: Sanitizer | false }) => Promise<ModuleNamespace>} load
  * @property {(src: string, options?: { base?: string, type?: 'html' | 'js' }) => boolean} unload
- * @property {(src: string, options?: { base?: string }) => Promise<HotReloadResult>} hotReload
+ * @property {(src: string, options?: { base?: string, sanitize?: Sanitizer | false }) => Promise<HotReloadResult>} hotReload
  * @property {(module: ModuleNamespace, options?: { as?: string, delimiter?: string, bindings?: Array<{ export: string, element?: string, adopt?: boolean }>, from?: string, root?: Document | ShadowRoot, conflict?: 'error' | 'reuse' }) => BindResult} bind
  * @property {{ (src: string, options: ImportOptions & { load: 'lazy' }): LazyImportHandle, (src: string, options?: ImportOptions): Promise<ImportResult> }} import
  */
@@ -485,6 +538,7 @@ export type CompileOptions = {
  *   readonly tags: Record<string, TagRecord>,
  *   readonly settings: { delimiter: string, conflict: 'error' | 'reuse', load: 'eager' | 'lazy', errors: 'event' | 'throw', base: string | undefined },
  *   src: string, as: string, type: string, integrity: string,
+ *   sanitize: Sanitizer | false | undefined,
  *   delimiter: string | null, conflict: string | null, loadMode: string | null, errors: string | null,
  * }} HTMLImportElement
  */
@@ -532,7 +586,7 @@ export type CompileOptions = {
  * The spec of `new HTMLComponent()` / `defineHTMLComponent()`.
  * @typedef {object} ComponentSpec
  * @property {string | null} [name]            module-local identity, e.g. "custom-card"
- * @property {string} [template]               template HTML (the content of the `<template>`)
+ * @property {string | DocumentFragment} [template]  template HTML (the content of the `<template>`), or a DocumentFragment of it (stamped without being parsed)
  * @property {'open' | 'closed'} [shadow]
  * @property {boolean} [delegatesFocus]
  * @property {string[]} [styles]               CSS text, adopted into every shadow root (one sheet per definition)

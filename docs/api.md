@@ -13,11 +13,12 @@ The [README](../README.md) is the guided tour; this is the lookup table. It is s
 | [Names](api/names.md) | `DELIMITER`, `bindingName`, `parseBindingName`, `isValidDelimiter`, `isValidElementName`, `elementNameProblem`, `isKebabName`, `camelCase`, `kebabCase`: the naming rules for exports, namespaces, delimiters and tags. |
 | [Compiler and CLI](api/compiler.md) | `compileHTMLModule`, `compileRecord`, `rewriteSpecifier`, `rebaseSpecifier`, the `html-module` CLI and its flags, and the `esm` and `register` output formats with a full generated example. |
 | [Dev server, hot reload and Vite](api/dev.md) | `html-module dev [dir]` (static server, file watching, hot reload over SSE), `HTMLModules.hotReload()`, what hot replacement swaps and what makes the page reload, the `@johnhenry/html-modules/vite` plugin and `createDevServer()`. |
+| [Sanitizing templates](api/sanitize.md) | The opt-in `sanitize` option for modules from less-trusted origins: its signature and context, where it can be set (instance, import, element property), why it runs at load time, what it covers (and refuses: JavaScript imports), reports as events, caching, and the `@johnhenry/html-modules/safe-fragment` adapter with a table of what a template loses under each safe-fragment profile. |
 | [Errors](api/errors.md) | Every error the library raises: its type, its message, and where it is reported (thrown, a rejection, or an `error` event on which element). |
 
 ## Entry points
 
-The package is plain ES modules with no runtime dependencies. `package.json` `exports`:
+The package is plain ES modules with no runtime dependencies (`@johnhenry/safe-fragment` is an optional peer of `/safe-fragment` only). `package.json` `exports`:
 
 | Specifier | File | What it is |
 | --- | --- | --- |
@@ -27,6 +28,7 @@ The package is plain ES modules with no runtime dependencies. `package.json` `ex
 | `@johnhenry/html-modules/compiler` | `src/compiler.js` | `compileHTMLModule`, `compileRecord`, `rewriteSpecifier`, `rebaseSpecifier`. Runs anywhere (Node, a dev server, a browser): no DOM needed. |
 | `@johnhenry/html-modules/dev` | `src/dev-server.js` | `createDevServer()` and `injectClient()`: the server behind `html-module dev`. Node only. |
 | `@johnhenry/html-modules/vite` | `src/vite.js` | The Vite plugin (default export). Node only. |
+| `@johnhenry/html-modules/safe-fragment` | `src/safe-fragment.js` | `safeFragmentSanitizer()` and `registerTemplateProfile()`: an adapter from `@johnhenry/safe-fragment` to the `sanitize` option. It does **not** depend on safe-fragment (an optional peer you pass in or let it `import()`); see [Sanitizing templates](api/sanitize.md#the-safe-fragment-adapter). |
 | `@johnhenry/html-modules/package.json` | `package.json` | For tools that read the version. |
 
 The bin is `html-module` (`bin/html-module.js`); see [Compiler and CLI](api/compiler.md#the-html-module-cli).
@@ -51,7 +53,7 @@ Everything else in `src/` (for example `assertDelimiter`, `bindingRecord`, `scan
 
 Every entry point ships declarations (`types/`, generated from the JSDoc in `src/` by `npm run types`, and exposed through a
 `"types"` condition in each `exports` entry): the record types (`ModuleRecord`, `ImportRecord`, `ExportRecord`,
-`BindingRecord`), `ModuleNamespace`, the `HTMLModulesInstance` returned by `createHTMLModules()`, the element classes
+`BindingRecord`), `ModuleNamespace`, the `HTMLModulesInstance` returned by `createHTMLModules()`, `Sanitizer` (the `sanitize` option), the element classes
 (`HTMLImportElement`, …), `ComponentSpec`, `CompileOptions` and the option and result types of the API. The root,
 `/browser`, `/runtime` and `/compiler` re-export the types they use, so `import type { ModuleRecord } from
 '@johnhenry/html-modules'` works; `/dev` and `/vite` are typed too (`/vite` refers to Vite's own `Plugin` type).

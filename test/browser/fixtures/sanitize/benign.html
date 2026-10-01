@@ -1,0 +1,17 @@
+<!-- Nothing here is script: a sanitizer with a template profile must leave it as it is. -->
+<html-export name="card" props="label">
+  <template>
+    <section class="card" aria-label="{{label}}">
+      <h2 part="title">{{label}}</h2>
+      <ul class="rows"><li>one</li><li><a href="/docs/{{label}}">two</a></li></ul>
+      <p><slot name="intro">fallback</slot><span part="tail"><slot></slot></span></p>
+      <ui--badge part="badge" tone="warm">new</ui--badge>
+      <button type="button" disabled>go</button>
+    </section>
+  </template>
+  <style>:host { display: block }</style>
+</html-export>
+
+<html-export name="badge" props="tone">
+  <template><b part="badge-text"><slot></slot></b></template>
+</html-export>

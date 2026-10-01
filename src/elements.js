@@ -197,6 +197,7 @@ export function defineHTMLModuleElements({ modules, window: win = globalThis, re
     #resolve = null;
     #reject = null;
     #phase = 'idle'; // idle | waiting | loading | loaded | error
+    #sanitize; // the sanitizer function set on this element (undefined: the instance's)
     #started = false; // configured, and loading begun (or failed or, if lazy, watching)
     #scheduled = false; // a start is queued for after the current script
     #missingSrc = false; // failed only because it had no src; setting one starts it again
@@ -328,6 +329,28 @@ export function defineHTMLModuleElements({ modules, window: win = globalThis, re
       return { ...resolveImportOptions(own, state.values, instance), base: state.base ?? modules.base ?? documentBase(doc) };
     }
 
+    /**
+     * A function that sanitizes the component templates of this import's module (and of the HTML modules it
+     * imports), over the instance's (`false`: none). It cannot be an attribute, so set it before the import starts:
+     * on an element made with `document.createElement()` before it is inserted, or by a script that runs before this
+     * element is upgraded. Setting it after loading started is an `error` event.
+     * @type {Function | false | undefined}
+     */
+    get sanitize() {
+      return this.#sanitize;
+    }
+
+    set sanitize(value) {
+      if (value !== undefined && value !== false && typeof value !== 'function') {
+        throw new TypeError('Invalid sanitize on <html-import>: pass a function (html, { def, url, window }) => string | DocumentFragment | TrustedHTML, or false for none');
+      }
+      if (this.#started && value !== this.#sanitize) {
+        fail(this, new Error('<html-import sanitize> was set after loading started: a sanitizer is read when the module is requested; set it before the element is inserted, or sanitize with HTMLModules.import()'), this.#config?.errors ?? errorsMode(this, this.ownerDocument));
+        return;
+      }
+      this.#sanitize = value;
+    }
+
     /** The namespace delimiter this import uses. */
     get delimiter() {
       return this.settings.delimiter;
@@ -413,7 +436,7 @@ export function defineHTMLModuleElements({ modules, window: win = globalThis, re
       this.#module ??= (async () => {
         const src = this.getAttribute('src');
         if (!src) throw new SyntaxError('<html-import> requires a "src" attribute');
-        return modules.load(src, { base: this.#config.base, type: this.getAttribute('type') || undefined, integrity: this.getAttribute('integrity') || undefined });
+        return modules.load(src, { base: this.#config.base, type: this.getAttribute('type') || undefined, integrity: this.getAttribute('integrity') || undefined, sanitize: this.#sanitize });
       })();
       return this.#module;
     }

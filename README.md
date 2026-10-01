@@ -300,6 +300,7 @@ An import with no `as` and no bindings only loads the module, for its side effec
 | `el.state` | `idle`, `waiting`, `loading`, `loaded` or `error` |
 | `el.elements` / `el.bindings` / `el.tags` | registered tags → classes; bound export names → values; tags → `{ tag, namespace, export, reused? }` |
 | `el.settings` / `el.delimiter` | the options in use, after precedence |
+| `el.sanitize` | a function (or `false`) that sanitizes this import's component templates: a property only (a function cannot be an attribute); see [Security model](#sanitizing-templates-from-less-trusted-modules) |
 | `el.src` / `as` / `type` / `integrity`, `el.delimiter` / `conflict` / `loadMode` / `errors` | properties for the attributes (`loadMode` is `load`, whose name the method has); a script can `createElement`, `append`, then set `src`: it starts after the script. Changing `src` after loading started fires an `error` event |
 | `load` / `error` events | on the import; `error` has `detail.error` and bubbles |
 
@@ -588,6 +589,7 @@ The API at a glance; every entry links to its reference:
 | Names | `DELIMITER`, `bindingName`, `parseBindingName`, `isValidDelimiter`, `isValidElementName`, `elementNameProblem`, `isKebabName`, `camelCase`, `kebabCase` | [Names](docs/api/names.md) |
 | Lazy loading | `lazyTargets`, `watchLazy`, `componentRoot` | [JavaScript API](docs/api/javascript.md#lazy-loading) |
 | Loader | `createLoader`, `linkHTMLModule`, `createNamespace` | [JavaScript API](docs/api/javascript.md#createloaderoptions) |
+| Sanitizing templates | the `sanitize` option (`createHTMLModules`, `import`, `load`, `<html-import>.sanitize`, `HTMLModules.sanitize`); `safeFragmentSanitizer`, `registerTemplateProfile` from `/safe-fragment` | [Sanitizing templates](docs/api/sanitize.md) |
 | Compiler | `compileHTMLModule`, `compileRecord`, `rewriteSpecifier`, `rebaseSpecifier`, the `html-module` CLI | [Compiler](docs/api/compiler.md) |
 
 **Definitions** (`src/runtime.js`, also `@johnhenry/html-modules/runtime`) are the shared representation. The loader
@@ -840,7 +842,8 @@ src/
   dev-server.js    html-module dev: static server, fs.watch, SSE (and dev-client.js, the page half)
   vite.js          the Vite plugin
   scan.js          scanHTMLModule() from source text
-  loader.js        resolve, fetch, parse, cache, link dependencies
+  loader.js        resolve, fetch, parse, cache, link dependencies; runs the `sanitize` hook over component templates
+  safe-fragment.js the optional adapter from @johnhenry/safe-fragment to `sanitize` (@johnhenry/html-modules/safe-fragment)
   lazy.js          lazy loading: what an import waits for, and the watcher
   html-modules.js  createHTMLModules(): load / import / bind
   elements.js      <html-import>, <html-binding>, <html-export>, and the settings elements
@@ -861,6 +864,7 @@ npm run check               # every source file parses; entry points import
 npm run examples            # the numbered Node examples, each self-verifying
 npm run examples:compile    # regenerate examples/compiled/
 npm run test:browser        # Playwright: Chromium, Firefox, WebKit
+npm run vendor:safe-fragment  # bundle the pinned @johnhenry/safe-fragment commit (the browser tests do it themselves)
 npm run types               # regenerate the .d.ts files; npm run types:check compiles a typed consumer
 npm run bench               # non-gating benchmark
 ```
@@ -974,6 +978,11 @@ done with your page's authority.
 - **Registration is all or nothing and never silent.** Tags are checked before any is registered, an existing tag is
   never redefined, and every failure is an `error` event, a rejection or a throw
   ([Errors](#errors)).
+- **Templates from a less-trusted origin can be sanitized, opt in.** `sanitize` is a function every component template
+  passes through at load time, before any component is defined, so a module can be loaded with its `<img onerror>`,
+  `javascript:` links, `<iframe srcdoc>`, handlers and `<script>` removed. html-modules ships the hook and an
+  [adapter for `@johnhenry/safe-fragment`](#sanitizing-templates-from-less-trusted-modules); it fails closed (a sanitizer
+  that throws means the module does not load) and it is off unless you set it.
 - **Trusted Types and CSP are supported.** The two HTML sinks (`innerHTML` on a detached element for fetched modules,
   `template.innerHTML` for a component's template) go through a `trustedTypes` policy you pass, or a policy named
   `html-modules`; a `nonce` option covers the `<style>` fallback. html-modules inserts no `<script>` and uses no `eval`.
@@ -981,11 +990,17 @@ done with your page's authority.
 
 **What is still yours:**
 
-- **A module URL is as trusted as a `<script src>`.** Templates are stamped into the page as real DOM, so a module
-  you import can do what its markup can do: `<img src=x onerror="…">`, `<a href="javascript:…">`,
-  `<iframe srcdoc="…">` and inline event handlers all execute (subject to your CSP). Import only modules you would
-  load as a script, from origins you control or have pinned with `integrity`; do not build a module's URL or source
-  from user input. An opt-in sanitizer for less-trusted markup is tracked in [html-modules#3](https://github.com/johnhenry/html-modules/issues/3).
+- **A module URL is as trusted as a `<script src>`, unless you opt in to sanitizing it.** By default templates are
+  stamped into the page as real DOM, so a module you import can do what its markup can do: `<img src=x onerror="…">`,
+  `<a href="javascript:…">`, `<iframe srcdoc="…">` and inline event handlers all execute (subject to your CSP). Import only
+  modules you would load as a script, from origins you control or have pinned with `integrity`, or
+  [sanitize their templates](#sanitizing-templates-from-less-trusted-modules); do not build a module's URL or source from user
+  input.
+- **The sanitizer covers templates, and nothing else.** A module's `<html-export><style>` stylesheets are not given to it
+  (CSS can still leak state through `url()` requests and redress the UI), compiled output has no load step to hook, a
+  sanitized module's JavaScript imports are refused rather than vetted, and what your own scripts later put in a shadow
+  root is not sanitized. A sanitizer is only as good as its function: html-modules does not check what it returns beyond
+  its type.
 - **Importing JavaScript runs code.** `<html-import src="./x.js">` is a native `import()`: the module's top level
   runs with full page authority, and html-modules cannot verify it (use an import map `integrity` field, or a CSP
   `script-src` allowlist). Tracked in [html-modules#1](https://github.com/johnhenry/html-modules/issues/1).
@@ -998,6 +1013,47 @@ done with your page's authority.
   be fetched or imported.
 - **Rendering untrusted data into a template is yours.** Templates are static markup; html-modules does not
   sanitize what your own scripts later put into a component's shadow DOM.
+
+### Sanitizing templates from less-trusted modules
+
+```js
+import { HTMLModules } from '@johnhenry/html-modules/browser';
+import { safeFragmentSanitizer } from '@johnhenry/html-modules/safe-fragment';
+import * as safeFragment from '@johnhenry/safe-fragment';           // you bring it: it is a peer, not a dependency
+
+HTMLModules.sanitize = safeFragmentSanitizer({ safeFragment, profile: { namespaces: ['ui'] } });   // every import
+await HTMLModules.import('https://cdn.example/ui.html', { as: 'ui' });                             // its templates come out sanitized
+await HTMLModules.import('./mine.html', { as: 'mine', sanitize: false });                          // opt one import out
+document.addEventListener('html-modules:sanitize', (e) => console.warn('removed', e.detail.details.removed));
+```
+
+- **The hook** is `sanitize: (html, { def, url, window, report }) => string | TrustedHTML | DocumentFragment` (or a
+  Promise of one). Set it on `createHTMLModules({ sanitize })`, assign `HTMLModules.sanitize`, pass it to
+  `HTMLModules.import()` / `load()`, or set `el.sanitize` on an `<html-import>` made in script (a function cannot be an
+  attribute, so there is no `<html-import-settings sanitize>`). `false` opts out. A `DocumentFragment` result is stamped without
+  being parsed again.
+- **It runs at load time**, in the loader, after the module record is read and before definitions are created: the runtime
+  stamps templates synchronously, so an async sanitizer is awaited there, once per template, and nothing is registered
+  until every template of the module is done. It receives each component's template and never the module source (which would
+  strip `<html-export>` and `<html-import>`).
+- **A sanitized module sanitizes what it imports**, with the same function, and **cannot import JavaScript**
+  (`Refusing to import the JavaScript module … from a sanitized HTML module`). A module is cached per sanitizer, so the same URL can be
+  imported both ways under different tags.
+- **`{{attr}}` bindings survive** a sanitizer that leaves the text alone (safe-fragment does); the Trusted Types policy
+  still wraps what is parsed, and a fragment never reaches an HTML sink.
+- **Reports are events**: a sanitizer calls `report(details)`, and it arrives as `{ type: 'sanitize', url, name, details }` on
+  `onEvent` and as `html-modules:sanitize` on the document. The safe-fragment adapter reports every element, attribute and URL its
+  profile removed.
+- **What a template loses** depends on the profile. `registerTemplateProfile()` (what `profile: { namespaces: ['ui'] }` runs)
+  derives `ui-v1` plus `<slot>`, `part`, `slot` and `ui--*` custom elements. Under it, or any safe-fragment profile, a template
+  loses `<style>` (safe-fragment cannot carry it: the module's own stylesheets are outside the template and untouched),
+  forms and their inputs (so a `form-associated` component loses its control), SVG, `style=""`, `data-*` beyond what you list, `http:`
+  URLs, and gets every `id` (and `for`/`aria-*` reference) prefixed `user-content-`. Per-profile table:
+  [Sanitizing templates](docs/api/sanitize.md#what-a-template-loses).
+- **Trusted Types**: with `require-trusted-types-for 'script'`, safe-fragment's DOMPurify fallback needs `dompurify` in your
+  `trusted-types` list next to `html-modules`; without it the module fails to load rather than loading unsanitized.
+
+Reference: [Sanitizing templates](docs/api/sanitize.md) and the [runnable example](examples/sanitize.html).
 
 ## Family
 
@@ -1013,6 +1069,18 @@ depends on neither of these packages, and neither depends on it.
   `@johnhenry/html-modules/runtime` at one runtime copy. This library used to carry an mport adapter, routers and a
   lockfile; they were removed in `1c0c416` when it became html-modules. (mport's current line is not yet published
   under the scope.)
+- **[`@johnhenry/safe-fragment`](https://github.com/johnhenry/safe-fragment)**: the sanitizer to reach for when markup comes
+  from somewhere less trusted. Two mechanisms, neither a dependency in either direction:
+  - **The `sanitize` hook**, wired by [`safeFragmentSanitizer()`](docs/api/sanitize.md#the-safe-fragment-adapter) from
+    `@johnhenry/html-modules/safe-fragment`: every component template of a less-trusted module goes through safe-fragment's
+    `sanitizeToFragment()` under a profile (derived from `ui-v1`, with `<slot>`, `part` and `ui--*` custom elements) and the
+    returned `DocumentFragment` is stamped. Safe-fragment is a peer you pass in (here it is a devDependency pinned to a
+    commit, bundled for the tests).
+  - **`<safe-fragment>` inside a component template**, for text a *page* hands a component you trust:
+    `<safe-fragment profile="article-v1" content="{{bio}}"></safe-fragment>` renders the host's `bio` attribute sanitized and
+    re-renders when it changes (`content` is safe-fragment's lowest-precedence source and logs a console note; it is the one a
+    `{{binding}}` can feed). Call `registerSafeFragment()` on the page. In a *sanitized* module the element is not one of the
+    profile's custom elements and is unwrapped, so use it in modules you trust.
 - **[`@johnhenry/window-algebra`](https://github.com/johnhenry/window-algebra)**: window-algebra's views host *surfaces*, `{ mount(target), unmount() }`, and its
   `htmlSurface(element)` simply appends an element. An html-modules component is a native custom element, so
   `htmlSurface(document.createElement('ui--card'))` is a window whose content upgrades when its import registers the

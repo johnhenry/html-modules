@@ -44,6 +44,23 @@ const STYLESHEET = Symbol.for('html-modules.stylesheet');
 const hasOwn = (o, k) => o != null && Object.prototype.hasOwnProperty.call(o, k);
 const SHADOW_MODES = new Set(['open', 'closed']);
 
+/** A DocumentFragment (checked by node type, so one from another realm or DOM implementation counts). */
+const isFragment = (v) => v != null && typeof v === 'object' && v.nodeType === 11;
+
+/**
+ * A template as markup. A string is itself; a DocumentFragment (what a sanitizer may return) is serialized from a
+ * detached element of its own document. (That serializes the sanitized DOM, which a browser will parse again.)
+ */
+function templateMarkup(template) {
+  if (!isFragment(template)) return template;
+  const holder = template.ownerDocument.createElement('div');
+  holder.append(template.cloneNode(true));
+  return holder.innerHTML;
+}
+
+/** True when two definitions' templates are the same markup (fragments are compared as trees). */
+const sameTemplate = (a, b) => (isFragment(a) && isFragment(b) ? a.isEqualNode(b) : a === b);
+
 // ---------------------------------------------------------------------------
 // Component definitions
 
@@ -66,13 +83,13 @@ export class HTMLComponent {
       if (typeof element !== 'function') throw new TypeError('defineHTMLComponent: `element` must be a class extending HTMLElement');
       this.#element = element;
       name ??= element.name ? kebabCase(element.name) : null;
-    } else if (typeof template !== 'string') {
-      throw new TypeError('defineHTMLComponent: pass a `template` string or an `element` class');
+    } else if (typeof template !== 'string' && !isFragment(template)) {
+      throw new TypeError('defineHTMLComponent: pass a `template` string (or a DocumentFragment) or an `element` class');
     }
     if (!SHADOW_MODES.has(shadow)) throw new SyntaxError(`Invalid shadow mode "${shadow}": use "open" or "closed"`);
     /** @type {string | null} */
     this.name = name;
-    /** @type {string | null} */
+    /** @type {string | DocumentFragment | null} */
     this.template = element === undefined ? template : null;
     /** @type {'open' | 'closed'} */
     this.shadow = shadow;
@@ -268,7 +285,14 @@ function viewOf(def, win) {
   if (!byWindow.has(win)) {
     let template;
     const content = () => {
-      template ??= Object.assign(win.document.createElement('template'), { innerHTML: trustedHTML(def.template, win) });
+      if (!template) {
+        template = win.document.createElement('template');
+        if (isFragment(def.template)) {
+          // Already DOM (a sanitizer returned it): copy it into the inert template content, with no re-parse. The
+          // template's own document is inert, so custom elements in the copy are not upgraded before they are stamped.
+          template.content.append(template.content.ownerDocument.importNode(def.template, true));
+        } else template.innerHTML = trustedHTML(def.template, win);
+      }
       return template.content;
     };
     const info = analyzeTemplate(content(), describeDefinition(def));
@@ -439,11 +463,12 @@ function componentSheets(def) {
 export function renderDeclarative(def, innerHTML = '') {
   if (!isHTMLComponent(def)) throw new TypeError('renderDeclarative: pass a component definition (from defineHTMLComponent() or a loaded module)');
   if (def.isClass) throw new TypeError(`renderDeclarative: ${describeDefinition(def)} is a JavaScript-authored class, not a template; there is no template to render`);
-  if (def.template.includes('{{')) {
+  const markup = templateMarkup(def.template);
+  if (markup.includes('{{')) {
     throw new TypeError(`renderDeclarative: ${describeDefinition(def)} has data bindings ({{…}}) in its template, which cannot be rendered on the server: the element re-stamps its template when it upgrades. Render the host's content yourself, or take the bindings out`);
   }
   const css = sheetsOf(def).filter(isHTMLStylesheet).map((sheet) => `<style>${sheet.resolvedCss.replace(/<\/style/gi, '<\\/style')}</style>`);
-  return `<template shadowrootmode="${def.shadow}"${def.delegatesFocus ? ' shadowrootdelegatesfocus' : ''}>${css.join('')}${def.template}</template>${innerHTML}`;
+  return `<template shadowrootmode="${def.shadow}"${def.delegatesFocus ? ' shadowrootdelegatesfocus' : ''}>${css.join('')}${markup}</template>${innerHTML}`;
 }
 
 const sheetCache = new WeakMap(); // def → stylesheet values (built once, shared by every instance)
@@ -1067,7 +1092,7 @@ function planComponentSwap(previous, next) {
   const unknown = next.props.filter((p) => known.get(p.name) !== p.type).map((p) => p.name);
   if (unknown.length) return `props ${unknown.map((n) => `"${n}"`).join(', ')} changed or are new: a property accessor is defined once per class`;
   return () => {
-    const changed = previous.template !== next.template;
+    const changed = !sameTemplate(previous.template, next.template);
     slot.def = next;
     slots.set(next, slot);
     let restamped = 0;

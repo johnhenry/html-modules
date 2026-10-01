@@ -48,8 +48,55 @@ export async function verifyIntegrity(bytes, integrity, url, win = globalThis) {
   }
 }
 
-/** The loader's cache key: `html:<url>` / `js:<url>`, plus `#integrity=<metadata>` for a verified load. */
-const cacheKey = (kind, url, integrity) => `${kind}:${url}${integrity ? `#integrity=${integrity.trim().split(/\s+/).join(' ')}` : ''}`;
+const sanitizerIds = new WeakMap(); // sanitizer function → a number that tells cache entries apart
+let sanitizerCount = 0;
+const sanitizerId = (fn) => {
+  if (!sanitizerIds.has(fn)) sanitizerIds.set(fn, ++sanitizerCount);
+  return sanitizerIds.get(fn);
+};
+
+/**
+ * The loader's cache key: `html:<url>` / `js:<url>`, plus `#integrity=<metadata>` for a verified load and
+ * `#sanitize=<n>` for a sanitized one (a copy that was not sanitized, or was sanitized by another function, must not
+ * satisfy it).
+ */
+const cacheKey = (kind, url, integrity, sanitize) => `${kind}:${url}${integrity ? `#integrity=${integrity.trim().split(/\s+/).join(' ')}` : ''}${sanitize ? `#sanitize=${sanitizerId(sanitize)}` : ''}`;
+
+function checkSanitize(value, where) {
+  if (value !== undefined && value !== false && typeof value !== 'function') {
+    throw new TypeError(`Invalid sanitize${where}: pass a function (html, { def, url, window }) => string | DocumentFragment | TrustedHTML (it may return a Promise), or false for none`);
+  }
+}
+
+const isFragment = (v) => v != null && typeof v === 'object' && v.nodeType === 11;
+
+/**
+ * Run a sanitizer over every component template of a freshly read record, returning a record whose templates are
+ * the sanitized ones (a string, or a DocumentFragment that is stamped without being parsed again). Only templates
+ * are touched: the module source itself is never sanitized (that would remove its `<html-export>` and
+ * `<html-import>`), and stylesheets and data are not markup. A sanitizer that throws or returns something else
+ * fails the whole load: nothing is registered from a module whose templates could not be vetted.
+ */
+async function sanitizeRecord(record, sanitize, { url, win, onEvent }) {
+  const announce = (name) => (details) => {
+    const event = { type: 'sanitize', url, name, details };
+    onEvent(event);
+    try {
+      const doc = win?.document;
+      if (doc && typeof win.CustomEvent === 'function') doc.dispatchEvent(new win.CustomEvent('html-modules:sanitize', { detail: event }));
+    } catch {}
+  };
+  const exports = await Promise.all(record.exports.map(async (e) => {
+    if (e.kind !== 'component') return e;
+    const where = `${e.name ? `component "${e.name}"` : 'the default component'} of ${url}`;
+    let out = await sanitize(e.template, Object.freeze({ def: Object.freeze({ ...e }), url, window: win, report: announce(e.name) }));
+    if (typeof out === 'object' && out !== null && !isFragment(out)) out = String(out); // TrustedHTML (the policy re-wraps it when the template is parsed)
+    if (isFragment(out)) out = out.cloneNode(true);
+    else if (typeof out !== 'string') throw new TypeError(`sanitize returned ${out === null ? 'null' : typeof out} for ${where}: return a string, a TrustedHTML or a DocumentFragment`);
+    return { ...e, template: out };
+  }));
+  return { ...record, exports };
+}
 
 const HTML_EXT = /\.html?(?:[?#]|$)/i;
 const URL_LIKE = /^(?:\.{0,2}\/)/;
@@ -200,10 +247,11 @@ export function parseModuleSource(html, win = globalThis) {
  * @param {'cors'|'same-origin'|'no-cors'} [options.mode]          fetch `mode` for HTML modules (default: the platform's)
  * @param {{ createHTML(html: string): unknown } | false} [options.trustedTypes]  Trusted Types policy for the HTML parsed and stamped in `window` (default: a policy named "html-modules" where `window.trustedTypes` exists; `false`: never)
  * @param {string} [options.nonce]   CSP nonce for the `<style>` elements used where constructable stylesheets are unavailable
+ * @param {import('./types.js').Sanitizer | false} [options.sanitize]   sanitizes every HTML component template this loader loads (the default for each load; `false`: none): see `Sanitizer`
  * @param {(html: string, url: string) => ParentNode} [options.parseHTML]  default: parses into a detached element (see `parseModuleSource`)
  * @param {(url: string) => Promise<object>} [options.importModule]      default: native import()
  * @param {any} [options.window]
- * @param {(event: { type: 'fetch'|'load'|'error', url: string, kind?: string, error?: unknown }) => void} [options.onEvent]
+ * @param {(event: { type: 'fetch'|'load'|'error'|'sanitize', url: string, kind?: string, error?: unknown, name?: string|null, details?: unknown }) => void} [options.onEvent]
  * @returns {import('./types.js').Loader}
  */
 export function createLoader({
@@ -214,12 +262,17 @@ export function createLoader({
   mode,
   trustedTypes,
   nonce,
+  sanitize,
   parseHTML,
   importModule = (url) => import(url),
   window: win = globalThis,
   onEvent = () => {},
 } = {}) {
   checkFetchOptions({ credentials, mode }, ' in createLoader()');
+  checkSanitize(sanitize, ' in createLoader()');
+  let defaultSanitize = sanitize || undefined;
+  /** The sanitizer a load uses: its own option (false: none), else the loader's. */
+  const sanitizerFor = (option) => (option === undefined ? defaultSanitize : option || undefined);
   if (trustedTypes !== undefined || nonce !== undefined) configureWindow(win, { trustedTypes, nonce });
   /** @type {Map<string, Promise<object>>} */
   const cache = new Map();
@@ -258,21 +311,22 @@ export function createLoader({
     return null;
   }
 
-  async function loadDependency(importer, src, type, referrer = importer, integrity) {
+  async function loadDependency(importer, src, type, referrer = importer, integrity, sanitizer) {
     const url = resolve(src, referrer);
     const cycle = waitPath(url, importer);
     if (cycle) throw new Error(`Circular HTML module dependency: ${[importer, ...cycle].join(' -> ')}`);
     if (!waitsFor.has(importer)) waitsFor.set(importer, new Set());
     waitsFor.get(importer).add(url);
     try {
-      return await start(url, type, { integrity });
+      // A dependency of a sanitized module is sanitized by the same function, and a JavaScript one is refused.
+      return await start(url, type, { integrity, sanitize: sanitizer || false, inherited: Boolean(sanitizer) });
     } finally {
       waitsFor.get(importer)?.delete(url);
       if (!waitsFor.get(importer)?.size) waitsFor.delete(importer);
     }
   }
 
-  async function loadHTML(url, { integrity, credentials: c = credentials, mode: m = mode, cache: httpCache } = {}) {
+  async function loadHTML(url, { integrity, credentials: c = credentials, mode: m = mode, cache: httpCache, sanitize: sanitizer } = {}) {
     onEvent({ type: 'fetch', url });
     const init = { ...(c !== undefined && { credentials: c }), ...(m !== undefined && { mode: m }), ...(httpCache !== undefined && { cache: httpCache }) };
     const res = await (Object.keys(init).length ? fetchImpl(url, init) : fetchImpl(url));
@@ -284,28 +338,33 @@ export function createLoader({
       await verifyIntegrity(bytes, integrity, url, win);
       source = new TextDecoder().decode(bytes);
     } else source = await res.text();
-    const record = readHTMLModule(parse(source, url), url);
+    let record = readHTMLModule(parse(source, url), url);
+    if (sanitizer) record = await sanitizeRecord(record, sanitizer, { url, win, onEvent });
     // The module's <html-import-settings base> is resolved against the module's own URL.
     const referrer = record.importSettings?.base ? new URL(record.importSettings.base, url).href : url;
     const wanted = new Map();
     for (const i of record.imports) if (moduleImportOptions(record, i).load !== 'lazy') wanted.set(dependencyKey(i.src, i.type), [i.src, i.type, i.integrity]);
     for (const e of record.exports) if (e.kind === 'reexport') wanted.set(dependencyKey(e.src, e.type), [e.src, e.type, e.integrity]);
-    const modules = new Map(await Promise.all([...wanted].map(async ([key, [src, type, sri]]) => [key, await loadDependency(url, src, type, referrer, sri)])));
-    return linkHTMLModule(record, modules, { lazy: (src, type, sri) => () => loadDependency(url, src, type, referrer, sri) });
+    const modules = new Map(await Promise.all([...wanted].map(async ([key, [src, type, sri]]) => [key, await loadDependency(url, src, type, referrer, sri, sanitizer)])));
+    return linkHTMLModule(record, modules, { lazy: (src, type, sri) => () => loadDependency(url, src, type, referrer, sri, sanitizer) });
   }
 
   function start(url, type, options = {}) {
     const kind = type ?? (HTML_EXT.test(url) ? 'html' : 'js');
     const { integrity } = options;
+    const sanitizer = kind === 'html' ? sanitizerFor(options.sanitize) : undefined;
+    if (kind === 'js' && options.inherited) {
+      throw new Error(`Refusing to import the JavaScript module ${url} from a sanitized HTML module: import() runs it with the page's authority, and a sanitizer only vets templates. Remove that <html-import>, or import the module from the page`);
+    }
     if (integrity !== undefined) {
       parseIntegrity(integrity, ` for ${url}`);
       if (kind !== 'html') throw new TypeError(`integrity applies to HTML modules only: ${url} is loaded with import(), which cannot verify it (to pin a JavaScript module, use the "integrity" field of an import map)`);
     }
     // Keyed by kind and URL (the same URL loaded as HTML and as JavaScript are two modules), and a load with
     // integrity is cached apart from one without: an unverified copy must not satisfy it.
-    const key = cacheKey(kind, url, integrity);
+    const key = cacheKey(kind, url, integrity, sanitizer);
     if (!cache.has(key)) {
-      const promise = kind === 'html' ? loadHTML(url, options) : Promise.resolve().then(() => importModule(url));
+      const promise = kind === 'html' ? loadHTML(url, { ...options, sanitize: sanitizer }) : Promise.resolve().then(() => importModule(url));
       cache.set(key, promise);
       promise.then(
         () => onEvent({ type: 'load', url, kind }),
@@ -322,13 +381,16 @@ export function createLoader({
    * Load a module namespace (HTML or JS), cached by resolved URL.
    * @param {string} specifier
    * @param {string} [referrer]
-   * @param {{ type?: 'html'|'js', integrity?: string, credentials?: string, mode?: string, cache?: RequestCache }} [options]
+   * @param {{ type?: 'html'|'js', integrity?: string, credentials?: string, mode?: string, cache?: RequestCache, sanitize?: import('./types.js').Sanitizer | false }} [options]
    *        `integrity` (SRI, HTML modules only), `credentials`, `mode` and `cache` (the fetch's HTTP cache mode) apply to this fetch; the
-   *        module's own dependencies use the loader's defaults.
+   *        module's own dependencies use the loader's defaults. `sanitize` (a function, or `false` for none) overrides the
+   *        loader's sanitizer for this module and the HTML modules it imports; the result is cached apart from a load
+   *        without it.
    */
-  async function load(specifier, referrer, { type, integrity, credentials: c, mode: m, cache: httpCache } = {}) {
+  async function load(specifier, referrer, { type, integrity, credentials: c, mode: m, cache: httpCache, sanitize: s } = {}) {
     checkFetchOptions({ integrity, credentials: c, mode: m, cache: httpCache }, ' in load()');
-    return start(resolve(specifier, referrer || baseURL), type, { integrity, credentials: c, mode: m, cache: httpCache });
+    checkSanitize(s, ' in load()');
+    return start(resolve(specifier, referrer || baseURL), type, { integrity, credentials: c, mode: m, cache: httpCache, sanitize: s });
   }
 
   /**
@@ -346,7 +408,7 @@ export function createLoader({
     const kinds = type ? [type] : ['html', 'js'];
     let evicted = false;
     for (const key of [...cache.keys()]) {
-      if (kinds.some((kind) => key === cacheKey(kind, url) || key.startsWith(`${cacheKey(kind, url)}#integrity=`))) evicted = cache.delete(key) || evicted;
+      if (kinds.some((kind) => key === cacheKey(kind, url) || key.startsWith(`${cacheKey(kind, url)}#integrity=`) || key.startsWith(`${cacheKey(kind, url)}#sanitize=`))) evicted = cache.delete(key) || evicted;
     }
     return evicted;
   }
@@ -357,22 +419,39 @@ export function createLoader({
    * module is then simply loaded). When the new load fails the old entry is put back and the error is thrown.
    * @param {string} specifier
    * @param {string} [referrer]
+   * @param {{ sanitize?: import('./types.js').Sanitizer | false }} [options]  the sanitizer the loaded copy used (default: the loader's)
    * @returns {Promise<{ previous: object|undefined, next: object }>}
    */
-  async function reload(specifier, referrer) {
+  async function reload(specifier, referrer, { sanitize: s } = {}) {
     const url = resolve(specifier, referrer || baseURL);
-    const key = cacheKey('html', url);
+    const sanitizer = sanitizerFor(s);
+    const key = cacheKey('html', url, undefined, sanitizer);
     const held = cache.get(key);
     let previous;
     if (held) previous = await held.catch(() => undefined);
     cache.delete(key);
     try {
-      return { previous, next: await start(url, 'html', { cache: 'no-cache' }) };
+      return { previous, next: await start(url, 'html', { cache: 'no-cache', sanitize: s }) };
     } catch (error) {
       if (held && previous) cache.set(key, held);
       throw error;
     }
   }
 
-  return { load, unload, reload, resolve, cache, baseURL };
+  /** True when `specifier` is cached as an HTML module (loaded with `sanitize`, default: the loader's). */
+  function cached(specifier, referrer, { sanitize: s } = {}) {
+    return cache.has(cacheKey('html', resolve(specifier, referrer || baseURL), undefined, sanitizerFor(s)));
+  }
+
+  return {
+    load, unload, reload, cached, resolve, cache, baseURL,
+    /** The sanitizer applied to component templates by default (undefined: none). Loads already cached are unchanged. */
+    get sanitize() {
+      return defaultSanitize;
+    },
+    set sanitize(value) {
+      checkSanitize(value, ' (sanitize)');
+      defaultSanitize = value || undefined;
+    },
+  };
 }

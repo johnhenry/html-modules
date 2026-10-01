@@ -16,6 +16,7 @@ export type PropSpec = import('./types.js').PropSpec;
 export type ComponentImport = import('./types.js').ComponentImport;
 export type ComponentSpec = import('./types.js').ComponentSpec;
 export type CompileOptions = import('./types.js').CompileOptions;
+export type Sanitizer = import('./types.js').Sanitizer;
 export type ModuleRecord = import('./record.js').ModuleRecord;
 export type ImportRecord = import('./record.js').ImportRecord;
 export type ExportRecord = import('./record.js').ExportRecord;
@@ -39,6 +40,7 @@ export type RawElement = import('./record.js').RawElement;
 /** @typedef {import('./types.js').ComponentImport} ComponentImport */
 /** @typedef {import('./types.js').ComponentSpec} ComponentSpec */
 /** @typedef {import('./types.js').CompileOptions} CompileOptions */
+/** @typedef {import('./types.js').Sanitizer} Sanitizer */
 /** @typedef {import('./record.js').ModuleRecord} ModuleRecord */
 /** @typedef {import('./record.js').ImportRecord} ImportRecord */
 /** @typedef {import('./record.js').ExportRecord} ExportRecord */

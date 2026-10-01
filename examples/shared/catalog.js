@@ -132,6 +132,15 @@ export const checklist = [
     ['scr.markup', 'a self-closed <html-binding /> and a lazy import with nothing to wait for are errors, not silence'],
     ['scr.security', 'integrity (SRI), credentials, mode and a Trusted Types policy'],
   ] },
+  { group: 'Sanitizing templates', items: [
+    ['san.hook', 'sanitize: (html, { def, url, window }) => string | DocumentFragment | TrustedHTML, applied to component templates only (never the module source)'],
+    ['san.fragment', 'a DocumentFragment result is stamped without being parsed again; {{attr}} bindings survive'],
+    ['san.async', 'an async sanitizer runs at load time, before anything is registered'],
+    ['san.scope', 'per import, per instance, false to opt out; a module is cached per sanitizer'],
+    ['san.js', 'a sanitized module sanitizes the HTML modules it imports and cannot import JavaScript'],
+    ['san.report', 'what a sanitizer removed is a sanitize event (onEvent, and html-modules:sanitize on the document)'],
+    ['san.safe-fragment', 'safeFragmentSanitizer({ profile }) from @johnhenry/html-modules/safe-fragment, over @johnhenry/safe-fragment'],
+  ] },
   { group: 'Errors', items: [
     ['err.fetch', 'missing module (404)'],
     ['err.missing-export', 'binding an export the module does not have'],
@@ -231,6 +240,11 @@ export const pages = [
     id: 'scripting', href: 'scripting.html', title: 'Scripting and lifecycle',
     summary: 'Live checks for driving the library from script: a scripted <html-import>, un-adopting a stylesheet, unload(), server-rendered shadow DOM (open and closed), markup mistakes that used to be silent, and the security options.',
     covers: ['scr.element-props', 'scr.unadopt', 'scr.unload', 'scr.dsd', 'scr.markup', 'scr.security', 'imp.element-api', 'imp.adopt', 'rt.cache'],
+  },
+  {
+    id: 'sanitize', href: 'sanitize.html', title: 'Sanitizing templates',
+    summary: 'The opt-in sanitize hook for modules from less-trusted origins: a module whose templates carry img onerror, javascript: links and iframe srcdoc renders without them, through a function you write (sync or async, string or DocumentFragment), per import, with reports as events; a sanitized module cannot import JavaScript; and the same through @johnhenry/safe-fragment.',
+    covers: ['san.hook', 'san.fragment', 'san.async', 'san.scope', 'san.js', 'san.report', 'san.safe-fragment', 'scr.security', 'bind.text', 'rt.events'],
   },
 ];
 

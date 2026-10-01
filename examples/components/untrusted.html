@@ -1,0 +1,24 @@
+<!--
+  A module you would NOT load as a script: its templates carry every way markup can run code. Imported with a
+  sanitizer (examples/sanitize.html) it renders without them; the payloads record themselves in window.__pwned.
+  Stylesheets live outside the template (<html-export><style>), so they are not part of what a sanitizer sees.
+-->
+<html-export name="card" props="label">
+  <template>
+    <h2 part="title">{{label}}</h2>
+    <p class="body"><slot>no content</slot></p>
+    <a class="docs" href="/docs/{{label}}">docs</a>
+    <a class="js" href="javascript:window.__pwned.push('javascript: link')">a script link</a>
+    <img class="img" src="data:text/plain,not-an-image" alt="" onerror="window.__pwned.push('img onerror')">
+    <iframe class="frame" srcdoc="&lt;script&gt;parent.__pwned.push('iframe srcdoc')&lt;/script&gt;"></iframe>
+    <button class="btn" type="button" onclick="window.__pwned.push('onclick')">go</button>
+    <script>window.__pwned.push('script element')</script>
+    <ui--badge part="badge" tone="warm">new</ui--badge>
+  </template>
+  <style>:host { display: block; padding: 0.4rem 0 }</style>
+</html-export>
+
+<html-export name="badge" props="tone">
+  <template><b part="badge-text"><slot></slot></b></template>
+  <style>b { padding: 0 0.4em; border-radius: 4px; background: var(--badge, #eee) }</style>
+</html-export>

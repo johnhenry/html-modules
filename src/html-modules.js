@@ -19,7 +19,7 @@ import { lazyImportProblem } from './record.js';
 
 /**
  * `options`: loader options (`fetch`, `parseHTML`, `hostResolve`, `baseURL`, `importModule`, `onEvent`, `credentials`,
- * `mode`, `trustedTypes`, `nonce`) plus these defaults for this instance's imports (lowest precedence: `<html-import>`
+ * `mode`, `trustedTypes`, `nonce`, `sanitize`) plus these defaults for this instance's imports (lowest precedence: `<html-import>`
  * attributes and the page's `<html-import-settings>` override them; they never apply inside modules): `delimiter`,
  * `base`, `conflict`, `load` (the default for `<html-import>` elements; `import()` is lazy only when the call says
  * `load: 'lazy'`) and `errors`. See `CreateHTMLModulesOptions`.
@@ -48,8 +48,8 @@ export function createHTMLModules({
   const bind = (module, { as, delimiter: d = options.delimiter, bindings, from, root, conflict: c = options.conflict } = {}) =>
     bindModule(module, { as, delimiter: d, bindings, from, conflict: c, registry: reg(), window: win, root: root ?? win.document });
 
-  async function importNow(src, { as, delimiter: d, bindings, base: b, type, root, conflict: c, integrity, credentials, mode }) {
-    const module = await api.load(src, { base: b, type, integrity, credentials, mode });
+  async function importNow(src, { as, delimiter: d, bindings, base: b, type, root, conflict: c, integrity, credentials, mode, sanitize }) {
+    const module = await api.load(src, { base: b, type, integrity, credentials, mode, sanitize });
     return { module, ...bind(module, { as, delimiter: d, bindings, from: src, root, conflict: c }) };
   }
 
@@ -64,6 +64,18 @@ export function createHTMLModules({
     /** This instance's import defaults: `{ delimiter, conflict, load, errors }`. */
     options,
 
+    /**
+     * The sanitizer applied to the component templates of every HTML module this instance loads, or undefined.
+     * Assigning it affects loads that start afterwards (a module already cached unsanitized stays that way; a
+     * sanitized load is cached apart). `false` or `undefined` clears it.
+     */
+    get sanitize() {
+      return loader.sanitize;
+    },
+    set sanitize(value) {
+      loader.sanitize = value;
+    },
+
     /** This instance's base URL for import specifiers (absolute), or undefined. */
     get base() {
       return instanceBase();
@@ -75,11 +87,13 @@ export function createHTMLModules({
     /**
      * Load an HTML (or JS) module and return its namespace, without registering anything.
      * @param {string} src
-     * @param {{ base?: string, type?: 'html'|'js', integrity?: string, credentials?: 'omit'|'same-origin'|'include', mode?: 'cors'|'same-origin'|'no-cors' }} [options]
+     * @param {{ base?: string, type?: 'html'|'js', integrity?: string, credentials?: 'omit'|'same-origin'|'include', mode?: 'cors'|'same-origin'|'no-cors', sanitize?: import('./types.js').Sanitizer | false }} [options]
      *        `integrity` is Subresource Integrity metadata checked against the fetched bytes (HTML modules only);
-     *        `credentials` and `mode` are the fetch options for this module, over the instance's.
+     *        `credentials` and `mode` are the fetch options for this module, over the instance's; `sanitize` runs
+     *        the component templates of this module and of the HTML modules it imports through that function
+     *        (`false`: through none, even if the instance has one). A module is cached per sanitizer.
      */
-    load: (src, { base: b, type, integrity, credentials, mode } = {}) => loader.load(src, b ?? instanceBase(), { type, integrity, credentials, mode }),
+    load: (src, { base: b, type, integrity, credentials, mode, sanitize } = {}) => loader.load(src, b ?? instanceBase(), { type, integrity, credentials, mode, sanitize }),
 
     /**
      * Evict a module from the cache so the next `load()` / `import()` fetches it again. Without `type`, every kind
@@ -101,14 +115,14 @@ export function createHTMLModules({
      * attributes, changed imports): reload the page then. `{ skipped: true }` when the module was never loaded here.
      * Rejects, leaving everything as it was, when the new source is invalid.
      * @param {string} src
-     * @param {{ base?: string }} [options]
+     * @param {{ base?: string, sanitize?: import('./types.js').Sanitizer | false }} [options]  `sanitize`: the sanitizer the module was imported with (default: the instance's)
      * @returns {Promise<{ reload: boolean, reasons: string[], updated: string[], elements: number, skipped?: true }>}
      */
-    async hotReload(src, { base: b } = {}) {
+    async hotReload(src, { base: b, sanitize } = {}) {
       const referrer = b ?? instanceBase();
       const url = loader.resolve(src, referrer);
-      if (!loader.cache.has(`html:${url}`)) return { reload: false, reasons: [], updated: [], elements: 0, skipped: true };
-      const { previous, next } = await loader.reload(url, referrer);
+      if (!loader.cached(url, referrer, { sanitize })) return { reload: false, reasons: [], updated: [], elements: 0, skipped: true };
+      const { previous, next } = await loader.reload(url, referrer, { sanitize });
       if (!previous) return { reload: true, reasons: ['the module had not finished loading'], updated: [], elements: 0 };
       return hotReplaceModule(previous, next);
     },
@@ -132,10 +146,10 @@ export function createHTMLModules({
      * @param {string} src
      * @param {{ as?: string, delimiter?: string, bindings?: object[], base?: string, type?: 'html'|'js', root?: Document|ShadowRoot,
      *           conflict?: 'error'|'reuse', load?: 'eager'|'lazy', errors?: 'event'|'throw',
-     *           integrity?: string, credentials?: string, mode?: string }} [options]
+     *           integrity?: string, credentials?: string, mode?: string, sanitize?: import('./types.js').Sanitizer | false }} [options]
      */
-    import(src, { as, delimiter: d = options.delimiter, bindings, base: b, type, root, conflict: c = options.conflict, load: l = 'eager', errors: e = options.errors, integrity, credentials, mode, registry: moduleRegistry } = {}) {
-      const call = { as, delimiter: d, bindings, base: b, type, root, conflict: c, integrity, credentials, mode };
+    import(src, { as, delimiter: d = options.delimiter, bindings, base: b, type, root, conflict: c = options.conflict, load: l = 'eager', errors: e = options.errors, integrity, credentials, mode, sanitize, registry: moduleRegistry } = {}) {
+      const call = { as, delimiter: d, bindings, base: b, type, root, conflict: c, integrity, credentials, mode, sanitize };
       const loud = (promise) => {
         if (e === 'throw') promise.catch((error) => reportLoudly(error, win));
         return promise;

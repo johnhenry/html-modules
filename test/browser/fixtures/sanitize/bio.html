@@ -1,0 +1,8 @@
+<!-- A TRUSTED module whose component renders untrusted text a page hands it, through <safe-fragment> in its own
+     template: the attribute `bio` is bound into safe-fragment's `content`, which it sanitizes under article-v1. -->
+<html-export name="card" props="bio">
+  <template>
+    <h2 part="title"><slot>Profile</slot></h2>
+    <safe-fragment class="bio" profile="article-v1" content="{{bio}}"></safe-fragment>
+  </template>
+</html-export>

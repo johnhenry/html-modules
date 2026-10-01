@@ -53,13 +53,14 @@ export declare function parseModuleSource(html: string, win?: any): ParentNode;
  * @param {'cors'|'same-origin'|'no-cors'} [options.mode]          fetch `mode` for HTML modules (default: the platform's)
  * @param {{ createHTML(html: string): unknown } | false} [options.trustedTypes]  Trusted Types policy for the HTML parsed and stamped in `window` (default: a policy named "html-modules" where `window.trustedTypes` exists; `false`: never)
  * @param {string} [options.nonce]   CSP nonce for the `<style>` elements used where constructable stylesheets are unavailable
+ * @param {import('./types.js').Sanitizer | false} [options.sanitize]   sanitizes every HTML component template this loader loads (the default for each load; `false`: none): see `Sanitizer`
  * @param {(html: string, url: string) => ParentNode} [options.parseHTML]  default: parses into a detached element (see `parseModuleSource`)
  * @param {(url: string) => Promise<object>} [options.importModule]      default: native import()
  * @param {any} [options.window]
- * @param {(event: { type: 'fetch'|'load'|'error', url: string, kind?: string, error?: unknown }) => void} [options.onEvent]
+ * @param {(event: { type: 'fetch'|'load'|'error'|'sanitize', url: string, kind?: string, error?: unknown, name?: string|null, details?: unknown }) => void} [options.onEvent]
  * @returns {import('./types.js').Loader}
  */
-export declare function createLoader({ baseURL, hostResolve, fetch: fetchImpl, credentials, mode, trustedTypes, nonce, parseHTML, importModule, window: win, onEvent, }?: {
+export declare function createLoader({ baseURL, hostResolve, fetch: fetchImpl, credentials, mode, trustedTypes, nonce, sanitize, parseHTML, importModule, window: win, onEvent, }?: {
     baseURL?: string;
     hostResolve?: (specifier: string) => string | URL | null | undefined;
     fetch?: typeof fetch;
@@ -69,13 +70,16 @@ export declare function createLoader({ baseURL, hostResolve, fetch: fetchImpl, c
         createHTML(html: string): unknown;
     } | false;
     nonce?: string;
+    sanitize?: import('./types.js').Sanitizer | false;
     parseHTML?: (html: string, url: string) => ParentNode;
     importModule?: (url: string) => Promise<object>;
     window?: any;
     onEvent?: (event: {
-        type: 'fetch' | 'load' | 'error';
+        type: 'fetch' | 'load' | 'error' | 'sanitize';
         url: string;
         kind?: string;
         error?: unknown;
+        name?: string | null;
+        details?: unknown;
     }) => void;
 }): import('./types.js').Loader;

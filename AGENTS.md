@@ -19,7 +19,8 @@ compiler/CLI and the numbered examples, so a green `npm test` does not prove any
    examples or docs). `npm run types:check` compiles a strict typed consumer of every entry point against `types/`.
 6. For anything that changes rendering, styles, shadow DOM, registries, forms, security, hot reload or lazy loading:
    `npm run test:browser` (Playwright: Chromium, Firefox and WebKit over every `examples/*.html` page and the targeted
-   specs in `test/browser/`; `npx playwright install --with-deps` once; `--project=chromium` for one engine), and look at
+   specs in `test/browser/`; `npx playwright install --with-deps` once; `--project=chromium` for one engine; the run
+   bundles the pinned safe-fragment commit first, which needs network: see the gotcha below), and look at
    the change in a real browser (`node scripts/test-server.js`, cache disabled). Features an engine lacks must be
    reported by the page as *unsupported* (`renderChecks` takes `'unsupported'`), not as a failure.
 7. A genuinely fresh clone: `git clone . /tmp/html-modules-verifyN && cd $_ && npm ci && npm test && npm run examples`.
@@ -56,6 +57,21 @@ CI (`.github/workflows/ci.yml`) runs steps 1-5 in this order on Node 26, plus a 
   slot of the one it replaces (`sameDefinition`). Anything fixed when an element is created (shadow mode, observed
   attributes, props, form association, imports) cannot change under live elements, so `planComponentSwap` reports it and
   the page reloads. Keep `viewOf`, `stamp` and `planComponentSwap` in step when adding per-definition state.
+- **`@johnhenry/safe-fragment` is a pinned git devDependency that installs EMPTY.** It is unpublished, its repository
+  commits no `dist/` and has no `prepare` script (safe-fragment#10), so `npm ci` gives `node_modules/@johnhenry/safe-fragment`
+  with a README and a package.json only (it does bring `dompurify`). `scripts/vendor-safe-fragment.js` (run by
+  `playwright.config.js`'s `globalSetup`, or `npm run vendor:safe-fragment`) fetches the pinned commit from GitHub, bundles
+  `src/index.ts` with Vite and writes the gitignored `examples/vendor/safe-fragment/safe-fragment.js` that
+  `test/browser/sanitize.spec.js` and `examples/sanitize.html` import (the example reports itself *unsupported* without it).
+  The pin lives in `package.json` and `package-lock.json` as `git+https://…#<sha>`: `npm install` rewrites the lockfile's
+  `resolved` to `git+ssh://`, which CI cannot clone, so after any `npm install` change it back to `git+https` (and keep the
+  `package.json` spec the same string). To move the pin, edit both, commit, `npm run vendor:safe-fragment -- --force`. When
+  safe-fragment is published, replace all of this with a semver range and delete the script.
+- **`sanitize` runs in the loader, never in `viewOf()`.** Templates must already be sanitized when a component is registered,
+  because stamping is synchronous. Anything new that creates definitions from a record (a new loader path, a reader) must go
+  through `loadHTML()`'s `sanitizeRecord()`, and a new thing a sanitized module can import must inherit the importer's
+  sanitizer (`loadDependency`), or a trusted-looking dependency becomes a hole. A sanitized module is cached under
+  `#sanitize=<n>`: a new place that builds cache keys must use `cacheKey()`.
 - **The sandbox here cannot launch Firefox** (its profile folder is not found); Chromium and WebKit run locally, Firefox in CI.
   Do not work around that with a sandbox bypass.
 - **linkedom is not a browser.** It does not upgrade custom elements inside shadow roots (`test/lazy.test.js`

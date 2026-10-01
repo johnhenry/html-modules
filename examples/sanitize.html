@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sanitizing templates · html-modules</title>
+  <script>try { const t = localStorage.getItem('html-modules-examples-theme'); if (t) document.documentElement.dataset.theme = t; } catch {}</script>
+  <link rel="stylesheet" href="./shared/site.css">
+  <style>
+    .step { border-top: 1px solid var(--border); padding-top: 0.8rem; margin-top: 0.8rem; }
+    .step:first-of-type { border-top: 0; padding-top: 0; margin-top: 0; }
+    .stage { min-height: 2rem; padding: 0.5rem; border: 1px dashed var(--border); border-radius: 10px; margin: 0.4rem 0; }
+    .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 0.8rem; }
+  </style>
+  <script type="module" src="../src/browser.js"></script>
+</head>
+<body>
+  <header class="site-header">
+    <a class="home" href="./index.html">html-modules</a>
+    <span class="crumb">Sanitizing templates</span>
+    <span class="spacer"></span>
+    <button class="theme-toggle" type="button">Dark mode</button>
+  </header>
+  <main class="page">
+    <nav class="site-nav"></nav>
+    <h1>Sanitizing templates</h1>
+    <p class="lede">
+      A module URL is as trusted as a <code>&lt;script src&gt;</code>: its templates are stamped as real DOM, so <code>&lt;img onerror&gt;</code>, a
+      <code>javascript:</code> link or an <code>&lt;iframe srcdoc&gt;</code> in one runs. <code>sanitize</code> is an opt-in function that every
+      component template passes through at load time, before anything is registered. The module in
+      <a href="./components/untrusted.html"><code>components/untrusted.html</code></a> carries all of those; each payload records itself in
+      <code>window.__pwned</code>, and none of them runs below.
+    </p>
+    <div class="covers" data-page="sanitize"></div>
+    <div class="summary-row" id="summary"></div>
+
+    <section class="card">
+      <div class="step">
+        <h3>A function you write</h3>
+        <p class="small"><code>createHTMLModules({ sanitize })</code> or <code>HTMLModules.import(src, { sanitize })</code>. The function receives the template's HTML and <code>{ def, url, window, report }</code> and returns a string, a <code>TrustedHTML</code> or a <code>DocumentFragment</code> (stamped without being parsed again). Here, a small allowlist walk over a fragment: no scripts, frames, handlers or <code>javascript:</code> URLs.</p>
+        <div class="stage" id="stage-hook"></div>
+        <ul id="checks-hook"></ul>
+      </div>
+      <div class="step">
+        <h3>Async, per import, and what it reports</h3>
+        <p class="small">The module is sanitized when it loads, so an async sanitizer works: nothing is registered until every template is done. A sanitizer may <code>report()</code> what it removed: it arrives as a <code>sanitize</code> event (<code>onEvent</code>) and as <code>html-modules:sanitize</code> on the document. A module is cached per sanitizer, so the same URL can be imported both ways under different tags.</p>
+        <ul id="checks-async"></ul>
+      </div>
+      <div class="step">
+        <h3>A sanitized module cannot import JavaScript</h3>
+        <p class="small">A sanitizer vets templates; <code>import()</code> would run the file with the page's authority. So the HTML modules a sanitized module imports are sanitized too, and a <code>.js</code> one is an error.</p>
+        <ul id="checks-js"></ul>
+      </div>
+      <div class="step">
+        <h3>With @johnhenry/safe-fragment</h3>
+        <p class="small"><code>safeFragmentSanitizer({ profile })</code> from <code>@johnhenry/html-modules/safe-fragment</code>: <code>sanitizeToFragment()</code> under a versioned profile (here <code>ui-v1</code> plus <code>&lt;slot&gt;</code>, <code>part</code> and <code>ui--*</code> elements, derived by <code>registerTemplateProfile()</code>). safe-fragment is a peer you pass in, not a dependency; this page loads a bundle of the pinned commit (<code>npm run vendor:safe-fragment</code>).</p>
+        <div class="stage" id="stage-sf"></div>
+        <ul id="checks-sf"></ul>
+      </div>
+    </section>
+
+    <div class="pager"><a href="./scripting.html">← Scripting and lifecycle</a><a href="./index.html">All examples →</a></div>
+  </main>
+
+  <div id="host" hidden></div>
+  <script type="module">
+    import { createHTMLModules } from '../src/index.js';
+    import { safeFragmentSanitizer } from '../src/safe-fragment.js';
+    import { renderChecks } from './shared/site.js';
+
+    const $ = (id) => document.getElementById(id);
+    const tick = (ms = 0) => new Promise((r) => setTimeout(r, ms));
+    const groups = [];
+    const show = (id, checks) => { groups.push(renderChecks($(id), checks)); };
+    window.__pwned = [];
+
+    // A small allowlist sanitizer over a parsed fragment (the real work belongs to a library: see the last section).
+    const BLOCKED = new Set(['script', 'iframe', 'object', 'embed', 'style', 'link', 'meta', 'base']);
+    function sanitizeToFragment(html, { window: win }) {
+      const template = win.document.createElement('template');
+      template.innerHTML = html; // (a detached, inert template: nothing runs while it is parsed)
+      for (const el of [...template.content.querySelectorAll('*')]) {
+        if (BLOCKED.has(el.localName)) { el.remove(); continue; }
+        for (const { name, value } of [...el.attributes]) {
+          if (/^on/i.test(name) || /^\s*(?:javascript|vbscript|data):/i.test(value) || name === 'srcdoc') el.removeAttribute(name);
+        }
+      }
+      return template.content;
+    }
+
+    // --- A function you write ---------------------------------------------------------------------------
+    {
+      const lab = createHTMLModules({ sanitize: (html, ctx) => sanitizeToFragment(html, ctx) });
+      await lab.import('./components/untrusted.html', { as: 'gen' });
+      const card = document.createElement('gen--card');
+      card.setAttribute('label', 'Ada');
+      card.append('hello');
+      $('stage-hook').append(card);
+      await tick(300); // an <img onerror> or an <iframe srcdoc> would have run by now
+      card.shadowRoot.querySelector('.js')?.click();
+      card.shadowRoot.querySelector('.btn')?.click();
+      const root = card.shadowRoot;
+      const ns = await lab.load('./components/untrusted.html');
+      show('checks-hook', [
+        ['no payload ran: <code>window.__pwned</code> is empty', window.__pwned.length === 0],
+        ['no <code>&lt;script&gt;</code>, <code>&lt;iframe&gt;</code>, <code>onerror</code>, <code>onclick</code> or <code>javascript:</code> link is left', !root.querySelector('script, iframe') && !root.querySelector('[onerror], [onclick]') && !root.querySelector('a.js')?.hasAttribute('href')],
+        ['the rest renders: the <code>{{label}}</code> binding, the <code>&lt;slot&gt;</code>, the <code>part</code> and the module\'s own stylesheet', root.querySelector('h2')?.textContent === 'Ada' && !!root.querySelector('slot') && !!root.querySelector('[part="title"]') && root.adoptedStyleSheets.length === 1],
+        ['the definition holds a <code>DocumentFragment</code>: the template is not parsed again when it is stamped', ns.card.template.nodeType === 11],
+        ['the module itself is intact (<code>badge</code> is still an export): only templates are sanitized, never the module source', typeof ns.badge === 'object' && !!ns.components.badge],
+      ]);
+    }
+
+    // --- Async, per import, and what it reports ---------------------------------------------------------
+    {
+      const events = [];
+      const heard = [];
+      const listener = (e) => heard.push(e.detail);
+      document.addEventListener('html-modules:sanitize', listener);
+      const lab = createHTMLModules({ onEvent: (e) => events.push(e) });
+      const order = [];
+      const loading = lab.import('./components/untrusted.html', {
+        as: 'asy',
+        sanitize: async (html, ctx) => {
+          order.push('start');
+          await tick(30);
+          const fragment = sanitizeToFragment(html, ctx);
+          ctx.report({ removed: ['scripts, frames, handlers and javascript: URLs'] });
+          order.push('done');
+          return fragment;
+        },
+      });
+      const registeredEarly = !!customElements.get('asy--card');
+      await loading;
+      await lab.import('./components/untrusted.html', { as: 'asraw', sanitize: false });
+      const cache = [...lab.cache.keys()].filter((k) => k.includes('untrusted.html'));
+      document.removeEventListener('html-modules:sanitize', listener);
+      const reports = events.filter((e) => e.type === 'sanitize');
+      show('checks-async', [
+        ['an async sanitizer ran for both templates before anything was registered', order.join() === 'start,start,done,done' && !registeredEarly && !!customElements.get('asy--card')],
+        ['<code>report()</code> arrived as <code>sanitize</code> events through <code>onEvent</code> (one per component)', reports.length === 2 && reports.every((e) => e.url.endsWith('untrusted.html') && e.details.removed.length === 1)],
+        ['…and as <code>html-modules:sanitize</code> on the document', heard.length === 2 && heard.some((d) => d.name === 'card')],
+        ['<code>sanitize: false</code> opts one import out, and the module is cached per sanitizer (two entries, one URL)', cache.length === 2],
+      ]);
+    }
+
+    // --- JavaScript dependencies --------------------------------------------------------------------------
+    {
+      const lab = createHTMLModules({ sanitize: (html, ctx) => sanitizeToFragment(html, ctx) });
+      const refused = await lab.load('./components/untrusted-importer.html').then(() => null, (e) => e);
+      const trusted = await lab.load('./components/untrusted-importer.html', { sanitize: false }).then(() => true, () => false);
+      show('checks-js', [
+        ['a sanitized module\'s <code>&lt;html-import src="*.js"&gt;</code> was refused with a named error', /Refusing to import the JavaScript module .*tagged\.js from a sanitized HTML module/.test(refused?.message ?? '')],
+        ['the same module loads when it is trusted (<code>sanitize: false</code>)', trusted === true],
+      ]);
+    }
+
+    // --- safe-fragment -----------------------------------------------------------------------------------
+    {
+      // A bundle of the pinned commit, made by `npm run vendor:safe-fragment` (gitignored). Computed, so a page
+      // served without it reports "unsupported" instead of failing.
+      const url = new URL('./vendor/safe-fragment/safe-fragment.js', location.href).href;
+      const safeFragment = await import(url).catch(() => null);
+      if (!safeFragment) {
+        show('checks-sf', [['safe-fragment is not bundled here (run <code>npm run vendor:safe-fragment</code>)', 'unsupported']]);
+      } else {
+        const events = [];
+        const lab = createHTMLModules({ onEvent: (e) => events.push(e) });
+        await lab.import('./components/untrusted.html', {
+          as: 'ui',
+          sanitize: safeFragmentSanitizer({ safeFragment, profile: { namespaces: ['ui'], attributes: ['tone'] } }),
+        });
+        const card = document.createElement('ui--card');
+        card.setAttribute('label', 'Grace');
+        card.append('hello');
+        $('stage-sf').append(card);
+        await tick(300);
+        card.shadowRoot.querySelector('.js')?.click();
+        card.shadowRoot.querySelector('.btn')?.click();
+        const root = card.shadowRoot;
+        const removed = events.filter((e) => e.type === 'sanitize').flatMap((e) => e.details.removed);
+        const badge = root.querySelector('ui--badge');
+        show('checks-sf', [
+          ['no payload ran (<code>window.__pwned</code> is still empty)', window.__pwned.length === 0],
+          ['<code>&lt;script&gt;</code>, <code>&lt;iframe&gt;</code>, <code>onerror</code>, <code>onclick</code> and the <code>javascript:</code> href are gone', !root.querySelector('script, iframe') && !root.querySelector('[onerror], [onclick]') && !root.querySelector('a.js')?.hasAttribute('href')],
+          ['<code>&lt;slot&gt;</code>, <code>part</code> and the <code>&lt;ui--badge&gt;</code> custom element are kept, and the badge upgraded', !!root.querySelector('slot') && badge?.getAttribute('part') === 'badge' && !!badge.shadowRoot?.querySelector('b')],
+          ['the removals were reported: an iframe, <code>onerror</code>, <code>onclick</code> and an <code>href</code>', ['iframe'].every((t) => removed.some((n) => n.tag === t)) && ['onerror', 'onclick', 'href'].every((a) => removed.some((n) => n.attribute === a))],
+        ]);
+      }
+    }
+
+    const passed = groups.filter(Boolean).length;
+    $('summary').innerHTML = `<div><span class="num">${passed}/${groups.length}</span><span class="muted small">groups fully passing</span></div>`;
+  </script>
+  <script type="module" src="./shared/site.js"></script>
+</body>
+</html>

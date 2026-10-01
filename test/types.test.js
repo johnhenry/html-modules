@@ -14,7 +14,7 @@ const tsc = join(root, 'node_modules/typescript/bin/tsc');
 
 test('every JavaScript entry point has a "types" condition pointing at a file that ships', async () => {
   const entries = Object.entries(pkg.exports).filter(([key]) => key !== './package.json');
-  assert.deepEqual(entries.map(([key]) => key), ['.', './browser', './runtime', './compiler', './dev', './vite']);
+  assert.deepEqual(entries.map(([key]) => key), ['.', './browser', './runtime', './compiler', './dev', './vite', './safe-fragment']);
   for (const [key, condition] of entries) {
     assert.ok(condition.types?.endsWith('.d.ts'), `${key} has a types condition`);
     assert.ok(Object.keys(condition)[0] === 'types', `${key}: "types" comes first, as TypeScript requires`);

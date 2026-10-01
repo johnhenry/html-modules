@@ -27,8 +27,8 @@ export declare class HTMLComponent {
     #private;
     /** @type {string | null} */
     name: string | null;
-    /** @type {string | null} */
-    template: string | null;
+    /** @type {string | DocumentFragment | null} */
+    template: string | DocumentFragment | null;
     /** @type {'open' | 'closed'} */
     shadow: 'open' | 'closed';
     /** @type {boolean} */

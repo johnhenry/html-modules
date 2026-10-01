@@ -5,7 +5,7 @@ export default class AnnotationsReporter {
 
   onTestEnd(test, result) {
     for (const a of test.annotations) {
-      if (['trusted-types', 'scoped-registries', 'state-restore', 'fallback'].includes(a.type)) {
+      if (['trusted-types', 'scoped-registries', 'state-restore', 'fallback', 'sanitizer-engine'].includes(a.type)) {
         this.#rows.push(`${test.parent.project()?.name ?? '?'}: ${a.type} = ${a.description} (${result.status})`);
       }
     }

@@ -128,7 +128,8 @@ export function compileRecord(record, { runtime = '@johnhenry/html-modules/runti
         expr = `defineHTMLStylesheet({ name: ${str(e.name)}, css: ${str(e.css)}, url: import.meta.url })`;
         break;
       case 'data':
-        expr = str(e.value);
+        // JSON.parse, as at runtime: an object literal would turn a "__proto__" key into the prototype.
+        expr = `JSON.parse(${str(str(e.value))})`;
         break;
       case 'reexport':
         if (!('name' in e)) {

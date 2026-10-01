@@ -117,7 +117,8 @@ Both formats produce, in order:
    - component → `defineHTMLComponent({ name, template, shadow, delegatesFocus, styles, imports, url: import.meta.url })`,
      with `<html-module-settings>` defaults already baked in;
    - stylesheet → `defineHTMLStylesheet({ name, css, url: import.meta.url })`;
-   - data → the JSON value as a literal;
+   - data → `JSON.parse("…")` of the JSON text (not an object literal, which would turn a `"__proto__"` key into the
+     prototype instead of an own key, as it is when loaded at runtime);
    - named re-export → `lookupExport($m<n>, "<import, else name, else default>", "<src>")`;
    - namespace re-export (`import="*"`) → `$m<n>` itself.
 7. `const $components = manifest({ <components and named re-exports>, ...namespaceComponents("<name>", $x_<name>) per

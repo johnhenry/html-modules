@@ -164,3 +164,20 @@ test('CLI: html-module input.html [-o out] [--format] [--as] [--runtime] [--stdo
   assert.equal(await main(['--help'], { stdout, stderr: io() }), 0);
   assert.match(stdout.text, /Usage: html-module/);
 });
+
+test('data exports compile to JSON.parse, so a "__proto__" key stays an own key as it is at runtime', async () => {
+  const source = '<html-export name="cfg"><script type="application/json">{"__proto__": {"admin": true}, "n": {"__proto__": 1}, "a": [1, {"b": null}]}</script></html-export>';
+  const js = compileHTMLModule(source, { url: 'cfg.html', runtime });
+  assert.match(js, /JSON\.parse\(/);
+  await writeFile(join(dir, 'cfg.js'), js);
+  const compiled = (await import(url('cfg.js'))).cfg;
+  const { modules } = setup({ files: { 'cfg.html': source } });
+  const runtimeValue = (await modules.load('./cfg.html')).cfg;
+  for (const value of [compiled, runtimeValue]) {
+    assert.ok(Object.hasOwn(value, '__proto__'), 'an own "__proto__" key');
+    assert.equal(Object.getPrototypeOf(value), Object.prototype);
+    assert.equal(value.admin, undefined, 'the prototype was not replaced');
+    assert.ok(Object.hasOwn(value.n, '__proto__'));
+  }
+  assert.deepEqual(JSON.stringify(compiled), JSON.stringify(runtimeValue));
+});

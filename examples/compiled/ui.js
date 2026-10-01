@@ -37,7 +37,7 @@ const $x_callout = defineHTMLComponent({
   imports: [],
   url: import.meta.url,
 });
-const $x_meta = {"library":"ui","version":"1.2.0","components":4};
+const $x_meta = JSON.parse("{\"library\":\"ui\",\"version\":\"1.2.0\",\"components\":4}");
 const $components = manifest({
   "card": $x_card,
   "button": $x_button,

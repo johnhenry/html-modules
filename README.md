@@ -60,6 +60,8 @@ dependencies.
 - [The compiler](#the-compiler)
 - [Dev server, hot reload and Vite](#dev-server-hot-reload-and-vite)
 - [TypeScript](#typescript)
+- [Testing in real browsers](#testing-in-real-browsers)
+- [Benchmarks](#benchmarks)
 - [Resolution and caching](#resolution-and-caching)
 - [Errors](#errors)
 - [Non-goals](#non-goals)
@@ -721,6 +723,52 @@ import { HTMLModules, type HTMLImportElement } from '@johnhenry/html-modules/bro
 A strict typed consumer of every entry point is compiled by `npm run types:check` (in `npm test` and CI); `npm run types`
 regenerates `types/`. See [TypeScript in the API reference](docs/api.md#typescript).
 
+## Testing in real browsers
+
+linkedom (the unit-test DOM) has no constructable stylesheets, Trusted Types or custom-element upgrade semantics inside
+shadow roots (a bug in `CSSStyleSheet`'s `baseURL` once passed every unit test and failed in Chrome), so anything about
+styles, shadow DOM, registries, forms or security is proven in real engines:
+
+```sh
+npx playwright install --with-deps    # once
+npm run test:browser                  # Chromium, Firefox and WebKit
+npx playwright test --project=webkit  # one engine
+```
+
+`test/browser/` drives every `examples/*.html` page (each renders pass/fail checks; none may fail and nothing may log an
+error) and targeted specs: constructable stylesheets and `url()` resolution against the module, declarative shadow DOM
+(open and closed), Trusted Types under an enforced `require-trusted-types-for` CSP (`scripts/test-server.js` adds CSP
+headers on request), data binding, form association, hot reload against a real `html-module dev` server and a real Vite
+dev server, and scoped registries. A feature an engine lacks is reported by the page as **unsupported**, never as a
+failure. The CI `browsers` job runs all three engines; what it found (117 specs, Chromium 153, Firefox 155,
+WebKit 26.6 on Linux):
+
+| Feature | Chromium | Firefox | WebKit |
+| --- | --- | --- | --- |
+| everything else (constructable sheets, declarative shadow DOM, form-associated custom elements, `:state()`, Trusted Types, data binding, hot reload, Vite HMR) | passes | passes | passes |
+| scoped custom element registries (`registry="scoped"`) | supported | **unsupported** (page says so; imports fall back with a warning) | **unsupported** in the Linux build CI uses (supported in WebKit 26.6 on macOS, where it was also run) |
+| form state restored on history navigation | restored | the engine restored not even a plain form-associated element in an automated back navigation, so the page reports those checks as unsupported | restored |
+
+(Firefox cannot be launched in the sandbox the maintainer's agent runs in, so it is exercised only in CI; Chromium and
+WebKit also run locally.) Chromium reports a `style-src-elem` CSP violation (a report: nothing is applied) for the
+`<style>` inside a module's `DOMParser` document under a strict `style-src`; the specs assert every other directive is clean.
+
+## Benchmarks
+
+`npm run bench` (non-gating; `--json` for machine output): the scanner on a 500-component, 160 KiB module, the compiler,
+and, in each Playwright engine that launches, registering 500 components (fetch, parse, bind and define) and stamping one
+element of each. One run each (numbers move around, CI runners most):
+
+| | Mac (arm64), Node 24 | CI (linux/x64), Node 26 |
+| --- | --- | --- |
+| `scanHTMLModule`, 500 components | 4.4 ms (≈ 38 MB/s) | 6–9 ms (≈ 18–27 MB/s) |
+| `compileHTMLModule` (scan + codegen) | 4.4 ms | 5–10 ms |
+| `readHTMLModule` (DOM reader over linkedom, parse excluded) | 4.1 ms | 5–8 ms |
+| scan a 10-component module | 0.08 ms | 0.07–0.12 ms |
+| register 500 components: Chromium / Firefox / WebKit | 28 ms / n.a. / 34–62 ms | 67–170 ms / 72–102 ms / 41–70 ms |
+| create and stamp 500 elements: Chromium / Firefox / WebKit | 11 ms / n.a. / 15–21 ms | 16–31 ms / 32–82 ms / 18–43 ms |
+| patch one bound attribute: Chromium / Firefox / WebKit | 0.9 µs / n.a. / 1.1 µs | 1.5–2.0 µs / 1.5–3.6 µs / 1.1–1.4 µs |
+
 ## Resolution and caching
 
 - `src` resolves like a module specifier: relative to the importing document (or, inside a module, the importing
@@ -800,6 +848,9 @@ npm test                    # node:test, with linkedom as the test DOM
 npm run check               # every source file parses; entry points import
 npm run examples            # the numbered Node examples, each self-verifying
 npm run examples:compile    # regenerate examples/compiled/
+npm run test:browser        # Playwright: Chromium, Firefox, WebKit
+npm run types               # regenerate the .d.ts files; npm run types:check compiles a typed consumer
+npm run bench               # non-gating benchmark
 ```
 
 ## Adding a new export kind

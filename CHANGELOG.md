@@ -4,6 +4,34 @@
 
 Fixes found by an audit of the first build. Nothing is published yet, so these are folded into `0.0.0` when it ships.
 
+### Features
+
+- **Data binding in templates.** `{{attribute}}` in a component template's text and attribute values reads the host
+  element's attributes (no expressions, no `eval`, no `innerHTML`: strict CSP and Trusted Types safe); text is set as text,
+  URL attributes refuse `javascript:` / `vbscript:` / HTML `data:` URLs, `on*`, `style` and `srcdoc` are never bound; a
+  changed attribute patches only the bound nodes. `props="name count:number open:boolean"` on an export reflects typed
+  properties and observes them. Records carry `props`; compiled output binds identically. Non-goals (loops, conditionals,
+  two-way binding) are in the docs. `159d45e`.
+- **Form-associated components.** `form-associated` (and `form-control="selector"`) on an export: `static formAssociated`,
+  `ElementInternals`, form value from a control in the template or `el.value`, validity, `disabled`, reset and restore.
+  `attachInternals()` is memoized on every template class, so a closed declarative shadow root and a subclass coexist.
+  `847de70`.
+- **Dev server, hot reload and a Vite plugin.** `html-module dev [dir]` (`node:http` + `fs.watch` + SSE, no dependencies);
+  `HTMLModules.hotReload()` swaps a re-fetched module's components and styles under live elements because registered
+  classes delegate to a swappable definition (template changes re-stamp in place, style changes swap adopted sheets; what
+  cannot be applied in place reloads the page); `@johnhenry/html-modules/vite` compiles `.html` imports from JavaScript with
+  the same HMR. `vite` is a dev dependency only. `bf19937`.
+- **Scoped custom element registries.** `registry="scoped"` on a module's import or `<html-import-settings>` gives its
+  components a registry of their own, so two versions of a library with the same inner tags coexist. Feature-detected
+  (`supportsScopedRegistries()`), with a warned fallback to the global registry. `a4f5fa8`.
+- **TypeScript declarations** for every entry point (`.`, `./browser`, `./runtime`, `./compiler`, `./dev`, `./vite`),
+  generated from JSDoc, with a `types` condition per export, a drift test and a strict typed-consumer check in CI.
+  `8c3265a`, `30deff8`.
+- **Cross-browser tests and a benchmark.** A Playwright harness runs every example page and targeted specs (stylesheets and
+  `url()`, declarative shadow DOM, Trusted Types under an enforced CSP, binding, forms, hot reload, scoped registries) in
+  Chromium, Firefox and WebKit, in CI; pages report unsupported features as unsupported. `npm run bench` is non-gating.
+  `f204992`, `aed133e`, `0d88700`, `884721a`, `5b73e76`.
+
 ### Fixes
 
 - **The scanner follows the HTML tokenizer.** The compiler's text scanner now handles comment endings (`--!>`, `<!-->`),

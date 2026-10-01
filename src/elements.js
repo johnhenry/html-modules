@@ -31,7 +31,7 @@
  * misplaced, duplicate or invalid settings element.
  */
 import { applyBinding, bindModule } from './runtime.js';
-import { bindingRecord } from './record.js';
+import { bindingRecord, lazyImportProblem } from './record.js';
 import { assertNamespace } from './names.js';
 import { readImportOptions, readImportSettings, resolveImportOptions, reportLoudly } from './settings.js';
 import { lazyTargets, watchLazy } from './lazy.js';
@@ -338,7 +338,18 @@ export function defineHTMLModuleElements({ modules, window: win = globalThis, re
         if (c.localName !== 'html-binding') continue;
         try {
           bindings.push(bindingRecord(attrsOf(c)));
-        } catch {} // reported when the binding is applied
+        } catch (error) {
+          // A lazy import never applies its bindings until it loads, so this one is reported now.
+          this.#phase = 'error';
+          this.#reject(error);
+          return;
+        }
+      }
+      const problem = lazyImportProblem({ src: this.getAttribute('src'), as, bindings });
+      if (problem) {
+        this.#phase = 'error';
+        this.#reject(new SyntaxError(problem));
+        return;
       }
       this.#watcher = watchLazy(win, lazyTargets({ as, delimiter: this.#config.delimiter, bindings }), () => this.#begin());
     }

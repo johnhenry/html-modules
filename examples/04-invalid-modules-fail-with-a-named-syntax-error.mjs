@@ -41,6 +41,7 @@ const cases = [
   [`<html-import src="./ui.html" integrity="md5-abc"></html-import>`, /Invalid integrity "md5-abc" on <html-import src="\.\/ui\.html"> in m\.html: use Subresource Integrity metadata/],
   [`<html-import src="./ui.html"><html-binding element="x-y"></html-binding></html-import>`, /<html-binding> requires an "export" attribute/],
   [`<html-import src="./t.html" load="lazy"><html-binding export="gold" adopt></html-binding></html-import>`, /is lazy but adopts a stylesheet in m\.html/],
+  [`<html-import src="./a.html" load="lazy"></html-import>`, /<html-import src="\.\/a\.html"> is lazy but has no tag to wait for in m\.html: it would never load/],
   // Settings
   [`<html-import src="./a.html"></html-import><html-import-settings delimiter="-"></html-import-settings>`, /<html-import-settings> must come before any <html-import> in m\.html/],
   [`<html-import-settings></html-import-settings><html-import-settings></html-import-settings>`, /More than one <html-import-settings> in m\.html: a module has at most one/],

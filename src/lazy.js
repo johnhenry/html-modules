@@ -53,6 +53,16 @@ export function lazyTargets({ as, delimiter = '--', bindings = [] } = {}) {
   return { tags, prefixes };
 }
 
+/**
+ * Whether a lazy import has any tag to wait for (what `lazyTargets()` would watch, ignoring whether each tag is
+ * valid): a namespace import, or a binding that registers a tag. Adopt, data and default-without-`element`
+ * bindings register none, and neither does an import with no `as` and no `element=`.
+ */
+export function hasLazyTargets({ as, bindings = [] } = {}) {
+  if (!bindings.length) return Boolean(as);
+  return bindings.some((b) => b.element || (as && !b.adopt && b.export !== 'default'));
+}
+
 function hubFor(win) {
   let hub = hubs.get(win);
   if (hub) return hub;

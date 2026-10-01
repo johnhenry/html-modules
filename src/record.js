@@ -59,6 +59,7 @@
  * @typedef {{ tag: string, order?: number, attrs: Record<string, string>, children: Array<{ tag: string, attrs: Record<string, string>, html?: string, text?: string }> }} RawElement
  */
 import { assertExportName, assertNamespace } from './names.js';
+import { hasLazyTargets } from './lazy.js';
 import {
   EXPORT_DEFAULTS, IMPORT_DEFAULTS, assertOption, booleanAttribute, readImportOptions, readImportSettings, readModuleSettings,
 } from './settings.js';
@@ -105,6 +106,15 @@ export function bindingRecord(attrs, where = '') {
   if (!name) throw new SyntaxError(`<html-binding> requires an "export" attribute${where}`);
   const element = nonEmpty(attrs.element);
   return { export: name, ...(element && { element }), ...(has(attrs, 'adopt') && { adopt: true }) };
+}
+
+/**
+ * The error message for a lazy import that has no tag to wait for (so nothing would ever load it), or null.
+ * Shared by modules (`recordFromRaw`), `<html-import>` and `HTMLModules.import()`.
+ */
+export function lazyImportProblem({ src, as, bindings = [] }, where = '') {
+  if (hasLazyTargets({ as, bindings })) return null;
+  return `<html-import src="${src}"> is lazy but has no tag to wait for${where}: it would never load. A lazy import loads when one of its tags is first used, so it needs "as" (every component as a tag) or an <html-binding> that registers a tag (element="…", or a component export under "as"); adopt, data and default-without-element bindings register none. Write load="eager" to load it at once`;
 }
 
 /** Build an import record from a raw <html-import>. */
@@ -310,6 +320,8 @@ export function recordFromRaw({ imports, exports, importSettings: iset = [], mod
     if (load === 'lazy' && i.bindings.some((b) => b.adopt)) {
       throw new SyntaxError(`<html-import src="${i.src}"> is lazy but adopts a stylesheet${where}: a module's components need their stylesheets when they render, so write load="eager" on this import`);
     }
+    const problem = load === 'lazy' && lazyImportProblem(i, where);
+    if (problem) throw new SyntaxError(problem);
   }
   const names = new Set();
   let firstDefault = null;

@@ -432,8 +432,9 @@ place.
 ```
 
 - **What it waits for.** A namespace import waits for any tag starting with `<as><delimiter>`; an import with
-  `<html-binding>` children waits for exactly the tags they bind. An import with nothing to wait for loads only when
-  `el.load()` is called.
+  `<html-binding>` children waits for exactly the tags they bind. An import with nothing to wait for
+  (no `as`, or only `adopt`, data and default-without-`element` bindings) could never load, so it is an error
+  (`<html-import src="…"> is lazy but has no tag to wait for`); write `load="eager"`.
 - **Where it looks.** The document (one `MutationObserver` per window, plus a scan of what is already there), and
   every shadow root created by an html-modules component, open or closed. What it does *not* see is listed under
   [Honest limitations](#honest-limitations).

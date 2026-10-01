@@ -207,8 +207,9 @@ With `load="lazy"` (or `load: 'lazy'`), nothing is fetched until one of the impo
   `<as><delimiter>`** (the export names are unknown before loading, so the prefix is matched: with
   `delimiter="-"`, `ui-` also matches `ui-kit-card`). With bindings, it waits for **exactly** the tags they bind
   (`element=`, or `<as><delimiter><export>`); bindings that register no tag (`adopt`, data, `export="default"`
-  without `element=`) add nothing. An import with nothing to wait for (no `as`, no element-producing binding) loads
-  only when `load()` is called.
+  without `element=`) add nothing. An import with nothing to wait for (no `as`, no element-producing binding) can never be
+  triggered, so it **fails** (a `SyntaxError`, below) rather than waiting forever: write `load="eager"`, or load it with
+  `HTMLModules.load()`. For `HTMLModules.import()` that is a handle already in state `"error"` whose `ready` rejects.
 - **Where it looks**: one `MutationObserver` per window (`childList` + `subtree`) on the document, plus a scan of
   what is already there when a watcher is added; and every shadow root created by an html-modules component, open or
   **closed** (the runtime reports each one as it stamps it). The observer runs only while some lazy import is

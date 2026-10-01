@@ -15,6 +15,7 @@ import { createLoader } from './loader.js';
 import { bindModule } from './runtime.js';
 import { IMPORT_DEFAULTS, checkFetchOptions, checkOptions, reportLoudly } from './settings.js';
 import { lazyTargets, watchLazy } from './lazy.js';
+import { lazyImportProblem } from './record.js';
 
 /**
  * @param {object} [options]  loader options (`fetch`, `parseHTML`, `hostResolve`, `baseURL`,
@@ -167,6 +168,16 @@ export function createHTMLModules({
         return state;
       },
     };
+    const problem = lazyImportProblem({ src, as: call.as, bindings: call.bindings ?? [] });
+    if (problem) {
+      state = 'error';
+      started = true;
+      const error = new SyntaxError(problem);
+      reject(error);
+      ready.catch(() => {}); // the caller sees it on `ready`; this only stops an unhandled-rejection report
+      loud(Promise.reject(error)).catch(() => {});
+      return handle;
+    }
     watcher = watchLazy(win, lazyTargets({ as: call.as, delimiter: call.delimiter, bindings: call.bindings }), () => start());
     return handle;
   }

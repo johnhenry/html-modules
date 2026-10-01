@@ -216,7 +216,7 @@ test('<html-binding element=…> children: the lazy import waits for exactly tho
 });
 
 test('el.load() forces loading; el.module waits for a lazy import instead of loading it', async () => {
-  const { $, fetch } = page({ body: '<html-import src="./ui.html" as="ui" load="lazy"></html-import><html-import id="none" src="./icons.html" load="lazy"></html-import>' });
+  const { $, fetch } = page({ body: '<html-import src="./ui.html" as="ui" load="lazy"></html-import>' });
   const imp = $('html-import');
   let resolved = false;
   imp.module.then(() => (resolved = true));
@@ -228,10 +228,7 @@ test('el.load() forces loading; el.module waits for a lazy import instead of loa
   assert.ok(resolved);
   assert.equal(detail, await imp.ready);
   assert.ok(detail.elements['ui--card']);
-  // Nothing to watch (no as, no bindings): only load() loads it.
-  assert.equal($('#none').state, 'waiting');
-  await $('#none').load();
-  assert.deepEqual(fetched(fetch).sort(), ['icons.html', 'ui.html']);
+  assert.deepEqual(fetched(fetch), ['ui.html']);
   // load() on an eager import is just ready.
   const eager = page({ body: '<html-import src="./ui.html" as="ui"></html-import>' });
   assert.equal(await eager.$('html-import').load(), await eager.$('html-import').ready);
@@ -290,4 +287,57 @@ test('programmatic: HTMLModules.import(src, { as, load: "lazy" }) returns a hand
   const eager = inst.modules.import('./ui.html', { as: 'ui' });
   assert.equal(typeof eager.then, 'function');
   await eager;
+});
+
+const NOTHING = /<html-import src="[^"]+"> is lazy but has no tag to wait for: it would never load\. A lazy import loads when one of its tags is first used, so it needs "as"/;
+
+test('a lazy <html-import> with no tag to wait for fails instead of waiting forever', async () => {
+  for (const [html, message] of [
+    ['<html-import src="./icons.html" load="lazy"></html-import>', NOTHING],
+    ['<html-import src="./ui.html" as="ui" load="lazy"><html-binding export="card" adopt></html-binding></html-import>', NOTHING],
+    ['<html-import src="./ui.html" as="ui" load="lazy"><html-binding export="default"></html-binding></html-import>', NOTHING],
+    ['<html-import src="./ui.html" load="lazy"><html-binding export="card"></html-binding></html-import>', NOTHING],
+    ['<html-import src="./ui.html" as="ui" load="lazy"><html-binding></html-binding></html-import>', /<html-binding> requires an "export" attribute/],
+  ]) {
+    const { $, fetch } = page({ body: html });
+    const imp = $('html-import');
+    const heard = once(imp, 'error');
+    await assert.rejects(imp.ready, message, html);
+    assert.match((await heard).detail.error.message, message);
+    assert.equal(imp.state, 'error');
+    assert.deepEqual(fetched(fetch), [], 'nothing was fetched');
+  }
+  // The same lazy imports are fine when something can trigger them.
+  const ok = page({ body: '<html-import src="./ui.html" as="ui" load="lazy"><html-binding export="card" adopt></html-binding><html-binding export="button"></html-binding></html-import>' });
+  await tick();
+  assert.equal(ok.$('html-import').state, 'waiting');
+  const element = page({ body: '<html-import src="./ui.html" load="lazy"><html-binding export="card" element="x-card"></html-binding></html-import>' });
+  await tick();
+  assert.equal(element.$('html-import').state, 'waiting');
+});
+
+test('HTMLModules.import({ load: "lazy" }) with no tag to wait for: a handle in state "error" whose ready rejects', async () => {
+  const { modules, fetch } = setup({ files: { 'ui.html': UI } });
+  for (const options of [{}, { as: 'ui', bindings: [{ export: 'card', adopt: true }] }, { bindings: [{ export: 'card' }] }]) {
+    const handle = modules.import('./ui.html', { ...options, load: 'lazy' });
+    assert.equal(handle.state, 'error');
+    await assert.rejects(handle.ready, NOTHING);
+    await assert.rejects(handle.load(), NOTHING);
+  }
+  assert.equal(modules.import('./ui.html', { as: 'ui', load: 'lazy' }).state, 'waiting');
+  assert.deepEqual(fetched(fetch), []);
+});
+
+test('a module whose lazy import has no tag to wait for is a SyntaxError in both readers', async () => {
+  const { scanHTMLModule, readHTMLModule } = await import('../src/index.js');
+  const { specParse } = await import('./spec-dom.js');
+  for (const html of [
+    '<html-import src="./a.html" load="lazy"></html-import>',
+    '<html-import-settings load="lazy"></html-import-settings><html-import src="./a.html"></html-import>',
+    '<html-import src="./a.html" as="a" load="lazy"><html-binding export="x" adopt></html-binding></html-import>'.replace('x" adopt', 'default"'),
+  ]) {
+    for (const read of [(h) => scanHTMLModule(h, 'm.html'), (h) => readHTMLModule(specParse(h), 'm.html')]) {
+      assert.throws(() => read(html), (e) => e instanceof SyntaxError && /<html-import src="\.\/a\.html"> is lazy but has no tag to wait for in m\.html: it would never load/.test(e.message), html);
+    }
+  }
 });

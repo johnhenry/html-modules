@@ -46,6 +46,7 @@ Fixes found by an audit of the first build. Nothing is published yet, so these a
   already evicted the failed load). `ee35618`.
 - **Binding is all or nothing on tag conflicts.** A namespace or `<html-binding>` bind checks every tag before it
   registers any, so a conflict on the last tag no longer leaves the module half bound. `95d387a`.
+- **A `form-control` component delegates focus by default.** The host of a component whose value lives in a control inside its shadow root is not focusable, so a browser could not focus the invalid control when its form was validated: Firefox logged *The invalid form control with name='x' is not focusable* and showed no message, and `focus()` and a click on the host never reached the input. `delegatesFocus` now defaults to `true` for an export with `form-control` (an explicit `delegates-focus`, or the module's `<html-module-settings>`, still decides); a regression test runs in all three engines. The README also says that `<html-import>` and friends are not hidden by default. Found by building the `workbench` integration app. `262fe1e`.
 
 ### Security
 

@@ -196,6 +196,13 @@ no `eval`), text is never parsed as markup, URL attributes refuse script URLs, `
 bound, and an update patches only the bound nodes. No loops, conditionals or two-way binding, deliberately: they
 would need an expression language. See [HTML syntax](api/html-syntax.md#data-binding-in-templates).
 
+## Extension beyond the PRD: form-associated components
+
+`form-associated` (and `form-control="selector"`) on an export: the registered class is `static formAssociated` with
+`ElementInternals`, supplying a form value (a control in the template, or `el.value`), validity, disabled, reset and
+restore. `attachInternals()` is memoized so the closed-declarative-root lookup and subclasses share the one call the
+platform allows. See [HTML syntax](api/html-syntax.md#form-associated-components).
+
 ## Deferred
 
 | Item | Why |

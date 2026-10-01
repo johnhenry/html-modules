@@ -9,6 +9,7 @@ syntax; an import inside a module is private to that module.
 
 - [`<html-export>`](#html-export): exports of a module
 - [Data binding in templates](#data-binding-in-templates): `{{attribute}}` and `props`
+- [Form-associated components](#form-associated-components): `form-associated`, `form-control`
 - [`<html-import>`](#html-import): imports into a page or a module
 - [`<html-binding>`](#html-binding): selective bindings of one import
 - [`<html-import-settings>`](#html-import-settings): import defaults for one document
@@ -71,6 +72,8 @@ scripts, a non-JSON script with no template, invalid JSON.
 | `shadow` | component only | `open` (default), `closed` | The shadow root mode. Overrides `<html-module-settings shadow>`. An empty value means "not set". On a non-component export it is an error. |
 | `delegates-focus` | component only | [boolean](#boolean-attributes): present, `"true"`, `"false"` | `delegatesFocus` for `attachShadow()`. Overrides `<html-module-settings delegates-focus>`; `delegates-focus="false"` turns a module default off. On a non-component export it is an error. |
 | `props` | component only | whitespace or comma separated `name` or `name:type` (`string`, `number`, `boolean`) | Declares attributes that are also **properties**: reflected, typed and observed (see [Data binding](#data-binding-in-templates)). `props="title count:number open:boolean"`. On a non-component export it is an error. |
+| `form-associated` | component only | [boolean](#boolean-attributes) | The component takes part in forms: `static formAssociated = true` and `ElementInternals`. See [Form-associated components](#form-associated-components). On a non-component export it is an error. |
+| `form-control` | component with `form-associated` | a CSS selector | The control in the template (an `<input>`, `<textarea>` or `<select>`) whose value is the form value. Without `form-associated` it is an error; the selector must match such an element in the template (checked at registration). |
 | `src` | re-export | a module specifier | Makes this a re-export of another module (HTML or JS), resolved like an `<html-import src>` of this module (including its `<html-import-settings base>`). |
 | `import` | re-export with `name` | an export name of the source module, `default`, or `*` | The export to take from `src`, when it differs from `name`. `import="*"` takes the whole namespace (`export * as ns from`). |
 | `type` | re-export | `html`, `js` | As on `<html-import>`: load `src` as an HTML module or as JavaScript, whatever its extension (`<html-export src="./part.tpl" type="html">`). The compiler ignores it (compiled dependencies are static imports). On an export without `src` it is an error. |
@@ -205,6 +208,51 @@ no two-way binding (a bound node never writes back to the host); no property-onl
 inside nested `<template>`s; no bindings in server-rendered shadow roots (`renderDeclarative()` rejects a template
 that has `{{`; an upgrading element re-stamps a declarative root when the definition has bindings, keeping its leading
 `<style>` elements); attribute values only reach the DOM as strings.
+
+## Form-associated components
+
+```html
+<html-export name="text-field" form-associated form-control="input">
+  <template><label><slot></slot> <input></label></template>
+</html-export>
+
+<form>
+  <ui--text-field name="who" value="Ada" required>Name</ui--text-field>
+</form>
+```
+
+`form-associated` makes the registered class `static formAssociated = true` and attaches `ElementInternals`, so the
+element is a real form control: it appears in `form.elements` and `FormData` under its `name`, is validated by the
+form, matches `:valid` / `:invalid` / `:disabled`, is disabled by a disabled `<fieldset>`, and is reset and restored
+with its form.
+
+**Where the value comes from.**
+
+- With **`form-control="selector"`**: the control inside the template. Its value is the element's value (the `value`
+  attribute is its initial value), its validity and `validationMessage` are the element's (so `required` works with
+  the browser's own messages: `required`, `disabled` on the host are passed to the control), and typing in it
+  updates the form value. The control must exist in the template (a `SyntaxError` at registration otherwise).
+- Without it, **the element is the control**: assign `el.value` (or call `el.internals.setFormValue()` yourself);
+  `required` on the host makes an empty value `valueMissing`.
+
+**What the class provides**, besides the platform's: `name`, `disabled` and `required` (reflected attributes),
+`value` (current), `defaultValue` (the `value` attribute), `type` (the tag), `form`, `labels`, `validity`,
+`validationMessage`, `willValidate`, `checkValidity()`, `reportValidity()`, `setCustomValidity(message)` and
+`internals` (the `ElementInternals`). These names cannot be `props` of the same component. `formResetCallback` restores the
+initial value (the `value` attribute, or the control's initial value); `formStateRestoreCallback` writes the saved
+string back; `formDisabledCallback` disables the control; `formAssociatedCallback` is an empty hook. A subclass may
+override any of them and call `super`.
+
+**`attachInternals()` coexists.** The platform allows one `attachInternals()` per element, and a component's base class
+may need it already (a *closed* declarative shadow root is only visible through it). On every template class,
+`attachInternals()` is memoized: the runtime, a subclass (`this.attachInternals()`), and `el.internals` all get the
+same object.
+
+**Not supported:** a form value that is not a string (`File`, `FormData`: call `el.internals.setFormValue()`), a
+`form-control` that is a custom element or a group of controls (radio groups), `<label for>` clicks reaching the
+control inside the shadow root (use `<slot>`-ed labels inside the component), and engines without
+`ElementInternals` form association (the element then throws a `TypeError` when constructed). Linkedom, the unit-test
+DOM, has none either, so the behaviour is proven in real browsers.
 
 ## `<html-import>`
 

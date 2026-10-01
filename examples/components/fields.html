@@ -1,0 +1,32 @@
+<!--
+  Form-associated components: `form-associated` makes the element take part in forms (static formAssociated +
+  ElementInternals): its name and value reach FormData, it validates, it is disabled by a disabled <fieldset>,
+  and it resets and restores with the form.
+
+  form-control="input" names the control in the template whose value is the form value; without it, the element
+  is the control: set `el.value`.
+-->
+<html-export name="text-field" form-associated form-control="input" delegates-focus>
+  <style>
+    :host { display: inline-block; }
+    label { display: grid; gap: 0.15rem; font: inherit; }
+    input { font: inherit; padding: 0.3rem 0.45rem; }
+    :host(:state(touched):invalid) input, :host(:invalid) input:not(:placeholder-shown) { outline: 2px solid #c0392b; }
+  </style>
+  <template><label><span><slot>Label</slot></span><input type="text" placeholder=" "></label></template>
+</html-export>
+
+<html-export name="star-input" form-associated props="max:number">
+  <style>
+    :host { display: inline-flex; gap: 0.15rem; font-size: 1.4rem; cursor: pointer; }
+    :host(:disabled) { opacity: 0.4; cursor: not-allowed; }
+    :host(:invalid) { outline: 2px solid #c0392b; }
+    button { all: unset; cursor: inherit; }
+  </style>
+  <template><button type="button" data-n="1">☆</button><button type="button" data-n="2">☆</button><button type="button" data-n="3">☆</button><button type="button" data-n="4">☆</button><button type="button" data-n="5">☆</button></template>
+</html-export>
+
+<html-export name="secret-field" form-associated form-control="input" shadow="closed">
+  <style>:host { display: inline-block; } input { font: inherit; padding: 0.3rem 0.45rem; }</style>
+  <template><input type="password"></template>
+</html-export>

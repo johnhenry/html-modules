@@ -58,6 +58,18 @@ binding is thrown when the component is **registered** (`define()`, an import's 
 | `SyntaxError` (at registration) | `…: Invalid binding "{{ a + b }}": a binding is the name of a host attribute, {{attribute-name}}. There are no expressions, filters or calls; write \{{ for a literal "{{"` |
 | `SyntaxError` (at registration) | `…: Unterminated binding "{{name": a binding is {{attribute-name}}; write \{{ for a literal "{{"` |
 
+### `form-associated`
+
+| Error | Message |
+| --- | --- |
+| `SyntaxError` | `Invalid form-associated="<value>" on <html-export name="<n>"> in <url>: it is a boolean attribute; write form-associated, form-associated="true" or form-associated="false"` |
+| `SyntaxError` | `<html-export name="<n>">: form-control="" is empty; write a selector for the control inside the template, e.g. form-control="input" in <url>` |
+| `SyntaxError` | `<html-export name="<n>">: form-control="<selector>" needs form-associated: the component must take part in forms for its control's value to be the form value in <url>` |
+| `SyntaxError` | `<html-export name="<n>">: "<name>" cannot be a prop of a form-associated component: it is a built-in property (name, value, …) in <url>` |
+| `SyntaxError` | `<html-export name="<n>">: "form-associated" only applies to an export with a <template> in <url>` (same for `"form-control"`) |
+| `SyntaxError` (at registration) | `"<name>" from <url>: form-control="<selector>" matches nothing in the template` / `is not a valid selector` / `matches <p>, which is not a form control (use an <input>, <textarea> or <select>)` |
+| `TypeError` (on construction) | `This environment has no ElementInternals (attachInternals())` |
+
 A bound URL attribute that would run script (`javascript:`, `vbscript:`, an HTML `data:` document) is not an error:
 the attribute is removed.
 

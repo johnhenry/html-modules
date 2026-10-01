@@ -51,6 +51,7 @@ dependencies.
 - [Selective imports: `<html-binding>`](#selective-imports-html-binding)
 - [Identity vs registration name](#identity-vs-registration-name)
 - [Data binding](#data-binding)
+- [Form-associated components](#form-associated-components)
 - [Settings](#settings)
 - [Lazy loading](#lazy-loading)
 - [JavaScript API](#javascript-api)
@@ -415,6 +416,27 @@ Templates are static by default. `{{attribute}}` makes a template read its host 
 
 See it live: [`examples/data.html`](examples/data.html).
 
+## Form-associated components
+
+`form-associated` on an export makes the component a real form control (`static formAssociated` and
+`ElementInternals`): it appears in `FormData` under its `name`, validates (`:invalid`, `required`,
+`setCustomValidity()`), is disabled by a disabled `<fieldset>`, and resets and restores with the form.
+
+```html
+<html-export name="text-field" form-associated form-control="input">
+  <template><label><slot></slot> <input></label></template>
+</html-export>
+
+<form><ui--text-field name="who" value="Ada" required>Name</ui--text-field></form>
+```
+
+`form-control="input"` names the control in the template that carries the value and the validity; without it the
+element is the control (`el.value = …`, or `el.internals.setFormValue()`). `attachInternals()` is memoized on every
+template class, so a closed shadow root (which needs the internals to be found) and your own subclass share the one
+object the platform allows. Not supported: non-string form values, radio-style groups, engines without form-associated
+custom elements. Reference: [HTML syntax](docs/api/html-syntax.md#form-associated-components);
+live: [`examples/forms.html`](examples/forms.html).
+
 ## Settings
 
 Two optional elements set defaults for one document. They are an extension beyond the PRD (which fixes `--` and has
@@ -687,6 +709,7 @@ src/
   runtime.js       HTML Component Definitions → custom elements; binding (shared by runtime and compiled code)
   record.js        module records; readHTMLModule() from a DOM
   template.js      data binding: {{attribute}} sites, props, URL escaping
+  form.js          form-associated components (ElementInternals)
   scan.js          scanHTMLModule() from source text
   loader.js        resolve, fetch, parse, cache, link dependencies
   lazy.js          lazy loading: what an import waits for, and the watcher
@@ -787,7 +810,7 @@ shared record, plus the equivalence test, is what keeps them in step.
   included) to put inside its host tag; when the element upgrades, the runtime keeps that shadow root (open or
   closed), adopts the component's sheets and does not stamp the template again. It does not render nested
   components or run any script. A `shadow="closed"` component's base class calls `attachInternals()` (to see a closed
-  declarative root), so a subclass of one cannot call it again; use `shadow="open"` for those.
+  declarative root); the call is memoized, so a subclass can call `this.attachInternals()` and gets the same object.
 - **The `.` (and `_`) delimiter cannot name one-word exports.** `.` is a legal custom element name character, but
   `ui.card` has no hyphen, so binding a one-word export under `delimiter="."` is a `SyntaxError` naming the tag; a
   namespace import checks every tag before registering any, so it fails whole. Two-word exports (`ui.custom-card`)

@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Form-associated components · html-modules</title>
+  <script>try { const t = localStorage.getItem('html-modules-examples-theme'); if (t) document.documentElement.dataset.theme = t; } catch {}</script>
+  <link rel="stylesheet" href="./shared/site.css">
+  <style>
+    :is(ff--text-field, ff--secret-field, ff--star-input):not(:defined) { visibility: hidden; }
+    form .row { align-items: end; }
+    fieldset { border: 1px dashed var(--border, #bbb); border-radius: 6px; margin-top: 0.75rem; }
+    output { display: block; font: 0.85rem ui-monospace, monospace; white-space: pre-wrap; margin-top: 0.5rem; }
+  </style>
+  <script type="module" src="../src/browser.js"></script>
+</head>
+<body>
+  <header class="site-header">
+    <a class="home" href="./index.html">html-modules</a>
+    <span class="crumb">Forms</span>
+    <span class="spacer"></span>
+    <button class="theme-toggle" type="button">Dark mode</button>
+  </header>
+  <main class="page">
+    <nav class="site-nav"></nav>
+    <h1>Form-associated components</h1>
+    <p class="lede">
+      <code>form-associated</code> on an export makes the component a form control: <code>static formAssociated</code> and
+      <code>ElementInternals</code>. Its <code>name</code> and value reach <code>FormData</code>, it validates (<code>:invalid</code>),
+      a disabled <code>&lt;fieldset&gt;</code> disables it, and it resets and restores with its form.
+      <code>form-control="input"</code> says which control in the template carries the value; without it the element is the control.
+    </p>
+    <div class="covers" data-page="forms"></div>
+
+    <html-import id="ff" src="./components/fields.html" as="ff">
+      <html-binding export="text-field"></html-binding>
+      <html-binding export="secret-field"></html-binding>
+    </html-import>
+
+    <section class="card">
+      <h2>A form</h2>
+      <form id="form">
+        <div class="row">
+          <ff--text-field id="who" name="who" value="Ada" required>Name</ff--text-field>
+          <ff--secret-field id="pin" name="pin" value="1234"></ff--secret-field>
+          <ff--star-input id="stars" name="rating" required></ff--star-input>
+        </div>
+        <fieldset id="locked" disabled><legend>Disabled fieldset</legend><ff--text-field id="locked-field" name="locked" value="nope">Locked</ff--text-field></fieldset>
+        <div class="row" style="margin-top:.75rem"><button type="submit">Submit</button> <button type="reset">Reset</button></div>
+        <output id="out"></output>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>The module</h2>
+      <pre data-source="./components/fields.html"></pre>
+      <p class="small muted"><code>star-input</code> has no control: the page gives it behaviour by extending the definition's element class
+      (<code>class extends fields.starInput.element</code>), which sets <code>this.value</code>. That subclass calls <code>this.attachInternals()</code> too: the runtime's
+      memoized version returns the same <code>ElementInternals</code>, so a base class that already attached them (a closed shadow root needs them) and a subclass coexist.</p>
+    </section>
+
+    <section class="card">
+      <h2>Checks</h2>
+      <ul id="checks"></ul>
+    </section>
+
+    <div class="pager"><a href="./data.html">← Data binding</a><a href="./errors.html">Errors →</a></div>
+  </main>
+
+  <script type="module">
+    import { HTMLModules } from '../src/browser.js';
+    import { renderChecks } from './shared/site.js';
+
+    const supported = 'ElementInternals' in window && 'setFormValue' in ElementInternals.prototype;
+    await document.getElementById('ff').ready;
+    const fields = await HTMLModules.load('./components/fields.html');
+    let attachedAgain = null;
+    class Stars extends fields.starInput.element {
+      constructor() {
+        super();
+        attachedAgain = this.attachInternals() === this.internals;
+        const paint = () => [...this.shadowRoot.querySelectorAll('button')].forEach((b) => { b.textContent = Number(b.dataset.n) <= Number(this.value || 0) ? '★' : '☆'; });
+        this.shadowRoot.addEventListener('click', (e) => {
+          if (this.disabled || !e.target.dataset?.n) return;
+          this.value = e.target.dataset.n;
+          paint();
+        });
+        this.paint = paint;
+      }
+      formResetCallback() { super.formResetCallback(); this.paint(); }
+    }
+    customElements.define('ff--star-input', Stars);
+    await customElements.whenDefined('ff--text-field');
+
+    const form = document.getElementById('form');
+    const data = () => Object.fromEntries(new FormData(form));
+    const show = () => { document.getElementById('out').textContent = JSON.stringify(data()); };
+    form.addEventListener('input', show);
+    form.addEventListener('click', show);
+    form.addEventListener('reset', () => setTimeout(show));
+    form.addEventListener('submit', (e) => { e.preventDefault(); show(); });
+    show();
+
+    const who = document.getElementById('who');
+    const stars = document.getElementById('stars');
+    const pin = document.getElementById('pin');
+    const results = [];
+    const check = (label, ok) => results.push([label, supported ? ok : 'unsupported']);
+
+    // Arriving by history navigation, the browser restores each control's saved state (formStateRestoreCallback).
+    // Do not mutate the restored form; show what was restored instead.
+    const restored = performance.getEntriesByType('navigation')[0]?.type === 'back_forward';
+    if (restored) {
+      check('the browser restored the form state on history navigation (<code>formStateRestoreCallback</code>): the name is what was typed, not the default', who.value !== 'Ada');
+      check('… and the stars', stars.value !== '');
+    } else {
+      check('the element is form-associated: <code>static formAssociated</code> and <code>el.form</code> is its form', who.constructor.formAssociated === true && who.form === form);
+      check('its name and value reach FormData (value attribute is the initial value)', data().who === 'Ada');
+      check('a closed-shadow-root component takes part too (<code>shadowRoot</code> is null)', pin.shadowRoot === null && data().pin === '1234');
+      check('a subclass calling <code>attachInternals()</code> gets the runtime\'s ElementInternals', attachedAgain === true);
+      check('a disabled fieldset disables the component: its value is not submitted, <code>:disabled</code> matches', !('locked' in data()) && document.getElementById('locked-field').matches(':disabled'));
+
+      check('required and empty: invalid, <code>:invalid</code> matches, <code>form.checkValidity()</code> is false', !stars.checkValidity() && stars.matches(':invalid') && !form.checkValidity());
+      stars.shadowRoot.querySelector('[data-n="4"]').click();
+      check('clicking a star sets the value: <code>rating=4</code> in FormData, and it is valid now', data().rating === '4' && stars.checkValidity());
+
+      who.value = '';
+      check('the control\'s validity is the element\'s: required + emptied → invalid', !who.checkValidity() && who.matches(':invalid') && who.validity.valueMissing);
+      who.value = 'Grace';
+      check('assigning <code>el.value</code> writes the control and the form value', who.shadowRoot.querySelector('input').value === 'Grace' && data().who === 'Grace' && who.checkValidity());
+      who.setCustomValidity('Nope');
+      check('<code>setCustomValidity()</code> makes it invalid with that message', who.validity.customError && who.validationMessage === 'Nope');
+      who.setCustomValidity('');
+
+      form.reset();
+      await new Promise((r) => setTimeout(r));
+      check('<code>form.reset()</code> restores every default (the value attribute; none for the stars)', data().who === 'Ada' && data().pin === '1234' && !('rating' in data()) && stars.paint() === undefined);
+
+    }
+
+    renderChecks(document.getElementById('checks'), results);
+  </script>
+  <script type="module" src="./shared/site.js"></script>
+</body>
+</html>

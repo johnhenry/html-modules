@@ -29,6 +29,12 @@ const cases = [
   [`<html-export name="card" props="a a">${T}</html-export>`, /prop "a" is declared twice in m\.html/],
   [`<html-export name="card" props="onclick">${T}</html-export>`, /"onclick" cannot be a prop: bindings never write on\* attributes in m\.html/],
   [`<html-export name="theme" props="a"><style>p{}</style></html-export>`, /"props" only applies to an export with a <template> in m\.html/],
+  // Form association
+  [`<html-export name="f" form-associated="maybe">${T}</html-export>`, /Invalid form-associated="maybe" on <html-export name="f"> in m\.html: it is a boolean attribute/],
+  [`<html-export name="f" form-control="input">${T}</html-export>`, /form-control="input" needs form-associated: the component must take part in forms/],
+  [`<html-export name="f" form-associated form-control="">${T}</html-export>`, /form-control="" is empty; write a selector for the control inside the template/],
+  [`<html-export name="f" form-associated props="value">${T}</html-export>`, /"value" cannot be a prop of a form-associated component: it is a built-in property \(name, value/],
+  [`<html-export name="f" form-associated><style>p{}</style></html-export>`, /"form-associated" only applies to an export with a <template> in m\.html/],
   // Defaults
   [`<html-export default>${T}</html-export>`, /"default" needs a name to go with it; write name="default" for a default-only export/],
   [`<html-export name="default" default>${T}</html-export>`, /name="default" is already the default export; drop the "default" attribute/],

@@ -46,7 +46,7 @@
  *
  * @typedef {{ export: string, element?: string, adopt?: boolean }} BindingRecord
  * @typedef {{ src: string, as?: string, delimiter?: string, type?: string, integrity?: string, conflict?: 'error'|'reuse', load?: 'eager'|'lazy', errors?: 'event'|'throw', bindings: BindingRecord[] }} ImportRecord
- * @typedef {{ kind: 'component', name: string|null, default?: true, template: string, shadow: 'open'|'closed', delegatesFocus: boolean, styles: string[], props?: Array<{ name: string, type: 'string'|'number'|'boolean' }> }
+ * @typedef {{ kind: 'component', name: string|null, default?: true, template: string, shadow: 'open'|'closed', delegatesFocus: boolean, styles: string[], props?: Array<{ name: string, type: 'string'|'number'|'boolean' }>, formAssociated?: true, formControl?: string }
  *         | { kind: 'stylesheet', name: string|null, default?: true, css: string }
  *         | { kind: 'data', name: string|null, default?: true, value: unknown }
  *         | { kind: 'reexport', src: string, type?: string, integrity?: string, name?: string|null, default?: true, import?: string }} ExportRecord
@@ -60,6 +60,7 @@
  */
 import { assertExportName, assertNamespace, camelCase } from './names.js';
 import { parseProps } from './template.js';
+import { FORM_PROPERTIES } from './form.js';
 import { hasLazyTargets } from './lazy.js';
 import {
   EXPORT_DEFAULTS, IMPORT_DEFAULTS, assertOption, booleanAttribute, readImportOptions, readImportSettings, readModuleSettings,
@@ -265,9 +266,20 @@ function exportRecord(raw, where, defaults = EXPORT_DEFAULTS) {
       : defaults.delegatesFocus ?? EXPORT_DEFAULTS.delegatesFocus;
     for (const css of styles) assertNoImport(raw, css, where);
     const props = has(attrs, 'props') ? parseProps(attrs.props, describe(raw), camelCase, where) : null;
-    return [{ kind: 'component', ...base, template: templates[0].html ?? '', shadow, delegatesFocus, styles, ...(props && { props }) }];
+    const formAssociated = has(attrs, 'form-associated') && booleanAttribute('form-associated', attrs['form-associated'], ` on ${describe(raw)}${where}`);
+    const formControl = nonEmpty(attrs['form-control']);
+    if (has(attrs, 'form-control') && !formControl) throw new SyntaxError(`${describe(raw)}: form-control="" is empty; write a selector for the control inside the template, e.g. form-control="input"${where}`);
+    if (formControl && !formAssociated) throw new SyntaxError(`${describe(raw)}: form-control="${formControl}" needs form-associated: the component must take part in forms for its control's value to be the form value${where}`);
+    if (formAssociated) {
+      const clash = props?.find((p) => FORM_PROPERTIES.has(camelCase(p.name)));
+      if (clash) throw new SyntaxError(`${describe(raw)}: "${clash.name}" cannot be a prop of a form-associated component: it is a built-in property (${[...FORM_PROPERTIES].join(', ')})${where}`);
+    }
+    return [{
+      kind: 'component', ...base, template: templates[0].html ?? '', shadow, delegatesFocus, styles, ...(props && { props }),
+      ...(formAssociated && { formAssociated: true, ...(formControl && { formControl }) }),
+    }];
   }
-  for (const a of ['shadow', 'delegates-focus', 'props']) {
+  for (const a of ['shadow', 'delegates-focus', 'props', 'form-associated', 'form-control']) {
     if (has(attrs, a)) throw new SyntaxError(`${describe(raw)}: "${a}" only applies to an export with a <template>${where}`);
   }
   if (scripts.length) {

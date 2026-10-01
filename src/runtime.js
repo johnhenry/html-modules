@@ -21,6 +21,7 @@ import { assertOption, reportLoudly } from './settings.js';
 import { componentRootCreated, lazyTargets, watchLazy } from './lazy.js';
 import { configureWindow, nonceFor, trustedHTML } from './policy.js';
 import { analyzeTemplate, resolveSites, updateSites } from './template.js';
+import { FORM_ATTRIBUTES, FORM_PROPERTIES, checkFormControl, formAttributeChanged, installFormAssociation, setupForm } from './form.js';
 
 /**
  * Configure page-security options for a window: a Trusted Types policy for the HTML the runtime parses
@@ -54,6 +55,8 @@ export class HTMLComponent {
    * @param {'open'|'closed'} [spec.shadow]  shadow root mode (default "open")
    * @param {boolean} [spec.delegatesFocus]
    * @param {string[]} [spec.styles]         CSS text, adopted into every shadow root (one sheet per definition)
+   * @param {boolean} [spec.formAssociated]  take part in forms (`static formAssociated`, ElementInternals): `form-associated`
+   * @param {string} [spec.formControl]      selector of the control in the template whose value is the form value: `form-control`
    * @param {Array<{ name: string, type?: 'string'|'number'|'boolean' }>} [spec.props]  attributes reflected as properties and observed (`props="count:number"`)
    * @param {Array<{module: object, from: string, as?: string, delimiter?: string, conflict?: string, errors?: string, load?: string, lazy?: () => Promise<object>, bindings?: object[]}>} [spec.imports]
    *                                         modules this component uses, bound before it is registered
@@ -61,7 +64,7 @@ export class HTMLComponent {
    * @param {Function} [spec.element]        a JS-authored HTMLElement subclass instead of a template
    * @param {string} [spec.url]              where it came from, for messages
    */
-  constructor({ name = null, template, shadow = 'open', delegatesFocus = false, styles = [], props = [], imports = [], element, url } = {}) {
+  constructor({ name = null, template, shadow = 'open', delegatesFocus = false, styles = [], props = [], formAssociated = false, formControl, imports = [], element, url } = {}) {
     if (element !== undefined) {
       if (typeof element !== 'function') throw new TypeError('defineHTMLComponent: `element` must be a class extending HTMLElement');
       this.#element = element;
@@ -76,6 +79,14 @@ export class HTMLComponent {
     this.delegatesFocus = Boolean(delegatesFocus);
     this.styles = Object.freeze([...styles]);
     this.props = Object.freeze(props.map((p) => Object.freeze({ name: p.name, type: p.type ?? 'string' })));
+    this.formAssociated = Boolean(formAssociated);
+    if (formControl !== undefined) {
+      if (!this.formAssociated) throw new TypeError('defineHTMLComponent: `formControl` needs `formAssociated: true`');
+      this.formControl = String(formControl);
+    }
+    for (const p of this.props) {
+      if (this.formAssociated && FORM_PROPERTIES.has(camelCase(p.name))) throw new SyntaxError(`defineHTMLComponent: "${p.name}" cannot be a prop of a form-associated component: it is a built-in property`);
+    }
     this.imports = Object.freeze(imports.map((i) => Object.freeze({ ...i, bindings: Object.freeze([...(i.bindings ?? [])]) })));
     if (url) this.url = url;
     Object.defineProperty(this, COMPONENT, { value: true });
@@ -131,6 +142,17 @@ export const isHTMLComponent = (value) => value != null && value[COMPONENT] === 
 const pascal = (name) => (name ? camelCase(name).replace(/^./, (c) => c.toUpperCase()) : 'HTMLModuleElement');
 
 const states = new WeakMap(); // element → { live: bound sites }
+const internalsMap = new WeakMap(); // element → its ElementInternals (attachable once)
+
+/** The element's ElementInternals, attached on first use: the platform allows one `attachInternals()` per element. */
+function internalsOf(el, win) {
+  if (!internalsMap.has(el)) {
+    const attach = win.HTMLElement.prototype.attachInternals;
+    if (typeof attach !== 'function') throw new TypeError('This environment has no ElementInternals (attachInternals())');
+    internalsMap.set(el, attach.call(el));
+  }
+  return internalsMap.get(el);
+}
 
 /** Define the reflected property for a declared prop on `proto`: the attribute is the single source of truth. */
 function defineProp(proto, { name, type }) {
@@ -161,7 +183,8 @@ function templateElementClass(def, win) {
   };
   // Binding sites are found once per definition and window, here, so a malformed binding fails at registration.
   const info = analyzeTemplate(content(), describeDefinition(def));
-  const observed = [...new Set([...def.props.map((p) => p.name), ...info.names])];
+  if (def.formControl) checkFormControl(content(), def.formControl, describeDefinition(def));
+  const observed = [...new Set([...def.props.map((p) => p.name), ...info.names, ...(def.formAssociated ? FORM_ATTRIBUTES : [])])];
   const cls = class extends win.HTMLElement {
     static get component() {
       return def;
@@ -169,6 +192,15 @@ function templateElementClass(def, win) {
     static get observedAttributes() {
       return observed;
     }
+    static get formAssociated() {
+      return def.formAssociated;
+    }
+
+    /** Memoized: one ElementInternals per element, shared with the runtime (a subclass may call this too). */
+    attachInternals() {
+      return internalsOf(this, win);
+    }
+
     constructor() {
       super();
       // A server-rendered (declarative) shadow root is kept, not re-stamped, but still gets the component's styles.
@@ -216,6 +248,7 @@ function templateElementClass(def, win) {
           updateSites(live, this);
         }
       }
+      if (def.formAssociated) setupForm(this, root, def.formControl, (el) => internalsOf(el, win));
       // Lazy imports watch component shadow roots too (see lazy.js).
       componentRootCreated(this, root, win);
     }
@@ -223,8 +256,10 @@ function templateElementClass(def, win) {
     attributeChangedCallback(name, previous, value) {
       const live = states.get(this)?.live;
       if (live && previous !== value) updateSites(live, this, [name]);
+      if (def.formAssociated) formAttributeChanged(this, name, previous, value);
     }
   };
+  if (def.formAssociated) installFormAssociation(cls, (el) => internalsOf(el, win));
   for (const prop of def.props) defineProp(cls.prototype, prop);
   Object.defineProperty(cls, 'name', { value: pascal(def.name) });
   return cls;

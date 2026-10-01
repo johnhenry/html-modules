@@ -92,6 +92,14 @@ export const checklist = [
     ['bind.patch', 'a changed attribute patches its bound nodes; the shadow root is not re-stamped'],
     ['bind.compiled', 'compiled modules bind identically to runtime-loaded ones'],
   ] },
+  { group: 'Form-associated components', items: [
+    ['frm.associated', 'form-associated: static formAssociated and ElementInternals; name and value reach FormData'],
+    ['frm.control', 'form-control="selector": a control in the template supplies the value and validity'],
+    ['frm.validity', 'required, setCustomValidity(), :invalid and form.checkValidity()'],
+    ['frm.disabled', 'a disabled fieldset disables the component'],
+    ['frm.reset', 'form.reset() restores the default value; state restore after navigation'],
+    ['frm.internals', 'one ElementInternals, shared with a closed shadow root and with subclasses'],
+  ] },
   { group: 'Compiler', items: [
     ['cmp.esm', 'html-module ui.html → ui.js exporting definitions and a manifest'],
     ['cmp.no-register', 'compiled modules do not register on import'],
@@ -171,6 +179,11 @@ export const pages = [
     id: 'data', href: 'data.html', title: 'Data binding',
     summary: '{{attribute}} in a template\'s text and attribute values, props that reflect as typed properties, escaping (text only, javascript: URLs refused), in-place patching, and the compiled module rendering the same. No eval; strict CSP and Trusted Types safe.',
     covers: ['bind.text', 'bind.attr', 'bind.props', 'bind.patch', 'bind.compiled', 'fmt.component', 'cmp.same'],
+  },
+  {
+    id: 'forms', href: 'forms.html', title: 'Form-associated components',
+    summary: 'form-associated on an export: components that take part in <form>: FormData, validity and :invalid, disabled fieldsets, reset, a closed shadow root, and a subclass sharing the same ElementInternals.',
+    covers: ['frm.associated', 'frm.control', 'frm.validity', 'frm.disabled', 'frm.reset', 'frm.internals', 'fmt.shadow'],
   },
   {
     id: 'errors', href: 'errors.html', title: 'Errors',

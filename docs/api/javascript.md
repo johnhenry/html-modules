@@ -15,7 +15,7 @@ exports it as `HTMLModules` (also `globalThis.HTMLModules`). Anywhere else, or f
 - [`defineHTMLModuleElements()`](#definehtmlmoduleelements)
 - Lower level: [`createLoader`](#createloaderoptions), [`linkHTMLModule`](#linkhtmlmodulerecord-modules-options),
   [`createNamespace`](#createnamespaceentries), [`lazyTargets`](#lazytargetsspec),
-  [`watchLazy`](#watchlazywindow-targets-fire), [`componentRoot`](#componentroothost)
+  [`watchLazy`](#watchlazywindow-targets-fire-options), [`componentRoot`](#componentroothost)
 
 ```js
 import { HTMLModules } from '@johnhenry/html-modules/browser';
@@ -175,7 +175,9 @@ With `load="lazy"` (or `load: 'lazy'`), nothing is fetched until one of the impo
   until then. Disconnecting a waiting import cancels the watching (`idle`); reconnecting resumes it.
 - **Inside modules**: a module's own lazy import loads when one of its tags first appears (usually inside one of the
   module's components' shadow roots). A failure fires `error` (bubbling, composed, `detail.lazy === true`) on the
-  element that used the tag. A lazy module import may not `adopt`.
+  element that used the tag, and the import is armed again: the next element that uses one of its tags retries
+  (the failed load was evicted from the cache). The element that failed is not retried by itself, so an outage does
+  not turn into a request loop. A lazy module import may not `adopt`.
 - **Compiled code is never lazy**: compiled dependencies are static `import`s. `load` is carried in `$imports` for
   fidelity only.
 - Throws `TypeError: load="lazy" needs MutationObserver, which this window does not have` when a lazy import has
@@ -317,16 +319,17 @@ lazyTargets({ as: 'ui', bindings: [{ export: 'card' }, { export: 'x', element: '
 lazyTargets({});                                                    // { tags: [], prefixes: [] }: only load() loads it
 ```
 
-## `watchLazy(window, targets, fire)`
+## `watchLazy(window, targets, fire, options)`
 
 ```ts
-watchLazy(window: Window, targets: { tags?: string[], prefixes?: string[] }, fire: (element: Element) => void):
-  { cancel(): void, readonly active: boolean }
+watchLazy(window: Window, targets: { tags?: string[], prefixes?: string[] }, fire: (element: Element) => void,
+          options?: { skip?: (element: Element) => boolean }): { cancel(): void, readonly active: boolean }
 ```
 
 Call `fire(element)` **once**, the first time an element whose tag is in `tags` or starts with one of `prefixes`
 is present in the window's document or in an html-modules component's shadow root, now or later. With no targets,
-nothing is watched, `fire` is never called and `active` is `false`. `cancel()` stops watching. Throws the
+nothing is watched, `fire` is never called and `active` is `false`. `cancel()` stops watching. `options.skip(element)`
+excludes elements that must not fire it (the runtime uses it to not retry an element whose lazy import already failed). Throws the
 `MutationObserver` `TypeError` above when needed and missing.
 
 ## `componentRoot(host)`

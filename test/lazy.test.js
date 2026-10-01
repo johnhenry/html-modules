@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { lazyTargets, componentRoot } from '../src/index.js';
-import { setup, tick, ORIGIN } from './helpers.js';
+import { setup, tick, ORIGIN, makeFetch } from './helpers.js';
 
 const once = (el, type) => new Promise((resolve) => el.addEventListener(type, (e) => resolve(e), { once: true }));
 
@@ -165,6 +165,30 @@ test('a failing module-level lazy import fires error on the element that used it
   assert.equal(e.detail.lazy, true);
   await tick();
   assert.equal(reported.length, 1);
+});
+
+test('a failed module-level lazy import is retried the next time one of its tags is used (not hammered for the one that failed)', async () => {
+  const MOD = `<html-import-settings load="lazy"></html-import-settings><html-import src="./flaky.html" as="fl"></html-import>
+    <html-export name="w"><template><fl--star></fl--star></template></html-export>`;
+  let up = false;
+  const base = makeFetch({ [new URL('m.html', ORIGIN).href]: MOD, [new URL('flaky.html', ORIGIN).href]: ICONS });
+  const fetch = async (url) => (String(url).endsWith('flaky.html') && !up ? (base.log.push(String(url)), { ok: false, status: 503, text: async () => '' }) : base(url));
+  fetch.log = base.log;
+  const { $, document, window } = page({ files: { 'm.html': MOD }, fetch, body: '<html-import src="./m.html" as="m"></html-import>' });
+  await $('html-import').ready;
+  document.body.insertAdjacentHTML('beforeend', '<m--w id="one"></m--w>');
+  const first = await once(componentRoot($('#one')).querySelector('fl--star'), 'error');
+  assert.match(first.detail.error.message, /503/);
+  await tick(10);
+  assert.equal(fetched(fetch).filter((u) => u === 'flaky.html').length, 1, 'the element that failed is not retried by itself');
+  assert.equal(window.customElements.get('fl--star'), undefined);
+  // The server recovers; the next element that uses the tag retries.
+  up = true;
+  document.body.insertAdjacentHTML('beforeend', '<m--w id="two"></m--w>');
+  await tick(10);
+  assert.equal(fetched(fetch).filter((u) => u === 'flaky.html').length, 2);
+  assert.ok(window.customElements.get('fl--star'), 'bound on the retry');
+  assert.ok(upgradeIn(window, componentRoot($('#two'))).querySelector('fl--star').shadowRoot);
 });
 
 test('<html-binding element=…> children: the lazy import waits for exactly those tags', async () => {

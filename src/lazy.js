@@ -63,7 +63,7 @@ function hubFor(win) {
 
   const check = (el) => {
     const name = el.localName;
-    for (const w of [...watchers]) if (w.matches(name)) w.fire(el);
+    for (const w of [...watchers]) if (w.matches(name) && !w.skip?.(el)) w.fire(el);
   };
   // Check `node` and everything under it, descending into component shadow roots.
   const visit = (node) => {
@@ -123,13 +123,15 @@ function hubFor(win) {
  * @param {any} win
  * @param {{ tags: string[], prefixes: string[] }} targets
  * @param {(el: Element) => void} fire
+ * @param {{ skip?: (el: Element) => boolean }} [options]  `skip` excludes elements that must not fire it (e.g. ones it already failed for)
  */
-export function watchLazy(win, { tags = [], prefixes = [] }, fire) {
+export function watchLazy(win, { tags = [], prefixes = [] }, fire, { skip } = {}) {
   if (!tags.length && !prefixes.length) return { cancel() {}, active: false };
   const hub = hubFor(win);
   const exact = new Set(tags);
   let done = false;
   const watcher = {
+    skip,
     matches: (name) => exact.has(name) || prefixes.some((p) => name.startsWith(p)),
     fire(el) {
       if (done) return;

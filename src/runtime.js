@@ -336,13 +336,7 @@ function bindImports(def, registry, win) {
     if (dep.module === undefined && typeof dep.lazy === 'function') {
       if (!lazyDeps.has(registry)) lazyDeps.set(registry, new WeakSet());
       if (lazyDeps.get(registry).has(dep)) continue;
-      lazyDeps.get(registry).add(dep);
-      watchLazy(win, lazyTargets({ ...dep, delimiter: dep.delimiter ?? DELIMITER }), (el) => {
-        Promise.resolve().then(dep.lazy).then((ns) => bindModule(ns, options)).catch((error) => {
-          el.dispatchEvent(new win.CustomEvent('error', { bubbles: true, composed: true, detail: { error, from: dep.from, lazy: true } }));
-          if (dep.errors === 'throw') reportLoudly(error, win);
-        });
-      });
+      watchLazyDep(dep, options, registry, win, new WeakSet());
       continue;
     }
     try {
@@ -352,6 +346,26 @@ function bindImports(def, registry, win) {
       throw error;
     }
   }
+}
+
+/**
+ * Watch for the tags of one lazy import; when one is used, load and bind it. A failure is announced on
+ * the element that used the tag, and the import is armed again for the next element that uses one (not
+ * for the ones that already failed, which would retry forever): the loader has evicted the failed load,
+ * so that next use fetches again.
+ */
+function watchLazyDep(dep, options, registry, win, failed) {
+  const { delimiter = DELIMITER } = dep;
+  lazyDeps.get(registry).add(dep);
+  watchLazy(win, lazyTargets({ ...dep, delimiter }), (el) => {
+    Promise.resolve().then(dep.lazy).then((ns) => bindModule(ns, options)).catch((error) => {
+      failed.add(el);
+      lazyDeps.get(registry).delete(dep);
+      watchLazyDep(dep, options, registry, win, failed);
+      el.dispatchEvent(new win.CustomEvent('error', { bubbles: true, composed: true, detail: { error, from: dep.from, lazy: true } }));
+      if (dep.errors === 'throw') reportLoudly(error, win);
+    });
+  }, { skip: (el) => failed.has(el) });
 }
 
 // ---------------------------------------------------------------------------

@@ -271,7 +271,7 @@ export const isHTMLStylesheet = (value) => value != null && value[STYLESHEET] ==
 const isCSSStyleSheet = (value) => value != null && typeof value === 'object' && typeof value.replaceSync === 'function' && 'cssRules' in value;
 export const isStylesheet = (value) => isHTMLStylesheet(value) || isCSSStyleSheet(value);
 
-const adoptedFallback = new WeakMap(); // root → Set<stylesheet> (roots without adoptedStyleSheets)
+const adoptedFallback = new WeakMap(); // root → Map<stylesheet, <style> element> (roots without adoptedStyleSheets)
 
 /**
  * Adopt a stylesheet export (HTMLStylesheet or CSSStyleSheet) into a document
@@ -288,18 +288,37 @@ export function adoptStylesheet(root, value, { window: win } = {}) {
     return;
   }
   if (!isHTMLStylesheet(value)) throw new TypeError('This document cannot adopt a CSSStyleSheet');
-  if (!adoptedFallback.has(root)) adoptedFallback.set(root, new Set());
+  if (!adoptedFallback.has(root)) adoptedFallback.set(root, new Map());
   const seen = adoptedFallback.get(root);
   if (seen.has(value)) return;
-  seen.add(value);
   const doc = root.ownerDocument ?? root;
   const style = doc.createElement('style');
   if (value.name) style.setAttribute('data-html-module', value.name);
   const nonce = nonceFor(win);
   if (nonce) style.setAttribute('nonce', nonce);
   style.textContent = value.css;
+  seen.set(value, style);
   const parent = root.head ?? root;
   parent.append(style);
+}
+
+/**
+ * The counterpart of `adoptStylesheet()`: take a stylesheet out of a document or shadow root again. A no-op when
+ * it was not adopted there. It is removed outright, whoever adopted it: adoption is not reference-counted, so
+ * two bindings that adopted the same sheet into one root lose it together.
+ */
+export function unadoptStylesheet(root, value, { window: win } = {}) {
+  if (!isStylesheet(value)) throw new TypeError('unadoptStylesheet: not a stylesheet');
+  win ??= root.defaultView ?? root.ownerDocument?.defaultView ?? globalThis;
+  const sheet = isHTMLStylesheet(value) ? value.sheetFor(win) : value;
+  if (sheet && Array.isArray(root.adoptedStyleSheets) && root.adoptedStyleSheets.includes(sheet)) {
+    root.adoptedStyleSheets = root.adoptedStyleSheets.filter((s) => s !== sheet);
+  }
+  const style = adoptedFallback.get(root)?.get(value);
+  if (style) {
+    style.remove();
+    adoptedFallback.get(root).delete(value);
+  }
 }
 
 // ---------------------------------------------------------------------------

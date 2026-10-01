@@ -30,13 +30,14 @@
  * <html-binding>, where `error` bubbles through its import; `error` on a
  * misplaced, duplicate or invalid settings element.
  */
-import { applyBinding, bindModule } from './runtime.js';
+import { applyBinding, bindModule, unadoptStylesheet } from './runtime.js';
 import { bindingPlacementProblem, bindingRecord, lazyImportProblem } from './record.js';
 import { assertNamespace } from './names.js';
 import { readImportOptions, readImportSettings, resolveImportOptions, reportLoudly } from './settings.js';
 import { lazyTargets, watchLazy } from './lazy.js';
 
 const BIND = Symbol('html-modules.bind');
+const adoptions = new WeakMap(); // <html-binding> → a function that undoes its stylesheet adoption
 const FOLLOWING = 4; // Node.DOCUMENT_POSITION_FOLLOWING
 
 function domReady(doc) {
@@ -545,6 +546,12 @@ export function defineHTMLModuleElements({ modules, window: win = globalThis, re
           this.#elements[result.tag] = result.element;
           this.#tags[result.tag] = { tag: result.tag, namespace: result.namespace, export: result.export, ...(result.reused && { reused: true }) };
         }
+        if (result.adopted) {
+          adoptions.set(el, () => {
+            unadoptStylesheet(root, result.value, { window: win });
+            this.#applied.delete(el); // reconnecting applies it again
+          });
+        }
         el.dispatchEvent(new win.CustomEvent('load', { detail: result }));
         return null;
       } catch (error) {
@@ -557,6 +564,15 @@ export function defineHTMLModuleElements({ modules, window: win = globalThis, re
   }
 
   class HTMLBinding extends win.HTMLElement {
+    disconnectedCallback() {
+      // An `adopt` binding that is removed gives its stylesheet back (registered tags stay: elements cannot be undefined).
+      const undo = adoptions.get(this);
+      if (undo) {
+        adoptions.delete(this);
+        undo();
+      }
+    }
+
     connectedCallback() {
       const parent = this.parentElement;
       if (parent?.localName === 'html-import') {

@@ -66,7 +66,7 @@ export function createHTMLModules({
 
   const api = {
     loader,
-    /** The module cache: resolved URL → Promise of the namespace. */
+    /** The module cache: `<kind>:<resolved URL>` (`html:https://…/ui.html`) → Promise of the namespace. */
     cache: loader.cache,
 
     /** The default namespace delimiter of this instance. */
@@ -91,6 +91,16 @@ export function createHTMLModules({
      *        `credentials` and `mode` are the fetch options for this module, over the instance's.
      */
     load: (src, { base: b, type, integrity, credentials, mode } = {}) => loader.load(src, b ?? instanceBase(), { type, integrity, credentials, mode }),
+
+    /**
+     * Evict a module from the cache so the next `load()` / `import()` fetches it again. Without `type`, every kind
+     * of that URL is evicted. Returns whether anything was. Registered tags stay registered and namespaces
+     * already loaded are unchanged; a JavaScript module also stays in the browser's own module map.
+     * @param {string} src
+     * @param {{ base?: string, type?: 'html'|'js' }} [options]
+     * @returns {boolean}
+     */
+    unload: (src, { base: b, type } = {}) => loader.unload(src, b ?? instanceBase(), { type }),
 
     /**
      * Bind a loaded namespace: see `bindModule()`.

@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   defineHTMLComponent, defineHTMLStylesheet, isHTMLComponent, defineElement, bindModule, registerComponents,
-  applyBinding, lookupExport, componentsOf, manifest, toComponent, adoptStylesheet, componentRoot, renderDeclarative,
+  applyBinding, lookupExport, componentsOf, manifest, toComponent, adoptStylesheet, componentRoot, renderDeclarative, unadoptStylesheet,
   bindingName, parseBindingName, camelCase, kebabCase, isValidElementName, DELIMITER,
 } from '../src/index.js';
 import { makeWindow, shared } from './helpers.js';
@@ -359,4 +359,32 @@ test('constructed stylesheets get the module URL as their baseURL (url() resolve
   assert.equal(made.at(-1), undefined);
   assert.equal(defineHTMLStylesheet({ css: 'p{}' }).sheetFor(win) !== null, true);
   assert.equal(made.at(-1), undefined, 'no url, no options');
+});
+
+test('unadoptStylesheet() undoes adoptStylesheet(): adopted sheets and the <style> fallback', () => {
+  const sheet = defineHTMLStylesheet({ name: 'theme', css: 'p{}' });
+  const win = makeWindow();
+  win.CSSStyleSheet = class {
+    constructor() {
+      this.cssRules = [];
+    }
+    replaceSync() {}
+  };
+  const root = { adoptedStyleSheets: [] };
+  adoptStylesheet(root, sheet, { window: win });
+  const other = new win.CSSStyleSheet();
+  root.adoptedStyleSheets.push(other);
+  unadoptStylesheet(root, sheet, { window: win });
+  assert.deepEqual(root.adoptedStyleSheets, [other], 'only that sheet is removed');
+  unadoptStylesheet(root, sheet, { window: win }); // a no-op when it is not adopted
+  adoptStylesheet(root, sheet, { window: win });
+  assert.equal(root.adoptedStyleSheets.length, 2, 'it can be adopted again');
+  const fallback = makeWindow();
+  adoptStylesheet(fallback.document, sheet, { window: fallback });
+  assert.equal(fallback.document.head.querySelectorAll('style').length, 1);
+  unadoptStylesheet(fallback.document, sheet, { window: fallback });
+  assert.equal(fallback.document.head.querySelectorAll('style').length, 0);
+  adoptStylesheet(fallback.document, sheet, { window: fallback });
+  assert.equal(fallback.document.head.querySelectorAll('style').length, 1, 'and again');
+  assert.throws(() => unadoptStylesheet(root, {}), /unadoptStylesheet: not a stylesheet/);
 });

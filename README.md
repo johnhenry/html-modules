@@ -472,7 +472,8 @@ const lazy = HTMLModules.import('./ui.html', { as: 'ui', load: 'lazy' });       
 await HTMLModules.import('./ui.html', { bindings: [{ export: 'card', element: 'x-card' }] });
 HTMLModules.bind(ui, { as: 'admin' });                                                  // bind a loaded module
 HTMLModules.resolve('./ui.html');                                                       // → absolute URL
-HTMLModules.cache;                                                                      // Map<URL, Promise<namespace>>
+HTMLModules.cache;                                                                      // Map<`<kind>:<URL>`, Promise<namespace>>
+HTMLModules.unload('./ui.html');                                                        // evict it from the cache: the next load fetches again
 ```
 
 A loaded namespace is frozen and has a null prototype. Named exports are camelCase (`fancy-button` →
@@ -483,7 +484,7 @@ The API at a glance; every entry links to its reference:
 
 | Area | Exports | Reference |
 | --- | --- | --- |
-| Instances | `createHTMLModules(options)`, the instance's `load`, `import`, `bind`, `resolve`, `cache`, `options`, `base`; `defineHTMLModuleElements()` | [JavaScript API](docs/api/javascript.md) |
+| Instances | `createHTMLModules(options)`, the instance's `load`, `unload`, `import`, `bind`, `resolve`, `cache`, `options`, `base`; `defineHTMLModuleElements()` | [JavaScript API](docs/api/javascript.md) |
 | Elements | `HTMLImport`, `HTMLBinding`, `HTMLExport`, `HTMLImportSettings`, `HTMLModuleSettings` (from `/browser`) | [Elements](docs/api/elements.md) |
 | Definitions | `defineHTMLComponent`, `HTMLComponent`, `defineHTMLStylesheet`, `HTMLStylesheet`, `isHTMLComponent`, `isHTMLStylesheet`, `isStylesheet`, `isElementLike` | [Runtime](docs/api/runtime.md) |
 | Binding and registration | `bindModule`, `applyBinding`, `registerComponents`, `defineElement`, `toComponent`, `lookupExport`, `componentsOf`, `manifest`, `adoptStylesheet` | [Runtime](docs/api/runtime.md) |
@@ -601,8 +602,9 @@ Every option, the CLI flags and exit codes, and a full generated module: [Compil
   JavaScript, `ui.html` without `./` is a bare specifier.
 - A document's `<html-import-settings base>` replaces the document (or module) URL as the base for its relative
   specifiers.
-- Modules are cached by resolved URL as promises, so repeated and concurrent imports share one fetch and parse.
-  Failed loads are evicted and can be retried.
+- Modules are cached by kind (HTML or JavaScript) and resolved URL as promises, so repeated and concurrent imports
+  share one fetch and parse. Failed loads are evicted and can be retried; `HTMLModules.unload(src)` evicts one on
+  purpose (registered tags stay registered, and a JavaScript module stays in the browser's module map).
 - Circular dependencies between HTML modules are rejected with the cycle in the message, whether the modules load
   one after another or concurrently.
 
@@ -716,7 +718,7 @@ shared record, plus the equivalence test, is what keeps them in step.
 ## Honest limitations
 
 - **Custom element names are global and permanent, and scoped registries are not supported yet.** Once a tag is
-  defined in a window it cannot be undefined or redefined: removing an `<html-import>` unregisters nothing, and a
+  defined in a window it cannot be undefined or redefined: removing an `<html-import>` unregisters nothing (it only un-adopts the stylesheets its `adopt` bindings adopted), and a
   second version of a library needs its own namespace (or `conflict="reuse"`, which keeps the first). The runtime
   takes a `registry` option, but a component's shadow root is attached without one, so the tags inside its template
   resolve against the global registry. Scoped custom element registries are deferred until native support settles

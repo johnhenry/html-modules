@@ -9,7 +9,7 @@ exports it as `HTMLModules` (also `globalThis.HTMLModules`). Anywhere else, or f
 
 - [`createHTMLModules(options)`](#createhtmlmodulesoptions)
 - [The instance](#the-instance): [`load`](#load), [`import`](#import), [`bind`](#bind), [`resolve`](#resolve),
-  [`cache`](#cache), [`options` / `delimiter` / `base`](#options-delimiter-base), [`loader`](#loader)
+  [`cache`](#cache), [`unload`](#unload), [`options` / `delimiter` / `base`](#options-delimiter-base), [`loader`](#loader)
 - [Lazy loading](#lazy-loading) and [the lazy handle](#the-lazy-handle)
 - [Resolution](#resolution), [caching and cycles](#caching-and-cycles), [the namespace shape](#the-namespace-shape)
 - [`defineHTMLModuleElements()`](#definehtmlmoduleelements)
@@ -26,7 +26,8 @@ await HTMLModules.import('./ui.html', { bindings: [{ export: 'card', element: 'x
 const lazy = HTMLModules.import('./ui.html', { as: 'ui', load: 'lazy' });  // a handle, not a promise
 HTMLModules.bind(ui, { as: 'admin', delimiter: '-' });              // bind a namespace you already have
 HTMLModules.resolve('./ui.html');                                   // → "https://example.com/ui.html"
-HTMLModules.cache;                                                  // Map<URL, Promise<namespace>>
+HTMLModules.cache;                                                  // Map<`<kind>:<URL>`, Promise<namespace>>
+HTMLModules.unload('./ui.html');                                    // evict it: the next load fetches again
 ```
 
 ## `createHTMLModules(options)`
@@ -163,9 +164,24 @@ See [Resolution](#resolution). Throws `TypeError` for an unresolvable bare speci
 
 ### `cache`
 
-`Map<string, Promise<namespace>>`: resolved URL → the load promise. Shared with every `<html-import>` of the
-instance. A failed load is removed so it can be retried. Deleting an entry forces the next load to fetch again (it
-does not unregister anything already registered).
+`Map<string, Promise<namespace>>`: `<kind>:<resolved URL>` (`html:https://…/ui.html`, `js:https://…/x.js`) → the load
+promise. Shared with every `<html-import>` of the instance. The kind is part of the key, so one URL loaded as HTML and
+as JavaScript (`type`) is two entries. A load with `integrity` has its own key (`…#integrity=<metadata>`). A failed
+load is removed so it can be retried. Deleting an entry forces the next load to fetch again (it does not unregister
+anything already registered); [`unload()`](#unload) does that by specifier.
+
+### `unload`
+
+```ts
+instance.unload(src: string, options?: { base?: string, type?: 'html' | 'js' }): boolean
+```
+
+The counterpart of `load()`: resolve `src` as `load()` does and evict its cache entry, so the next `load()` or
+`import()` fetches it again. Without `type`, every kind of that URL (and every `integrity` variant) is evicted; with
+it, only that kind. Returns `true` if anything was evicted. Namespaces already loaded are unchanged and keep working,
+registered tags stay registered (custom elements cannot be undefined), and a JavaScript module stays in the browser's own
+module map, so `import()` of it returns the same module: only html-modules' entry goes. Throws `TypeError` for an
+unresolvable bare specifier.
 
 ### `options`, `delimiter`, `base`
 
@@ -175,7 +191,7 @@ does not unregister anything already registered).
 
 ### `loader`
 
-The underlying [`createLoader()`](#createloaderoptions) object: `{ load, resolve, cache, baseURL }`.
+The underlying [`createLoader()`](#createloaderoptions) object: `{ load, unload, resolve, cache, baseURL }`.
 
 ## Trusted Types and CSP
 
@@ -264,10 +280,10 @@ Note that `ui.html` (no `./`) is a **bare** specifier, exactly as in JavaScript:
 
 ## Caching and cycles
 
-- Modules are cached by resolved URL as promises, so repeated and concurrent loads share one fetch and one parse,
+- Modules are cached by kind (HTML or JavaScript) and resolved URL as promises, so repeated and concurrent loads share one fetch and one parse,
   and every `<html-import>` of the same URL gets the same namespace (and the same definitions: identity is
   preserved).
-- A failed load is evicted; the next import retries.
+- A failed load is evicted; the next import retries. `unload(src)` evicts one on purpose.
 - Circular dependencies between HTML modules (imports or re-exports, including self-references) are rejected with
   the cycle in the message (`Error: Circular HTML module dependency: …/a.html -> …/b.html -> …/a.html`), whether the
   modules load one after another or concurrently. Detection uses a wait graph, so concurrent loads of a cycle reject
@@ -318,7 +334,7 @@ defineHTMLModuleElements({ modules });
 ```ts
 createLoader(options?: { baseURL?, hostResolve?, fetch?, credentials?, mode?, trustedTypes?, nonce?, parseHTML?, importModule?, window?, onEvent? }):
   { load(specifier, referrer?, { type?, integrity?, credentials?, mode? }?): Promise<namespace>, resolve(specifier, referrer?): string,
-    cache: Map<string, Promise<namespace>>, baseURL: string | undefined }
+    unload(specifier, referrer?, { type? }?): boolean, cache: Map<string, Promise<namespace>>, baseURL: string | undefined }
 ```
 
 The loader alone: resolve → fetch → parse → read the record → load dependencies → link. Options as in

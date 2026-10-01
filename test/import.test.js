@@ -281,3 +281,17 @@ test('a page <html-binding> that is not a direct child of <html-import> fires an
   assert.match((await strayHeard).detail.error.message, /<html-binding export="card"> is not a direct child of <html-import>: it is outside any <html-import>/);
   assert.deepEqual(fetch.log, [`${ORIGIN}ui.html`]);
 });
+
+test('removing an adopt <html-binding> un-adopts its stylesheet; putting it back adopts it again', async () => {
+  const { $, document } = page(`<html-import src="${at('ui.html')}"><html-binding export="theme" adopt></html-binding><html-binding export="custom-card" element="x-un"></html-binding></html-import>`);
+  await $('html-import').ready;
+  const styles = () => document.head.querySelectorAll('style[data-html-module="theme"]').length;
+  assert.equal(styles(), 1);
+  const adopt = $('html-binding[adopt]');
+  adopt.remove();
+  assert.equal(styles(), 0, 'the fallback <style> goes with the binding');
+  $('html-import').append(adopt);
+  assert.equal(styles(), 1, 'reconnecting adopts it again');
+  $('html-binding[element]').remove();
+  assert.equal(styles(), 1, 'a binding that adopted nothing leaves the stylesheet alone');
+});

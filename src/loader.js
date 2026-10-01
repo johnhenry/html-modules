@@ -5,7 +5,7 @@
  *   DOMParser, read into a module record and linked into a namespace of HTML
  *   Component Definitions.
  * - Anything else is a JavaScript module, loaded with native `import()`.
- * - Every module is cached by resolved URL as a Promise, so concurrent and
+ * - Every module is cached by kind and resolved URL as a Promise, so concurrent and
  *   repeated imports share one fetch and one parse (PRD §16). Failed loads are
  *   evicted so they can be retried.
  * - Relative URLs resolve against the importing document or module. Bare
@@ -48,8 +48,14 @@ export async function verifyIntegrity(bytes, integrity, url, win = globalThis) {
   }
 }
 
+/** The loader's cache key: `html:<url>` / `js:<url>`, plus `#integrity=<metadata>` for a verified load. */
+const cacheKey = (kind, url, integrity) => `${kind}:${url}${integrity ? `#integrity=${integrity.trim().split(/\s+/).join(' ')}` : ''}`;
+
 const HTML_EXT = /\.html?(?:[?#]|$)/i;
 const URL_LIKE = /^(?:\.{0,2}\/)/;
+
+/** The key of a dependency in the `modules` map `linkHTMLModule()` takes: its `src`, or `type:src` when it has a `type`. */
+const dependencyKey = (src, type) => (type ? `${type}:${src}` : src);
 
 /**
  * Build a module namespace from a record and its loaded dependencies. The
@@ -59,13 +65,14 @@ const URL_LIKE = /^(?:\.{0,2}\/)/;
  * module's <html-import-settings>). A lazy import that was not loaded gets a
  * `lazy` loader from `options.lazy(src, type)` instead of a `module`.
  * @param {import('./record.js').ModuleRecord} record
- * @param {Map<string, object>} modules src (as written) → loaded namespace
+ * @param {Map<string, object>} modules src (as written, or `type:src` for a dependency with a `type`) → loaded namespace
  * @param {{ lazy?: (src: string, type?: string, integrity?: string) => () => Promise<object> }} [options]
  */
 export function linkHTMLModule(record, modules, { lazy } = {}) {
   const { url } = record;
+  const dependency = (src, type) => (modules.has(dependencyKey(src, type)) ? modules.get(dependencyKey(src, type)) : modules.get(src));
   const imports = record.imports.map((i) => {
-    const entry = { module: modules.get(i.src), from: i.src, ...(i.as && { as: i.as }), ...moduleImportOptions(record, i), bindings: i.bindings };
+    const entry = { module: dependency(i.src, i.type), from: i.src, ...(i.as && { as: i.as }), ...moduleImportOptions(record, i), bindings: i.bindings };
     if (entry.module === undefined && entry.load === 'lazy' && lazy) entry.lazy = lazy(i.src, i.type, i.integrity);
     return entry;
   });
@@ -88,10 +95,10 @@ export function linkHTMLModule(record, modules, { lazy } = {}) {
         break;
       case 'reexport':
         if (!('name' in e)) {
-          stars.push([modules.get(e.src), e.src]);
+          stars.push([dependency(e.src, e.type), e.src]);
           continue;
         }
-        value = e.import === '*' ? modules.get(e.src) : lookupExport(modules.get(e.src), e.import ?? e.name ?? 'default', e.src);
+        value = e.import === '*' ? dependency(e.src, e.type) : lookupExport(dependency(e.src, e.type), e.import ?? e.name ?? 'default', e.src);
         break;
     }
     if (e.name) {
@@ -231,9 +238,9 @@ export function createLoader({
     // The module's <html-import-settings base> is resolved against the module's own URL.
     const referrer = record.importSettings?.base ? new URL(record.importSettings.base, url).href : url;
     const wanted = new Map();
-    for (const i of record.imports) if (moduleImportOptions(record, i).load !== 'lazy') wanted.set(i.src, [i.type, i.integrity]);
-    for (const e of record.exports) if (e.kind === 'reexport' && !wanted.has(e.src)) wanted.set(e.src, []);
-    const modules = new Map(await Promise.all([...wanted].map(async ([src, [type, sri]]) => [src, await loadDependency(url, src, type, referrer, sri)])));
+    for (const i of record.imports) if (moduleImportOptions(record, i).load !== 'lazy') wanted.set(dependencyKey(i.src, i.type), [i.src, i.type, i.integrity]);
+    for (const e of record.exports) if (e.kind === 'reexport') wanted.set(dependencyKey(e.src, e.type), [e.src, e.type, e.integrity]);
+    const modules = new Map(await Promise.all([...wanted].map(async ([key, [src, type, sri]]) => [key, await loadDependency(url, src, type, referrer, sri)])));
     return linkHTMLModule(record, modules, { lazy: (src, type, sri) => () => loadDependency(url, src, type, referrer, sri) });
   }
 
@@ -244,8 +251,9 @@ export function createLoader({
       parseIntegrity(integrity, ` for ${url}`);
       if (kind !== 'html') throw new TypeError(`integrity applies to HTML modules only: ${url} is loaded with import(), which cannot verify it (to pin a JavaScript module, use the "integrity" field of an import map)`);
     }
-    // A load with integrity is cached apart from one without: an unverified copy must not satisfy it.
-    const key = integrity ? `${url}#integrity=${integrity.trim().split(/\s+/).join(' ')}` : url;
+    // Keyed by kind and URL (the same URL loaded as HTML and as JavaScript are two modules), and a load with
+    // integrity is cached apart from one without: an unverified copy must not satisfy it.
+    const key = cacheKey(kind, url, integrity);
     if (!cache.has(key)) {
       const promise = kind === 'html' ? loadHTML(url, options) : Promise.resolve().then(() => importModule(url));
       cache.set(key, promise);
@@ -273,5 +281,25 @@ export function createLoader({
     return start(resolve(specifier, referrer || baseURL), type, { integrity, credentials: c, mode: m });
   }
 
-  return { load, resolve, cache, baseURL };
+  /**
+   * Evict a module from the cache so the next load fetches (or imports) it again. Without `type`, every kind
+   * of that URL goes; returns whether anything was evicted. Nothing else changes: namespaces already
+   * loaded stay as they are, registered tags stay registered, and a JavaScript module stays in the
+   * browser's own module map (only html-modules' cache entry goes).
+   * @param {string} specifier
+   * @param {string} [referrer]
+   * @param {{ type?: 'html'|'js' }} [options]
+   * @returns {boolean}
+   */
+  function unload(specifier, referrer, { type } = {}) {
+    const url = resolve(specifier, referrer || baseURL);
+    const kinds = type ? [type] : ['html', 'js'];
+    let evicted = false;
+    for (const key of [...cache.keys()]) {
+      if (kinds.some((kind) => key === cacheKey(kind, url) || key.startsWith(`${cacheKey(kind, url)}#integrity=`))) evicted = cache.delete(key) || evicted;
+    }
+    return evicted;
+  }
+
+  return { load, unload, resolve, cache, baseURL };
 }

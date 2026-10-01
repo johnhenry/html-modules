@@ -43,7 +43,7 @@ type ExportRecord =
       shadow: 'open' | 'closed', delegatesFocus: boolean, styles: string[] }
   | { kind: 'stylesheet', name: string | null, default?: true, css: string }
   | { kind: 'data', name: string | null, default?: true, value: unknown }
-  | { kind: 'reexport', src: string, name?: string | null, default?: true, import?: string };
+  | { kind: 'reexport', src: string, type?: string, integrity?: string, name?: string | null, default?: true, import?: string };
 ```
 
 - Optional keys are present **only when written** in the source. An import's `delimiter`, `conflict`, `load` and

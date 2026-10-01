@@ -8,7 +8,7 @@ so the two paths cannot drift apart. A definition is inert: **nothing registers 
 tag.**
 
 - Definitions: [`HTMLComponent` / `defineHTMLComponent`](#htmlcomponent), [`isHTMLComponent`](#ishtmlcomponentvalue)
-- Stylesheets: [`HTMLStylesheet` / `defineHTMLStylesheet`](#htmlstylesheet), [`adoptStylesheet`](#adoptstylesheetroot-value-options), [`isHTMLStylesheet`, `isStylesheet`](#ishtmlstylesheetvalue-isstylesheetvalue)
+- Stylesheets: [`HTMLStylesheet` / `defineHTMLStylesheet`](#htmlstylesheet), [`adoptStylesheet`](#adoptstylesheetroot-value-options), [`unadoptStylesheet`](#unadoptstylesheetroot-value-options), [`isHTMLStylesheet`, `isStylesheet`](#ishtmlstylesheetvalue-isstylesheetvalue)
 - Server-side rendering: [`renderDeclarative`](#renderdeclarativedef-innerhtml)
 - Page security: [`configureRuntime`](#configureruntimewindow-options)
 - Registration: [`defineElement`](#defineelementtag-value-options), [`toComponent`](#tocomponentvalue-options), [`isElementLike`](#iselementlikevalue-window)
@@ -172,6 +172,18 @@ calls this for its window; call it yourself when only compiled modules run in th
 trustedTypes: pass a Trusted Types policy (an object with createHTML(html)), or false to never use Trusted Types` /
 `TypeError: Invalid nonce "<v>": pass the page's CSP nonce as a non-empty string`. See
 [Trusted Types and CSP](javascript.md#trusted-types-and-csp).
+
+## `unadoptStylesheet(root, value, options)`
+
+```ts
+unadoptStylesheet(root: Document | ShadowRoot, value: HTMLStylesheet | CSSStyleSheet, options?: { window? }): void
+```
+
+The counterpart of `adoptStylesheet()`: remove the window's constructed sheet from `root.adoptedStyleSheets`, or remove
+the fallback `<style data-html-module>` element it inserted. A no-op if the sheet was not adopted there, and it can be
+adopted again afterwards. Adoption is not reference-counted: two adopters of one sheet in one root lose it together.
+`<html-binding adopt>` calls this when the binding is removed from the page (and adopts again when it is put back).
+Throws `TypeError: unadoptStylesheet: not a stylesheet`.
 
 ## `isHTMLStylesheet(value)`, `isStylesheet(value)`
 

@@ -32,6 +32,7 @@ const cases = [
   [`<html-export src="./b.html" names="a b"></html-export>`, /"a b" in names is not "<export>" or "<export> as <name>"/],
   [`<html-export src="./b.html" names="* as icon"></html-export>`, /"\*" cannot appear in names; write name="icon" import="\*" for a namespace re-export/],
   [`<html-export src="./b.html" names="a" name="b"></html-export>`, /"names" lists every re-exported name; it cannot be combined with "name"/],
+  [`<html-export name="a" type="html">${T}</html-export>`, /<html-export name="a">: "type" only applies to a re-export \(an <html-export> with "src"\) in m\.html/],
   [`<html-export name="a" import="b">${T}</html-export>`, /"import" only applies to a re-export \(an <html-export> with "src"\)/],
   // Imports
   [`<html-import as="ui"></html-import>`, /<html-import> requires a "src" attribute in m\.html/],

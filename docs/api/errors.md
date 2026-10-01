@@ -54,7 +54,8 @@ Nothing is silently ignored: a mistake is an exception, a rejection, or an `erro
 | `SyntaxError` | `<html-export src="<src>" names="…">: "<entry>" in names is not "<export>" or "<export> as <name>" in <url>` |
 | `SyntaxError` | `<html-export src="<src>" names="…">: "*" cannot appear in names; write name="<ns>" import="*" for a namespace re-export in <url>` |
 | `SyntaxError` | `<html-export … names="…">: "names" lists every re-exported name; it cannot be combined with "name" (or "import" / "default") in <url>` |
-| `SyntaxError` | `<html-export name="<n>" import="<x>">: "import" only applies to a re-export (an <html-export> with "src") in <url>` (same for `"names"`) |
+| `SyntaxError` | `<html-export name="<n>" import="<x>">: "import" only applies to a re-export (an <html-export> with "src") in <url>` (same for `"names"`, `"type"` and `"integrity"`) |
+| `SyntaxError` | `Invalid integrity "<value>" on <html-export src="<src>"> in <url>: use Subresource Integrity metadata …` |
 | `SyntaxError` | `The requested module '<src>' does not provide an export named '<name>'` (a named, listed or default re-export, when the dependency loads) |
 | `SyntaxError` | `Conflicting star exports for '<name>' from '<a>' and '<b>'` (two star sources with different components of one name) |
 | `Error` | `Circular HTML module dependency: <url> -> <url> -> …` (imports or re-exports; including a module re-exporting itself) |
@@ -126,6 +127,7 @@ Nothing is silently ignored: a mistake is an exception, a rejection, or an `erro
 | `renderDeclarative()` | `TypeError: renderDeclarative: pass a component definition (from defineHTMLComponent() or a loaded module)`; `TypeError: renderDeclarative: <definition> is a JavaScript-authored class, not a template; there is no template to render` |
 | An element of a template-backed component, when constructed with a server-rendered shadow root of the other mode | `Error: <<tag>> already has an open shadow root (server-rendered?), but "<name>" is shadow="closed": render it with shadowrootmode="closed" (renderDeclarative() does), or set shadow="open" on the export` (thrown from the constructor, so reported by the browser as an uncaught error on upgrade) |
 | `configureRuntime()` | the two `TypeError`s above (`Invalid trustedTypes …`, `Invalid nonce …`) |
+| `unadoptStylesheet()` | `TypeError: unadoptStylesheet: not a stylesheet` |
 | `adoptStylesheet()`, `stylesheet.adopt()` | `TypeError: adoptStylesheet: not a stylesheet`; `TypeError: This document cannot adopt a CSSStyleSheet` |
 | `lookupExport()` | `SyntaxError: The requested module '<from>' does not provide an export named '<name>'` |
 | `componentsOf()` | `TypeError: The module '<from>' does not export any HTML components: …` |

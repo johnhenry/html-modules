@@ -29,8 +29,8 @@ test('the cache: one fetch and parse per resolved URL, shared by concurrent load
   assert.equal(a, b);
   assert.equal(a, c);
   assert.equal(fetch.log.filter((u) => u.endsWith('/ui.html')).length, 1);
-  assert.ok(modules.cache.has(at('ui.html')));
-  assert.ok(modules.cache.get(at('ui.html')) instanceof Promise);
+  assert.ok(modules.cache.has(`html:${at('ui.html')}`));
+  assert.ok(modules.cache.get(`html:${at('ui.html')}`) instanceof Promise);
 });
 
 test('failed loads are evicted and can be retried; events report fetch, load and error', async () => {
@@ -38,7 +38,7 @@ test('failed loads are evicted and can be retried; events report fetch, load and
   const { modules, events } = setup({ files });
   await assert.rejects(modules.load('./flaky.html'), /Failed to fetch HTML module http:\/\/modules\.test\/flaky\.html: 503/);
   await tick();
-  assert.equal(modules.cache.has(`${ORIGIN}flaky.html`), false);
+  assert.equal(modules.cache.has(`html:${ORIGIN}flaky.html`), false);
   files['flaky.html'] = '<html-export name="ok"><template>ok</template></html-export>';
   const { modules: again } = setup({ files });
   assert.ok((await again.load('./flaky.html')).ok);
@@ -190,4 +190,60 @@ test('credentials and mode reach fetch for HTML modules: instance defaults, over
   assert.deepEqual(plain.fetch.inits, [undefined], 'no options: fetch(url) as before');
   assert.throws(() => setup({ credentials: 'always' }), /Invalid credentials="always" in createLoader\(\): use "omit" or "same-origin" or "include"/);
   await assert.rejects(modules.import('./a.html', { mode: 'navigate' }), /Invalid mode="navigate"/);
+});
+
+// ---- Counterparts: unload, a cache keyed by kind, type on re-exports ------------------------------------------
+
+test('unload(): evicts the cache entry so the next load fetches again; nothing else changes', async () => {
+  const { modules, fetch, window } = setup({ files: { 'a.html': '<html-export name="a-b"><template>a</template></html-export>' } });
+  const first = await modules.load('./a.html');
+  first.aB.define('x-a-b', { window });
+  assert.equal(modules.unload('./a.html'), true);
+  assert.equal(modules.cache.has(`html:${ORIGIN}a.html`), false);
+  assert.equal(modules.unload('./a.html'), false, 'nothing left to evict');
+  const second = await modules.load('./a.html');
+  assert.notEqual(second, first, 'a fresh namespace from a second fetch');
+  assert.equal(fetch.log.length, 2);
+  assert.ok(window.customElements.get('x-a-b'), 'registered tags stay registered');
+  assert.equal(first.aB.name, 'a-b', 'the old namespace still works');
+  assert.equal(modules.unload('./a.html', { type: 'js' }), false, 'a type limits it to that kind');
+  assert.equal(modules.unload('./a.html', { type: 'html' }), true);
+  assert.equal(modules.unload(`${ORIGIN}a.html`), false);
+  assert.throws(() => modules.unload('bare-name'), /Unable to resolve bare specifier/);
+});
+
+test('the cache is keyed by kind and URL: one URL can be loaded as HTML and as JavaScript', async () => {
+  const { modules } = setup({ files: { 'x.html': '<html-export name="a-b"><template>a</template></html-export>' }, js: { 'x.html': { fromJS: true } } });
+  const asHTML = await modules.load('./x.html');
+  const asJS = await modules.load('./x.html', { type: 'js' });
+  assert.ok(asHTML.aB);
+  assert.equal(asJS.fromJS, true);
+  assert.deepEqual([...modules.cache.keys()], [`html:${ORIGIN}x.html`, `js:${ORIGIN}x.html`]);
+  assert.equal(await modules.load('./x.html'), asHTML, 'still one entry per kind');
+  assert.equal(modules.unload('./x.html'), true, 'without a type, every kind goes');
+  assert.equal(modules.cache.size, 0);
+});
+
+test('<html-export src type="html"> re-exports an HTML module whose URL does not end in .html (both readers record the type)', async () => {
+  const { scanHTMLModule } = await import('../src/index.js');
+  const html = '<html-export src="./part.tpl" type="html"></html-export><html-export src="./other.tpl" type="html" names="x-y as z-w"></html-export><html-export src="./more.tpl" type="html" name="m-n"></html-export>';
+  assert.deepEqual(scanHTMLModule(html, 'm.html').exports.map((e) => e.type), ['html', 'html', 'html']);
+  const { modules } = setup({ files: {
+    'barrel.html': '<html-export src="./part.tpl" type="html"></html-export>',
+    'part.tpl': '<html-export name="part-card"><template>p</template></html-export>',
+  } });
+  const barrel = await modules.load('./barrel.html');
+  assert.equal(barrel.partCard.name, 'part-card');
+  assert.deepEqual(Object.keys(barrel.components), ['part-card']);
+  assert.throws(() => scanHTMLModule('<html-export name="a" type="html"><template>t</template></html-export>', 'm.html'), /<html-export name="a">: "type" only applies to a re-export \(an <html-export> with "src"\) in m\.html/);
+  assert.throws(() => scanHTMLModule('<html-export src="./a.html" integrity="nope"></html-export>', 'm.html'), /Invalid integrity "nope" on <html-export src="\.\/a\.html"> in m\.html/);
+});
+
+test('integrity on a re-export pins the re-exported module', async () => {
+  const part = '<html-export name="part-card"><template>p</template></html-export>';
+  const sri = `sha256-${createHash('sha256').update(part).digest('base64')}`;
+  const ok = setup({ files: { 'barrel.html': `<html-export src="./part.html" integrity="${sri}"></html-export>`, 'part.html': part } });
+  assert.ok((await ok.modules.load('./barrel.html')).partCard);
+  const bad = setup({ files: { 'barrel.html': `<html-export src="./part.html" integrity="${sri}"></html-export>`, 'part.html': `${part} ` } });
+  await assert.rejects(bad.modules.load('./barrel.html'), /Integrity check failed for HTML module http:\/\/modules\.test\/part\.html/);
 });

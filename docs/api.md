@@ -22,13 +22,13 @@ The package is plain ES modules with no runtime dependencies. `package.json` `ex
 | --- | --- | --- |
 | `@johnhenry/html-modules` | `src/index.js` | Everything below except the browser bootstrap. **Side-effect free**: importing it defines no elements and registers nothing. |
 | `@johnhenry/html-modules/browser` | `src/browser.js` | The one-script bootstrap. **Has side effects**: creates the shared instance `HTMLModules` (bare specifiers resolved with `import.meta.resolve`, so through the page's import map), defines the five elements on `customElements`, and sets `globalThis.HTMLModules` if it is not already set. Exports `HTMLModules`, `HTMLImport`, `HTMLBinding`, `HTMLExport`, `HTMLImportSettings`, `HTMLModuleSettings`. |
-| `@johnhenry/html-modules/runtime` | `src/runtime.js` | Only the runtime: what compiled modules import. Exports `HTMLComponent`, `HTMLStylesheet`, `defineHTMLComponent`, `defineHTMLStylesheet`, `isHTMLComponent`, `isHTMLStylesheet`, `isStylesheet`, `isElementLike`, `toComponent`, `defineElement`, `adoptStylesheet`, `lookupExport`, `componentsOf`, `applyBinding`, `bindModule`, `registerComponents`, `manifest`, `namespaceComponents`, `configureRuntime`, `renderDeclarative`. |
+| `@johnhenry/html-modules/runtime` | `src/runtime.js` | Only the runtime: what compiled modules import. Exports `HTMLComponent`, `HTMLStylesheet`, `defineHTMLComponent`, `defineHTMLStylesheet`, `isHTMLComponent`, `isHTMLStylesheet`, `isStylesheet`, `isElementLike`, `toComponent`, `defineElement`, `adoptStylesheet`, `lookupExport`, `componentsOf`, `applyBinding`, `bindModule`, `registerComponents`, `manifest`, `namespaceComponents`, `configureRuntime`, `renderDeclarative`, `unadoptStylesheet`. |
 | `@johnhenry/html-modules/compiler` | `src/compiler.js` | `compileHTMLModule`, `compileRecord`, `rewriteSpecifier`, `rebaseSpecifier`. Runs anywhere (Node, a dev server, a browser): no DOM needed. |
 | `@johnhenry/html-modules/package.json` | `package.json` | For tools that read the version. |
 
 The bin is `html-module` (`bin/html-module.js`); see [Compiler and CLI](api/compiler.md#the-html-module-cli).
 
-The root entry point exports exactly these 51 names (`npm run check` prints the count):
+The root entry point exports exactly these 52 names (`npm run check` prints the count):
 
 ```
 DELIMITER EXPORT_DEFAULTS HTMLComponent HTMLStylesheet IMPORT_DEFAULTS adoptStylesheet applyBinding bindModule
@@ -37,7 +37,7 @@ createNamespace defineElement defineHTMLComponent defineHTMLModuleElements defin
 isElementLike isHTMLComponent isHTMLStylesheet isKebabName isStylesheet isValidDelimiter isValidElementName
 kebabCase lazyTargets linkHTMLModule lookupExport manifest moduleImportOptions namespaceComponents parseBindingName
 readHTMLModule readImportOptions readImportSettings readModuleSettings rebaseSpecifier recordFromRaw
-registerComponents renderDeclarative resolveImportOptions rewriteSpecifier scanHTMLModule toComponent watchLazy
+registerComponents renderDeclarative resolveImportOptions rewriteSpecifier scanHTMLModule toComponent unadoptStylesheet watchLazy
 ```
 
 Everything else in `src/` (for example `assertDelimiter`, `bindingRecord`, `scanRawElements`, `reportLoudly`,

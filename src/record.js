@@ -49,7 +49,7 @@
  * @typedef {{ kind: 'component', name: string|null, default?: true, template: string, shadow: 'open'|'closed', delegatesFocus: boolean, styles: string[] }
  *         | { kind: 'stylesheet', name: string|null, default?: true, css: string }
  *         | { kind: 'data', name: string|null, default?: true, value: unknown }
- *         | { kind: 'reexport', src: string, name?: string|null, default?: true, import?: string }} ExportRecord
+ *         | { kind: 'reexport', src: string, type?: string, integrity?: string, name?: string|null, default?: true, import?: string }} ExportRecord
  * (a re-export without a `name` key is a star re-export; `import: "*"` is a namespace re-export)
  * @typedef {{ url: string, imports: ImportRecord[], exports: ExportRecord[],
  *   importSettings?: { delimiter?: string, base?: string, conflict?: string, load?: string, errors?: string },
@@ -191,7 +191,7 @@ function exportName(raw, where) {
 }
 
 /** Parse a `names` list: "card, fancy-button as button, default, card as default". */
-function reexportList(raw, src, where) {
+function reexportList(raw, src, where, via) {
   const items = raw.attrs.names.split(',').map((s) => s.trim()).filter(Boolean);
   if (!items.length) throw new SyntaxError(`${describe(raw)}: names="" lists no exports; write names="card, button" (or drop "names" to re-export every component)${where}`);
   return items.map((item) => {
@@ -201,7 +201,7 @@ function reexportList(raw, src, where) {
     if (from === '*') throw new SyntaxError(`${describe(raw)}: "*" cannot appear in names; write name="${m[2] ?? 'ns'}" import="*" for a namespace re-export${where}`);
     if (to !== 'default') assertExportName(to, where);
     return {
-      kind: 'reexport', src, name: to === 'default' ? null : to,
+      kind: 'reexport', src, ...via, name: to === 'default' ? null : to,
       ...(to === 'default' && { default: true }),
       ...(from !== to && { import: from }),
     };
@@ -222,26 +222,30 @@ function reexportList(raw, src, where) {
  */
 function reexportRecords(raw, src, where) {
   const { attrs } = raw;
+  const type = nonEmpty(attrs.type);
+  const integrity = nonEmpty(attrs.integrity);
+  if (integrity) assertOption('integrity', integrity, ` on ${describe(raw)}${where}`);
+  const via = { ...(type && { type }), ...(integrity && { integrity }) };
   if (has(attrs, 'names')) {
     const other = ['name', 'import', 'default'].filter((a) => has(attrs, a));
     if (other.length) throw new SyntaxError(`${describe(raw)}: "names" lists every re-exported name; it cannot be combined with ${other.map((a) => `"${a}"`).join(' or ')}${where}`);
-    return reexportList(raw, src, where);
+    return reexportList(raw, src, where, via);
   }
   const imported = nonEmpty(attrs.import);
   if (!has(attrs, 'name')) {
     if (imported) throw new SyntaxError(`${describe(raw)}: import="${imported}" needs a name="…" to export it as${where}`);
     if (has(attrs, 'default')) throw new SyntaxError(`${describe(raw)}: a star re-export (src without a name) is never the default; write name="default" to re-export the source's default${where}`);
-    return [{ kind: 'reexport', src }];
+    return [{ kind: 'reexport', src, ...via }];
   }
   const { name, isDefault } = exportName(raw, where);
-  return [{ kind: 'reexport', src, name, ...(isDefault && { default: true }), ...(imported && { import: imported }) }];
+  return [{ kind: 'reexport', src, ...via, name, ...(isDefault && { default: true }), ...(imported && { import: imported }) }];
 }
 
 function exportRecord(raw, where, defaults = EXPORT_DEFAULTS) {
   const { attrs } = raw;
   const src = nonEmpty(attrs.src);
   if (src) return reexportRecords(raw, src, where);
-  for (const a of ['import', 'names']) {
+  for (const a of ['import', 'names', 'type', 'integrity']) {
     if (has(attrs, a)) throw new SyntaxError(`${describe(raw)}: "${a}" only applies to a re-export (an <html-export> with "src")${where}`);
   }
   const { name, isDefault } = exportName(raw, where);

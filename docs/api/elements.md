@@ -46,7 +46,10 @@ Note the name difference with the JavaScript API: the element's result has **`bi
 
 No properties or methods of its own. When it connects as a direct child of an `<html-import>`, it asks its import to
 apply it: immediately if the module is already bound, in the initial pass otherwise, and, for a lazy import that is
-still waiting, by adding its tag to what the import waits for. It fires its own `load` / `error` events.
+still waiting, by adding its tag to what the import waits for. It fires its own `load` / `error` events. When it
+connects anywhere else, it fires an `error` (see [Errors](errors.md)). When an **`adopt`** binding is removed from the page, its
+stylesheet is un-adopted from the root it was adopted into (`unadoptStylesheet()`), and adopted again if the binding is put back;
+registered tags are never undone.
 
 ## `HTMLImportSettings` (`<html-import-settings>`)
 

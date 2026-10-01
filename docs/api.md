@@ -12,6 +12,7 @@ The [README](../README.md) is the guided tour; this is the lookup table. It is s
 | [Module records and settings](api/records.md) | The module record JSON shape, `readHTMLModule` / `scanHTMLModule` / `recordFromRaw` / `moduleImportOptions`, and the settings vocabulary (`IMPORT_DEFAULTS`, `EXPORT_DEFAULTS`, `readImportSettings`, `readModuleSettings`, `readImportOptions`, `resolveImportOptions`). |
 | [Names](api/names.md) | `DELIMITER`, `bindingName`, `parseBindingName`, `isValidDelimiter`, `isValidElementName`, `elementNameProblem`, `isKebabName`, `camelCase`, `kebabCase`: the naming rules for exports, namespaces, delimiters and tags. |
 | [Compiler and CLI](api/compiler.md) | `compileHTMLModule`, `compileRecord`, `rewriteSpecifier`, `rebaseSpecifier`, the `html-module` CLI and its flags, and the `esm` and `register` output formats with a full generated example. |
+| [Dev server, hot reload and Vite](api/dev.md) | `html-module dev [dir]` (static server, file watching, hot reload over SSE), `HTMLModules.hotReload()`, what hot replacement swaps and what makes the page reload, the `@johnhenry/html-modules/vite` plugin and `createDevServer()`. |
 | [Errors](api/errors.md) | Every error the library raises: its type, its message, and where it is reported (thrown, a rejection, or an `error` event on which element). |
 
 ## Entry points
@@ -22,19 +23,21 @@ The package is plain ES modules with no runtime dependencies. `package.json` `ex
 | --- | --- | --- |
 | `@johnhenry/html-modules` | `src/index.js` | Everything below except the browser bootstrap. **Side-effect free**: importing it defines no elements and registers nothing. |
 | `@johnhenry/html-modules/browser` | `src/browser.js` | The one-script bootstrap. **Has side effects**: creates the shared instance `HTMLModules` (bare specifiers resolved with `import.meta.resolve`, so through the page's import map), defines the five elements on `customElements`, and sets `globalThis.HTMLModules` if it is not already set. Exports `HTMLModules`, `HTMLImport`, `HTMLBinding`, `HTMLExport`, `HTMLImportSettings`, `HTMLModuleSettings`. |
-| `@johnhenry/html-modules/runtime` | `src/runtime.js` | Only the runtime: what compiled modules import. Exports `HTMLComponent`, `HTMLStylesheet`, `defineHTMLComponent`, `defineHTMLStylesheet`, `isHTMLComponent`, `isHTMLStylesheet`, `isStylesheet`, `isElementLike`, `toComponent`, `defineElement`, `adoptStylesheet`, `lookupExport`, `componentsOf`, `applyBinding`, `bindModule`, `registerComponents`, `manifest`, `namespaceComponents`, `configureRuntime`, `renderDeclarative`, `unadoptStylesheet`. |
+| `@johnhenry/html-modules/runtime` | `src/runtime.js` | Only the runtime: what compiled modules import. Exports `HTMLComponent`, `HTMLStylesheet`, `defineHTMLComponent`, `defineHTMLStylesheet`, `isHTMLComponent`, `isHTMLStylesheet`, `isStylesheet`, `isElementLike`, `toComponent`, `defineElement`, `adoptStylesheet`, `lookupExport`, `componentsOf`, `applyBinding`, `bindModule`, `registerComponents`, `manifest`, `namespaceComponents`, `configureRuntime`, `renderDeclarative`, `unadoptStylesheet`, `hotReplaceComponent`, `hotReplaceStylesheet`, `hotReplaceModule`. |
 | `@johnhenry/html-modules/compiler` | `src/compiler.js` | `compileHTMLModule`, `compileRecord`, `rewriteSpecifier`, `rebaseSpecifier`. Runs anywhere (Node, a dev server, a browser): no DOM needed. |
+| `@johnhenry/html-modules/dev` | `src/dev-server.js` | `createDevServer()` and `injectClient()`: the server behind `html-module dev`. Node only. |
+| `@johnhenry/html-modules/vite` | `src/vite.js` | The Vite plugin (default export). Node only. |
 | `@johnhenry/html-modules/package.json` | `package.json` | For tools that read the version. |
 
 The bin is `html-module` (`bin/html-module.js`); see [Compiler and CLI](api/compiler.md#the-html-module-cli).
 
-The root entry point exports exactly these 52 names (`npm run check` prints the count):
+The root entry point exports exactly these 55 names (`npm run check` prints the count):
 
 ```
 DELIMITER EXPORT_DEFAULTS HTMLComponent HTMLStylesheet IMPORT_DEFAULTS adoptStylesheet applyBinding bindModule
 bindingName camelCase compileHTMLModule compileRecord componentRoot componentsOf configureRuntime createHTMLModules createLoader
 createNamespace defineElement defineHTMLComponent defineHTMLModuleElements defineHTMLStylesheet elementNameProblem
-isElementLike isHTMLComponent isHTMLStylesheet isKebabName isStylesheet isValidDelimiter isValidElementName
+hotReplaceComponent hotReplaceModule hotReplaceStylesheet isElementLike isHTMLComponent isHTMLStylesheet isKebabName isStylesheet isValidDelimiter isValidElementName
 kebabCase lazyTargets linkHTMLModule lookupExport manifest moduleImportOptions namespaceComponents parseBindingName
 readHTMLModule readImportOptions readImportSettings readModuleSettings rebaseSpecifier recordFromRaw
 registerComponents renderDeclarative resolveImportOptions rewriteSpecifier scanHTMLModule toComponent unadoptStylesheet watchLazy

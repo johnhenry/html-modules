@@ -173,6 +173,15 @@ the attribute is removed.
 Functions that return a status instead of throwing: `parseBindingName()` (`null`), `elementNameProblem()` (a reason
 or `null`), and the `is*` predicates.
 
+### Hot reload
+
+| Situation | Result |
+| --- | --- |
+| `HTMLModules.hotReload(src)` for a module never loaded by this instance | resolves `{ reload: false, skipped: true, … }` |
+| The new source is invalid, or its fetch fails | rejects with the `SyntaxError` / `Error: Failed to fetch HTML module …`; the old module stays cached and live |
+| The change cannot be applied under live elements | resolves `{ reload: true, reasons: [...] }` (nothing swapped), e.g. `exports changed (+added)`, `<hot-card>: shadow changed ("open" → "closed"): it is fixed when an element is created`, `new attribute "x" cannot be observed on elements that are already defined …`, `props "x" changed or are new …`, `the component's own imports changed`, `export "cfg" changed and is not a component or stylesheet` |
+| `hotReplaceStylesheet(a, b)` with a non-stylesheet | `TypeError: hotReplaceStylesheet: both must be HTMLStylesheets` |
+
 ## Compiler and CLI
 
 | Where | Error and message |
@@ -180,3 +189,6 @@ or `null`), and the `is*` predicates.
 | `compileHTMLModule()`, `compileRecord()` | every module `SyntaxError` above; `TypeError: Unknown format "<f>": use "esm" or "register"`; `SyntaxError: Invalid namespace …` (bad `as`); `Invalid delimiter …`; `Invalid conflict="<v>": use "error" or "reuse"`; for `register` with `as`, the `bindingName()` error for a component's tag |
 | A compiled `register` module, when imported | the registration errors of `registerComponents()` (for example `"star" is not a valid custom element name: it has no hyphen` without `--as`, or a tag conflict) |
 | `html-module` | exit `1` with `<input>: <ErrorName>: <message>` on stderr for a read or compile failure (stops at the first); exit `2` with the usage for a usage error |
+
+`html-module dev`: `html-module dev: <dir> is not a directory` (exit 1) or a listen error such as `EADDRINUSE`; bad arguments print the usage (exit 2).
+The Vite plugin throws the compiler's `SyntaxError` from `load()`, so `vite build` fails with it and `vite dev` shows it in its overlay.

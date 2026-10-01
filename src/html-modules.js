@@ -12,7 +12,7 @@
  *   await h.ready;                                           // …until a <ui--…> element appears, or h.load()
  */
 import { createLoader } from './loader.js';
-import { bindModule } from './runtime.js';
+import { bindModule, hotReplaceModule } from './runtime.js';
 import { IMPORT_DEFAULTS, checkFetchOptions, checkOptions, reportLoudly } from './settings.js';
 import { lazyTargets, watchLazy } from './lazy.js';
 import { lazyImportProblem } from './record.js';
@@ -101,6 +101,28 @@ export function createHTMLModules({
      * @returns {boolean}
      */
     unload: (src, { base: b, type } = {}) => loader.unload(src, b ?? instanceBase(), { type }),
+
+    /**
+     * Hot reload an HTML module: fetch it again (bypassing the HTTP cache), replace its cache entry, and swap its
+     * components and stylesheets under the elements already registered: live elements are re-stamped in place
+     * (template changes) and get their styles swapped, keeping their classes, listeners and light DOM. Custom
+     * element definitions cannot be replaced, so registered classes delegate to a swappable definition.
+     * Resolves to `{ reload, reasons, updated, elements }`: `reload` is true (and nothing was swapped) when the
+     * change cannot be applied to live elements (exports added or removed, changed data, shadow mode, new observed
+     * attributes, changed imports): reload the page then. `{ skipped: true }` when the module was never loaded here.
+     * Rejects, leaving everything as it was, when the new source is invalid.
+     * @param {string} src
+     * @param {{ base?: string }} [options]
+     * @returns {Promise<{ reload: boolean, reasons: string[], updated: string[], elements: number, skipped?: true }>}
+     */
+    async hotReload(src, { base: b } = {}) {
+      const referrer = b ?? instanceBase();
+      const url = loader.resolve(src, referrer);
+      if (!loader.cache.has(`html:${url}`)) return { reload: false, reasons: [], updated: [], elements: 0, skipped: true };
+      const { previous, next } = await loader.reload(url, referrer);
+      if (!previous) return { reload: true, reasons: ['the module had not finished loading'], updated: [], elements: 0 };
+      return hotReplaceModule(previous, next);
+    },
 
     /**
      * Bind a loaded namespace: see `bindModule()`.

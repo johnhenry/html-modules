@@ -10,6 +10,7 @@
  *   html-module ui.html --format register --as ui --conflict reuse   → keep tags already defined
  *   html-module a.html b.html --runtime ./vendor/html-modules/runtime.js
  *   html-module ui.html --stdout
+ *   html-module dev [dir]                   → serve a directory, watch it, hot reload open pages
  */
 import { parseArgs } from 'node:util';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
@@ -17,6 +18,7 @@ import { realpathSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { compileHTMLModule } from '../src/compiler.js';
+import { createDevServer } from '../src/dev-server.js';
 
 export const usage = `Usage: html-module <input.html...> [options]
 
@@ -28,10 +30,72 @@ Options:
       --conflict <mode>   register format: error (default) or reuse, for tags that are already defined
       --runtime <spec>    where the output imports the runtime from (default: @johnhenry/html-modules/runtime)
       --stdout            print instead of writing files
-  -h, --help`;
+  -h, --help
+
+       html-module dev [dir] [options]
+
+Serve a directory (default: .) and hot reload open pages when its files change:
+  -p, --port <n>          port (default: 5173; 0 picks a free one)
+      --host <host>       interface (default: 127.0.0.1)
+      --no-watch          serve only
+  -q, --quiet             do not log changes`;
+
+/** `html-module dev [dir]`: runs until `signal` aborts (or SIGINT / SIGTERM). Returns the exit code. */
+async function dev(argv, { stdout, stderr, signal }) {
+  let parsed;
+  try {
+    parsed = parseArgs({
+      args: argv,
+      allowPositionals: true,
+      options: {
+        port: { type: 'string', short: 'p', default: '5173' },
+        host: { type: 'string', default: '127.0.0.1' },
+        'no-watch': { type: 'boolean', default: false },
+        quiet: { type: 'boolean', short: 'q', default: false },
+        help: { type: 'boolean', short: 'h', default: false },
+      },
+    });
+  } catch (error) {
+    stderr.write(`${error.message}\n${usage}\n`);
+    return 2;
+  }
+  const { values, positionals } = parsed;
+  if (values.help) {
+    stdout.write(`${usage}\n`);
+    return 0;
+  }
+  const port = Number(values.port);
+  if (positionals.length > 1 || !Number.isInteger(port) || port < 0 || port > 65535) {
+    stderr.write(`${usage}\n`);
+    return 2;
+  }
+  let server;
+  try {
+    server = await createDevServer({
+      dir: positionals[0] ?? '.', port, host: values.host, watch: !values['no-watch'],
+      log: values.quiet ? undefined : (line) => stdout.write(`${line}\n`),
+    });
+  } catch (error) {
+    stderr.write(`html-module dev: ${error.message}\n`);
+    return 1;
+  }
+  stdout.write(`html-module dev: serving ${server.dir} at ${server.url}${values['no-watch'] ? '' : ' (watching; open pages hot reload)'}\n`);
+  await new Promise((done) => {
+    const stop = () => done();
+    signal?.addEventListener('abort', stop, { once: true });
+    if (!signal) {
+      process.once('SIGINT', stop);
+      process.once('SIGTERM', stop);
+    }
+    if (signal?.aborted) done();
+  });
+  await server.close();
+  return 0;
+}
 
 /** Run the CLI. Returns the exit code. */
-export async function main(argv = process.argv.slice(2), { stdout = process.stdout, stderr = process.stderr } = {}) {
+export async function main(argv = process.argv.slice(2), { stdout = process.stdout, stderr = process.stderr, signal } = {}) {
+  if (argv[0] === 'dev') return dev(argv.slice(1), { stdout, stderr, signal });
   let parsed;
   try {
     parsed = parseArgs({

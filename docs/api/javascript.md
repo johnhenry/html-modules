@@ -170,6 +170,16 @@ as JavaScript (`type`) is two entries. A load with `integrity` has its own key (
 load is removed so it can be retried. Deleting an entry forces the next load to fetch again (it does not unregister
 anything already registered); [`unload()`](#unload) does that by specifier.
 
+### `hotReload`
+
+```ts
+instance.hotReload(src: string, options?: { base?: string }): Promise<{ reload: boolean, reasons: string[], updated: string[], elements: number, skipped?: true }>
+```
+
+Fetch an HTML module again (bypassing the HTTP cache), replace its cache entry, and swap its components and stylesheets
+under the elements already registered: the primitive behind `html-module dev`. See [Dev server, hot reload and
+Vite](dev.md#htmlmoduleshotreloadsrc).
+
 ### `unload`
 
 ```ts
@@ -191,7 +201,7 @@ unresolvable bare specifier.
 
 ### `loader`
 
-The underlying [`createLoader()`](#createloaderoptions) object: `{ load, unload, resolve, cache, baseURL }`.
+The underlying [`createLoader()`](#createloaderoptions) object: `{ load, unload, reload, resolve, cache, baseURL }`.
 
 ## Trusted Types and CSP
 
@@ -334,7 +344,7 @@ defineHTMLModuleElements({ modules });
 ```ts
 createLoader(options?: { baseURL?, hostResolve?, fetch?, credentials?, mode?, trustedTypes?, nonce?, parseHTML?, importModule?, window?, onEvent? }):
   { load(specifier, referrer?, { type?, integrity?, credentials?, mode? }?): Promise<namespace>, resolve(specifier, referrer?): string,
-    unload(specifier, referrer?, { type? }?): boolean, cache: Map<string, Promise<namespace>>, baseURL: string | undefined }
+    unload(specifier, referrer?, { type? }?): boolean, reload(specifier, referrer?): Promise<{ previous, next }>, cache: Map<string, Promise<namespace>>, baseURL: string | undefined }
 ```
 
 The loader alone: resolve → fetch → parse → read the record → load dependencies → link. Options as in

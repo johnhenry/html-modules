@@ -203,6 +203,15 @@ would need an expression language. See [HTML syntax](api/html-syntax.md#data-bin
 restore. `attachInternals()` is memoized so the closed-declarative-root lookup and subclasses share the one call the
 platform allows. See [HTML syntax](api/html-syntax.md#form-associated-components).
 
+## Extension beyond the PRD: dev server, hot reload and Vite
+
+`html-module dev [dir]` serves and watches a directory and hot reloads open pages; `HTMLModules.hotReload()` swaps a
+re-fetched module's components and styles under live elements (registered classes delegate to a swappable definition,
+because custom element definitions cannot be replaced); `@johnhenry/html-modules/vite` compiles HTML modules imported
+from JavaScript and gives them the same HMR. These are development tools: the dev server is not a bundler or a custom
+module loader (the PRD's non-goals), only a static server with a change feed. See
+[Dev server, hot reload and Vite](api/dev.md).
+
 ## Deferred
 
 | Item | Why |

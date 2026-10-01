@@ -100,6 +100,11 @@ export const checklist = [
     ['frm.reset', 'form.reset() restores the default value; state restore after navigation'],
     ['frm.internals', 'one ElementInternals, shared with a closed shadow root and with subclasses'],
   ] },
+  { group: 'Dev tooling', items: [
+    ['dev.server', 'html-module dev [dir]: a static server that watches the directory and pushes changes over SSE'],
+    ['dev.hot', 'HTMLModules.hotReload(): a module edit re-stamps live elements and swaps their styles in place'],
+    ['dev.vite', '@johnhenry/html-modules/vite: HTML modules imported from JS, compiled, with HMR'],
+  ] },
   { group: 'Compiler', items: [
     ['cmp.esm', 'html-module ui.html → ui.js exporting definitions and a manifest'],
     ['cmp.no-register', 'compiled modules do not register on import'],
@@ -218,6 +223,10 @@ export const pages = [
 ];
 
 /** Items no page covers, with the reason. */
-export const uncovered = {};
+export const uncovered = {
+  'dev.server': 'needs a running server and a file to edit: proven against real browsers by test/browser/hot.spec.js, and by examples/07',
+  'dev.hot': 'needs a file to edit while the page is open: proven by test/browser/hot.spec.js (and examples/07 in Node)',
+  'dev.vite': 'needs a Vite project: proven by test/vite.test.js (build) and test/browser/vite-hmr.spec.js (dev HMR)',
+};
 
 export const allItems = checklist.flatMap((g) => g.items.map(([id, label]) => ({ id, label, group: g.group })));

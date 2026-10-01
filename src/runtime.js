@@ -141,7 +141,11 @@ export const isHTMLComponent = (value) => value != null && value[COMPONENT] === 
 
 const pascal = (name) => (name ? camelCase(name).replace(/^./, (c) => c.toUpperCase()) : 'HTMLModuleElement');
 
-const states = new WeakMap(); // element → { live: bound sites }
+/**
+ * Per-element state: `{ root, live, win, def }`: the shadow root, the bound template sites, the window, and the
+ * definition last stamped into it (a hot reload swaps it).
+ */
+const states = new WeakMap();
 const internalsMap = new WeakMap(); // element → its ElementInternals (attachable once)
 
 /** The element's ElementInternals, attached on first use: the platform allows one `attachInternals()` per element. */
@@ -175,19 +179,67 @@ function defineProp(proto, { name, type }) {
   });
 }
 
+/**
+ * A definition's template as a window sees it: the parsed content and its binding sites, analysed once per
+ * definition and window (a malformed binding fails here, at registration, before anything is registered).
+ */
+const views = new WeakMap(); // def → WeakMap<window, { content(), info }>
+
+function viewOf(def, win) {
+  if (!views.has(def)) views.set(def, new WeakMap());
+  const byWindow = views.get(def);
+  if (!byWindow.has(win)) {
+    let template;
+    const content = () => {
+      template ??= Object.assign(win.document.createElement('template'), { innerHTML: trustedHTML(def.template, win) });
+      return template.content;
+    };
+    const info = analyzeTemplate(content(), describeDefinition(def));
+    if (def.formControl) checkFormControl(content(), def.formControl, describeDefinition(def));
+    byWindow.set(win, { content, info });
+  }
+  return byWindow.get(win);
+}
+
+/**
+ * The live slot of a template-backed definition: registered classes delegate to `slot.def`, so a hot reload can
+ * swap the definition under elements that are already defined (a custom element definition cannot be replaced).
+ * A replacement definition shares the slot of the one it replaces.
+ */
+const slots = new WeakMap(); // def → slot
+const slotOf = (def) => {
+  if (!slots.has(def)) slots.set(def, { def, instances: new Set(), windows: new Set(), observed: null });
+  return slots.get(def);
+};
+
+/** True when both are the same definition, or one has been hot-swapped for the other. */
+const sameDefinition = (a, b) => a === b || (slots.has(a) && slots.get(a) === slots.get(b));
+
+/** Observed attributes a definition's class needs. */
+const observedFor = (def, view) => [...new Set([...def.props.map((p) => p.name), ...view.info.names, ...(def.formAssociated ? FORM_ATTRIBUTES : [])])];
+
+/** Stamp (or re-stamp) the template of `def` into an element's shadow root and bind it. */
+function stamp(el, state, def) {
+  const { root, win } = state;
+  const view = viewOf(def, win);
+  const fragment = (el.ownerDocument ?? win.document).importNode(view.content(), true);
+  const live = view.info.sites.length ? resolveSites(fragment, view.info) : null;
+  root.append(fragment);
+  state.def = def;
+  state.live = live;
+  if (live) updateSites(live, el);
+  if (def.formAssociated) setupForm(el, root, def.formControl, (host) => internalsOf(host, win));
+}
+
 function templateElementClass(def, win) {
-  let template;
-  const content = () => {
-    template ??= Object.assign(win.document.createElement('template'), { innerHTML: trustedHTML(def.template, win) });
-    return template.content;
-  };
-  // Binding sites are found once per definition and window, here, so a malformed binding fails at registration.
-  const info = analyzeTemplate(content(), describeDefinition(def));
-  if (def.formControl) checkFormControl(content(), def.formControl, describeDefinition(def));
-  const observed = [...new Set([...def.props.map((p) => p.name), ...info.names, ...(def.formAssociated ? FORM_ATTRIBUTES : [])])];
+  const slot = slotOf(def);
+  slot.windows.add(win);
+  const original = viewOf(def, win);
+  const observed = observedFor(def, original);
+  slot.observed ??= new Set(observed);
   const cls = class extends win.HTMLElement {
     static get component() {
-      return def;
+      return slot.def;
     }
     static get observedAttributes() {
       return observed;
@@ -203,22 +255,24 @@ function templateElementClass(def, win) {
 
     constructor() {
       super();
+      const current = slot.def; // the latest definition: a hot reload may have replaced the one this class was made from
+      const view = viewOf(current, win);
       // A server-rendered (declarative) shadow root is kept, not re-stamped, but still gets the component's styles.
-      let root = existingShadowRoot(this, def.shadow === 'closed');
+      let root = existingShadowRoot(this, current.shadow === 'closed');
       if (!root) {
         try {
-          root = this.attachShadow({ mode: def.shadow, delegatesFocus: def.delegatesFocus });
+          root = this.attachShadow({ mode: current.shadow, delegatesFocus: current.delegatesFocus });
         } catch (error) {
           // A declarative root of the other mode: `shadowRoot` hides a closed one, `attachInternals()` shows it.
           root = existingShadowRoot(this, true);
           if (!root) throw error;
         }
       }
-      if (root.mode && root.mode !== def.shadow) {
-        throw new Error(`<${this.localName}> already has ${root.mode === 'open' ? 'an open' : 'a closed'} shadow root (server-rendered?), but ${describeDefinition(def)} is shadow="${def.shadow}": render it with shadowrootmode="${def.shadow}" (renderDeclarative() does), or set shadow="${root.mode}" on the export`);
+      if (root.mode && root.mode !== current.shadow) {
+        throw new Error(`<${this.localName}> already has ${root.mode === 'open' ? 'an open' : 'a closed'} shadow root (server-rendered?), but ${describeDefinition(current)} is shadow="${current.shadow}": render it with shadowrootmode="${current.shadow}" (renderDeclarative() does), or set shadow="${root.mode}" on the export`);
       }
       let rendered = root.childNodes.length > 0; // (before the fallback <style> lands in the root)
-      if (rendered && info.sites.length) {
+      if (rendered && view.info.sites.length) {
         // Server-rendered markup cannot carry bindings: keep its leading <style>s, stamp the template afresh.
         let node = root.firstChild;
         while (node && node.nodeType === 1 && node.localName === 'style') node = node.nextSibling;
@@ -230,7 +284,7 @@ function templateElementClass(def, win) {
         rendered = false;
       }
       // A property set before the element was upgraded shadows the accessor: take its value and give it back.
-      for (const { name } of def.props) {
+      for (const { name } of current.props) {
         const property = camelCase(name);
         if (Object.prototype.hasOwnProperty.call(this, property)) {
           const value = this[property];
@@ -238,25 +292,20 @@ function templateElementClass(def, win) {
           this[property] = value;
         }
       }
-      applyComponentStyles(root, def, win);
-      if (!rendered) {
-        const fragment = (this.ownerDocument ?? win.document).importNode(content(), true);
-        const live = info.sites.length ? resolveSites(fragment, info) : null;
-        root.append(fragment);
-        if (live) {
-          states.set(this, { live });
-          updateSites(live, this);
-        }
-      }
-      if (def.formAssociated) setupForm(this, root, def.formControl, (el) => internalsOf(el, win));
+      const state = { root, live: null, win, def: current };
+      states.set(this, state);
+      slot.instances.add(new WeakRef(this));
+      applyComponentStyles(root, current, win);
+      if (!rendered) stamp(this, state, current);
+      else if (current.formAssociated) setupForm(this, root, current.formControl, (host) => internalsOf(host, win));
       // Lazy imports watch component shadow roots too (see lazy.js).
       componentRootCreated(this, root, win);
     }
 
     attributeChangedCallback(name, previous, value) {
-      const live = states.get(this)?.live;
-      if (live && previous !== value) updateSites(live, this, [name]);
-      if (def.formAssociated) formAttributeChanged(this, name, previous, value);
+      const state = states.get(this);
+      if (state?.live && previous !== value) updateSites(state.live, this, [name]);
+      if (state?.def.formAssociated) formAttributeChanged(this, name, previous, value);
     }
   };
   if (def.formAssociated) installFormAssociation(cls, (el) => internalsOf(el, win));
@@ -407,6 +456,16 @@ const isCSSStyleSheet = (value) => value != null && typeof value === 'object' &&
 export const isStylesheet = (value) => isHTMLStylesheet(value) || isCSSStyleSheet(value);
 
 const adoptedFallback = new WeakMap(); // root → Map<stylesheet, <style> element> (roots without adoptedStyleSheets)
+const adoptions = new WeakMap(); // HTMLStylesheet → { refs: Set<WeakRef<root>>, roots: WeakSet<root> }: where it is adopted (a hot reload swaps it there)
+const replacements = new WeakMap(); // HTMLStylesheet → the stylesheet that replaced it (hot reload)
+
+/** The current version of a stylesheet: itself, or what a hot reload replaced it with. */
+function liveSheet(value) {
+  while (isHTMLStylesheet(value) && replacements.has(value)) value = replacements.get(value);
+  return value;
+}
+
+const windowOf = (root) => root.defaultView ?? root.ownerDocument?.defaultView ?? globalThis;
 
 /**
  * Adopt a stylesheet export (HTMLStylesheet or CSSStyleSheet) into a document
@@ -416,7 +475,18 @@ const adoptedFallback = new WeakMap(); // root → Map<stylesheet, <style> eleme
  */
 export function adoptStylesheet(root, value, { window: win } = {}) {
   if (!isStylesheet(value)) throw new TypeError('adoptStylesheet: not a stylesheet');
-  win ??= root.defaultView ?? root.ownerDocument?.defaultView ?? globalThis;
+  adoptSheet(root, liveSheet(value), win ?? windowOf(root));
+}
+
+function adoptSheet(root, value, win) {
+  if (isHTMLStylesheet(value)) {
+    if (!adoptions.has(value)) adoptions.set(value, { refs: new Set(), roots: new WeakSet() });
+    const where = adoptions.get(value);
+    if (!where.roots.has(root)) {
+      where.roots.add(root);
+      where.refs.add(new WeakRef(root));
+    }
+  }
   const sheet = isHTMLStylesheet(value) ? value.sheetFor(win) : value;
   if (sheet && Array.isArray(root.adoptedStyleSheets)) {
     if (!root.adoptedStyleSheets.includes(sheet)) root.adoptedStyleSheets = [...root.adoptedStyleSheets, sheet];
@@ -444,7 +514,13 @@ export function adoptStylesheet(root, value, { window: win } = {}) {
  */
 export function unadoptStylesheet(root, value, { window: win } = {}) {
   if (!isStylesheet(value)) throw new TypeError('unadoptStylesheet: not a stylesheet');
-  win ??= root.defaultView ?? root.ownerDocument?.defaultView ?? globalThis;
+  unadoptSheet(root, liveSheet(value), win ?? windowOf(root));
+}
+
+function unadoptSheet(root, value, win) {
+  if (isHTMLStylesheet(value)) {
+    adoptions.get(value)?.roots.delete(root); // (its WeakRef goes stale; a hot reload skips roots that are no longer members)
+  }
   const sheet = isHTMLStylesheet(value) ? value.sheetFor(win) : value;
   if (sheet && Array.isArray(root.adoptedStyleSheets) && root.adoptedStyleSheets.includes(sheet)) {
     root.adoptedStyleSheets = root.adoptedStyleSheets.filter((s) => s !== sheet);
@@ -534,7 +610,7 @@ function checkTag(tag, value, { registry, window: win = globalThis, conflict = '
   const existing = registry.get(tag);
   const taken = Boolean(existing) || Boolean(pending?.has(tag));
   const holder = existing ? registrations.get(registry).get(tag) : pending?.get(tag);
-  if (taken && holder !== def && conflict !== 'reuse') {
+  if (taken && !(holder === def || (holder && sameDefinition(holder, def))) && conflict !== 'reuse') {
     throw new Error(`Cannot bind <${tag}>: it is already defined${holder ? ` by ${describeDefinition(holder)}` : ''} (conflict="reuse" keeps the existing definition instead)`);
   }
   if (!taken) pending?.set(tag, def);
@@ -545,7 +621,7 @@ function checkTag(tag, value, { registry, window: win = globalThis, conflict = '
 function commitTag({ tag, def, registry, win }) {
   const seen = registrations.get(registry);
   const existing = registry.get(tag);
-  if (existing) return { element: existing, reused: seen.get(tag) !== def };
+  if (existing) return { element: existing, reused: !sameDefinition(seen.get(tag), def) };
   bindImports(def, registry, win);
   const Base = def.elementFor(win);
   const Registered = class extends Base {};
@@ -815,4 +891,145 @@ export function manifest(locals, stars = []) {
     }
   }
   return Object.freeze(out);
+}
+
+// ---------------------------------------------------------------------------
+// Hot reload
+//
+// A custom element definition cannot be replaced, so registered classes delegate to a swappable definition (see
+// `slotOf`): replacing a component's definition re-stamps the shadow roots of its live elements in place, and
+// replacing a stylesheet export swaps the adopted sheet in every root that adopted it. The same code serves
+// `HTMLModules.hotReload()` (runtime-loaded modules) and the Vite plugin's HMR (compiled modules).
+
+const importsKey = (def) => JSON.stringify(def.imports.map(({ module, lazy, ...rest }) => rest));
+
+/**
+ * Check, changing nothing, whether `next` can replace `previous` under live elements. Returns a reason string when it
+ * cannot (the page must reload), or a function that applies the swap.
+ */
+function planComponentSwap(previous, next) {
+  if (previous.isClass || next.isClass) return 'a JavaScript-authored class cannot be hot-swapped';
+  for (const key of ['shadow', 'delegatesFocus', 'formAssociated', 'formControl']) {
+    if (previous[key] !== next[key]) return `${key} changed (${JSON.stringify(previous[key])} → ${JSON.stringify(next[key])}): it is fixed when an element is created`;
+  }
+  if (importsKey(previous) !== importsKey(next)) return 'the component\'s own imports changed';
+  const slot = slotOf(previous);
+  for (const win of slot.windows) {
+    let view;
+    try {
+      view = viewOf(next, win);
+    } catch (error) {
+      return error.message;
+    }
+    const added = observedFor(next, view).filter((n) => !slot.observed.has(n));
+    if (added.length) return `new attribute${added.length > 1 ? 's' : ''} ${added.map((n) => `"${n}"`).join(', ')} cannot be observed on elements that are already defined (observedAttributes is read once)`;
+  }
+  const known = new Map(previous.props.map((p) => [p.name, p.type]));
+  const unknown = next.props.filter((p) => known.get(p.name) !== p.type).map((p) => p.name);
+  if (unknown.length) return `props ${unknown.map((n) => `"${n}"`).join(', ')} changed or are new: a property accessor is defined once per class`;
+  return () => {
+    const changed = previous.template !== next.template;
+    slot.def = next;
+    slots.set(next, slot);
+    let restamped = 0;
+    for (const ref of [...slot.instances]) {
+      const el = ref.deref();
+      const state = el && states.get(el);
+      if (!state) {
+        slot.instances.delete(ref);
+        continue;
+      }
+      const { root, win } = state;
+      for (const sheet of sheetsOf(state.def)) unadoptStylesheet(root, sheet, { window: win });
+      if (changed) root.replaceChildren();
+      for (const sheet of sheetsOf(next)) adoptStylesheet(root, sheet, { window: win });
+      if (changed) {
+        stamp(el, state, next);
+        componentRootCreated(el, root, win);
+      } else state.def = next;
+      restamped++;
+    }
+    return restamped;
+  };
+}
+
+/**
+ * Replace a component definition under the elements already registered with it: they keep their classes, listeners
+ * and light DOM, and get the new template (re-stamped) and styles (swapped) in place. The replacement can be
+ * registered under the same tag again (it is the same component). Returns `{ ok: true, elements }`, or
+ * `{ ok: false, reason }` and changes nothing when the change cannot be applied to live elements: `shadow`,
+ * `delegatesFocus`, `form-associated`, new observed attributes or props, changed imports, JavaScript-authored classes.
+ * @param {HTMLComponent} previous
+ * @param {HTMLComponent} next
+ * @returns {{ ok: true, elements: number } | { ok: false, reason: string }}
+ */
+export function hotReplaceComponent(previous, next) {
+  if (!isHTMLComponent(previous) || !isHTMLComponent(next)) return { ok: false, reason: 'both must be component definitions' };
+  const plan = planComponentSwap(previous, next);
+  if (typeof plan === 'string') return { ok: false, reason: plan };
+  return { ok: true, elements: plan() };
+}
+
+/** Replace a stylesheet export: every root that adopted `previous` gets `next` instead, and later adoptions of `previous` adopt `next`. */
+export function hotReplaceStylesheet(previous, next) {
+  if (!isHTMLStylesheet(previous) || !isHTMLStylesheet(next)) throw new TypeError('hotReplaceStylesheet: both must be HTMLStylesheets');
+  if (previous === next) return 0;
+  const where = adoptions.get(previous);
+  replacements.set(previous, next);
+  let swapped = 0;
+  const seen = new Set();
+  for (const ref of where?.refs ?? []) {
+    const root = ref.deref();
+    if (!root || seen.has(root) || !where.roots.has(root)) continue;
+    seen.add(root);
+    const win = windowOf(root);
+    unadoptSheet(root, previous, win);
+    adoptSheet(root, liveSheet(next), win);
+    swapped++;
+  }
+  return swapped;
+}
+
+/**
+ * Hot-replace one module's exports with another's (a re-fetched HTML module, or a re-evaluated compiled one): its
+ * components and stylesheets are swapped under live elements. Nothing is changed unless **every** export can be
+ * swapped; otherwise `reload` is true and `reasons` says why (exports added or removed, changed data, imports or
+ * a setting that is fixed when an element is created), and the caller should reload the page.
+ * @param {object} previous the module namespace before
+ * @param {object} next     the module namespace after
+ * @returns {{ reload: boolean, reasons: string[], updated: string[], elements: number }}
+ */
+export function hotReplaceModule(previous, next) {
+  const names = (ns) => Object.keys(ns).filter((k) => k !== 'components').sort();
+  const [before, after] = [names(previous), names(next)];
+  const reasons = [];
+  const added = after.filter((k) => !before.includes(k));
+  const removed = before.filter((k) => !after.includes(k));
+  if (added.length || removed.length) reasons.push(`exports changed (${[...added.map((k) => `+${k}`), ...removed.map((k) => `-${k}`)].join(', ')})`);
+  const applies = [];
+  const updated = [];
+  const handled = new Set();
+  for (const key of before.filter((k) => after.includes(k))) {
+    const [a, b] = [previous[key], next[key]];
+    if (a === b) continue;
+    if (isHTMLComponent(a) && isHTMLComponent(b)) {
+      if (handled.has(a)) continue;
+      handled.add(a);
+      const plan = planComponentSwap(a, b);
+      if (typeof plan === 'string') reasons.push(`<${a.name ?? key}>: ${plan}`);
+      else applies.push(() => plan());
+      updated.push(key);
+    } else if (isHTMLStylesheet(a) && isHTMLStylesheet(b)) {
+      if (handled.has(a)) continue;
+      handled.add(a);
+      applies.push(() => hotReplaceStylesheet(a, b));
+      updated.push(key);
+    } else if (JSON.stringify(a) !== JSON.stringify(b) || typeof a !== typeof b || typeof a === 'function') {
+      reasons.push(`export "${key}" changed and is not a component or stylesheet`);
+    }
+  }
+  if (reasons.length) return { reload: true, reasons, updated: [], elements: 0 };
+  let elements = 0;
+  for (const apply of applies) elements += Number(apply()) || 0;
+  return { reload: false, reasons: [], updated, elements };
 }

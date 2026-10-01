@@ -57,6 +57,7 @@ dependencies.
 - [JavaScript API](#javascript-api)
 - [JavaScript-authored components](#javascript-authored-components)
 - [The compiler](#the-compiler)
+- [Dev server, hot reload and Vite](#dev-server-hot-reload-and-vite)
 - [Resolution and caching](#resolution-and-caching)
 - [Errors](#errors)
 - [Non-goals](#non-goals)
@@ -655,6 +656,35 @@ export { $x_card as card, $components as components };
 
 Every option, the CLI flags and exit codes, and a full generated module: [Compiler and CLI](docs/api/compiler.md).
 
+## Dev server, hot reload and Vite
+
+```sh
+html-module dev ./site          # serve a directory, watch it, hot reload open pages (no dependencies)
+```
+
+`html-module dev [dir]` is a static server over `node:http` and `fs.watch` that pushes file changes to open pages over
+Server-Sent Events. When an HTML module changes, the page calls `HTMLModules.hotReload(url)`: the module is fetched
+again and its components and styles are swapped **under live elements**. Custom element definitions cannot be
+redefined, so registered classes delegate to a swappable definition: a template change re-stamps each element's shadow
+root in place (host, listeners and light DOM are kept; bindings re-bound) and a style change swaps the adopted
+stylesheet. A change that cannot be applied to live elements (exports added or removed, a changed shadow mode,
+`form-associated`, new observed attributes, changed imports) reloads the page; a module with a syntax error changes
+nothing and shows an overlay. See [Dev server, hot reload and Vite](docs/api/dev.md).
+
+For modules imported from JavaScript there is a Vite plugin, with the same in-place HMR:
+
+```js
+// vite.config.js
+import htmlModules from '@johnhenry/html-modules/vite';
+export default { plugins: [htmlModules()] };
+
+// main.js
+import { customCard } from './ui.html';   // compiled with the same compiler as the CLI
+customCard.define('x-card');
+```
+
+`vite` is a dev dependency of this package only; `npm install @johnhenry/html-modules` adds no runtime dependency.
+
 ## Resolution and caching
 
 - `src` resolves like a module specifier: relative to the importing document (or, inside a module, the importing
@@ -710,6 +740,8 @@ src/
   record.js        module records; readHTMLModule() from a DOM
   template.js      data binding: {{attribute}} sites, props, URL escaping
   form.js          form-associated components (ElementInternals)
+  dev-server.js    html-module dev: static server, fs.watch, SSE (and dev-client.js, the page half)
+  vite.js          the Vite plugin
   scan.js          scanHTMLModule() from source text
   loader.js        resolve, fetch, parse, cache, link dependencies
   lazy.js          lazy loading: what an import waits for, and the watcher

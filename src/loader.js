@@ -222,9 +222,9 @@ export function createLoader({
     }
   }
 
-  async function loadHTML(url, { integrity, credentials: c = credentials, mode: m = mode } = {}) {
+  async function loadHTML(url, { integrity, credentials: c = credentials, mode: m = mode, cache: httpCache } = {}) {
     onEvent({ type: 'fetch', url });
-    const init = { ...(c !== undefined && { credentials: c }), ...(m !== undefined && { mode: m }) };
+    const init = { ...(c !== undefined && { credentials: c }), ...(m !== undefined && { mode: m }), ...(httpCache !== undefined && { cache: httpCache }) };
     const res = await (Object.keys(init).length ? fetchImpl(url, init) : fetchImpl(url));
     if (!res.ok) throw new Error(`Failed to fetch HTML module ${url}: ${res.status}`);
     let source;
@@ -272,13 +272,13 @@ export function createLoader({
    * Load a module namespace (HTML or JS), cached by resolved URL.
    * @param {string} specifier
    * @param {string} [referrer]
-   * @param {{ type?: 'html'|'js', integrity?: string, credentials?: string, mode?: string }} [options]
-   *        `integrity` (SRI, HTML modules only), `credentials` and `mode` apply to this fetch; the
+   * @param {{ type?: 'html'|'js', integrity?: string, credentials?: string, mode?: string, cache?: RequestCache }} [options]
+   *        `integrity` (SRI, HTML modules only), `credentials`, `mode` and `cache` (the fetch's HTTP cache mode) apply to this fetch; the
    *        module's own dependencies use the loader's defaults.
    */
-  async function load(specifier, referrer, { type, integrity, credentials: c, mode: m } = {}) {
-    checkFetchOptions({ integrity, credentials: c, mode: m }, ' in load()');
-    return start(resolve(specifier, referrer || baseURL), type, { integrity, credentials: c, mode: m });
+  async function load(specifier, referrer, { type, integrity, credentials: c, mode: m, cache: httpCache } = {}) {
+    checkFetchOptions({ integrity, credentials: c, mode: m, cache: httpCache }, ' in load()');
+    return start(resolve(specifier, referrer || baseURL), type, { integrity, credentials: c, mode: m, cache: httpCache });
   }
 
   /**
@@ -301,5 +301,28 @@ export function createLoader({
     return evicted;
   }
 
-  return { load, unload, resolve, cache, baseURL };
+  /**
+   * Fetch an HTML module again, bypassing the HTTP cache, and replace its cache entry: the loader half of a hot
+   * reload. Resolves to `{ previous, next }` namespaces (`previous` is undefined when the module was not loaded; the
+   * module is then simply loaded). When the new load fails the old entry is put back and the error is thrown.
+   * @param {string} specifier
+   * @param {string} [referrer]
+   * @returns {Promise<{ previous: object|undefined, next: object }>}
+   */
+  async function reload(specifier, referrer) {
+    const url = resolve(specifier, referrer || baseURL);
+    const key = cacheKey('html', url);
+    const held = cache.get(key);
+    let previous;
+    if (held) previous = await held.catch(() => undefined);
+    cache.delete(key);
+    try {
+      return { previous, next: await start(url, 'html', { cache: 'no-cache' }) };
+    } catch (error) {
+      if (held && previous) cache.set(key, held);
+      throw error;
+    }
+  }
+
+  return { load, unload, reload, resolve, cache, baseURL };
 }

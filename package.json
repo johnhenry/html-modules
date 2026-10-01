@@ -25,6 +25,8 @@
     "./browser": "./src/browser.js",
     "./runtime": "./src/runtime.js",
     "./compiler": "./src/compiler.js",
+    "./dev": "./src/dev-server.js",
+    "./vite": "./src/vite.js",
     "./package.json": "./package.json"
   },
   "bin": {
@@ -46,6 +48,7 @@
     "example:04": "node examples/04-invalid-modules-fail-with-a-named-syntax-error.mjs",
     "example:05": "node examples/05-html-import-registers-and-upgrades-in-place.mjs",
     "example:06": "node examples/06-lazy-import-fetches-on-first-use.mjs",
+    "example:07": "node examples/07-hot-reload-swaps-components-under-live-elements.mjs",
     "examples:compile": "node scripts/compile-examples.js",
     "test:browser": "playwright test"
   },
@@ -66,6 +69,7 @@
   "devDependencies": {
     "@playwright/test": "^1.63.0",
     "linkedom": "^0.18.13",
-    "parse5": "^8.0.1"
+    "parse5": "^8.0.1",
+    "vite": "^8.3.1"
   }
 }

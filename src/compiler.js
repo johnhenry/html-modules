@@ -67,6 +67,7 @@ export function rebaseSpecifier(src, base) {
  * @param {string} [options.delimiter]      register format: namespace delimiter (default "--"), e.g. "-" for <ui-card>
  * @param {'error'|'reuse'} [options.conflict]  register format: keep tags that are already defined instead of throwing
  * @param {(src: string) => string} [options.rewrite]   dependency specifier rewrite (default ".html" → ".js")
+ * @param {boolean} [options.hot]           add Vite-style HMR: the module accepts itself and hot-replaces its components and stylesheets under live elements (see `hotReplaceModule()`); invalidates when that cannot be done in place
  * @param {(html: string, url: string) => Document} [options.parse]  use a DOM parser instead of the built-in scanner
  * @returns {string} JavaScript module source
  */
@@ -79,7 +80,7 @@ export function compileHTMLModule(source, { url = 'module.html', parse, ...optio
  * Generate an ES module from a module record.
  * @param {import('./record.js').ModuleRecord} record
  */
-export function compileRecord(record, { runtime = '@johnhenry/html-modules/runtime', format = 'esm', as, delimiter = DELIMITER, conflict = 'error', rewrite = rewriteSpecifier } = {}) {
+export function compileRecord(record, { runtime = '@johnhenry/html-modules/runtime', format = 'esm', as, delimiter = DELIMITER, conflict = 'error', rewrite = rewriteSpecifier, hot = false } = {}) {
   if (format !== 'esm' && format !== 'register') throw new TypeError(`Unknown format "${format}": use "esm" or "register"`);
   if (as != null) assertNamespace(as);
   assertDelimiter(delimiter);
@@ -160,6 +161,22 @@ export function compileRecord(record, { runtime = '@johnhenry/html-modules/runti
 
   body.push(`const $components = manifest({${manifestEntries.length ? `\n${manifestEntries.join('\n')}\n` : ''}}, [${stars.join(', ')}]);`);
   exported.push(['$components', 'components']);
+  if (hot) {
+    helpers.add('hotReplaceModule');
+    const own = exported.map(([local, name]) => `${name}: ${local}`);
+    if (defaultLocal) own.push(`default: ${defaultLocal}`);
+    // Before any registration, so re-registering a replaced component under its tag is the same component.
+    body.push(`if (import.meta.hot) {
+  const $next = { ${own.join(', ')} };
+  const $previous = import.meta.hot.data.namespace;
+  import.meta.hot.data.namespace = $next;
+  if ($previous) {
+    const $result = hotReplaceModule($previous, $next);
+    if ($result.reload) import.meta.hot.invalidate($result.reasons.join('; '));
+  }
+  import.meta.hot.accept();
+}`);
+  }
   if (format === 'register') {
     helpers.add('registerComponents');
     const opts = [

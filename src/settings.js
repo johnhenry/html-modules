@@ -26,6 +26,7 @@ const CHOICES = {
   shadow: ['open', 'closed'],
   credentials: ['omit', 'same-origin', 'include'],
   mode: ['cors', 'same-origin', 'no-cors'],
+  cache: ['default', 'no-store', 'reload', 'no-cache', 'force-cache', 'only-if-cached'],
 };
 
 /** Import options that `<html-import>` (and a module's import records) may set per import. */
@@ -166,7 +167,7 @@ export function checkOptions(options, where = '') {
 
 /** Validate the fetch options of a load: `integrity`, `credentials`, `mode` (undefined values are skipped). */
 export function checkFetchOptions(options, where = '') {
-  for (const name of ['integrity', 'credentials', 'mode']) {
+  for (const name of ['integrity', 'credentials', 'mode', 'cache']) {
     if (options[name] !== undefined) assertOption(name, options[name], where);
   }
   return options;

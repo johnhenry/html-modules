@@ -346,3 +346,22 @@ The manifest entries a namespace re-export (`<html-export src="./icons.html" nam
 each of `ns`'s components (per [`componentsOf`](#componentsofns-from)) keyed `<name>--<export>`, e.g.
 `{ 'icon--star': … }`. Returns `{}` when `ns` offers no components instead of throwing. Spread into the `locals` of
 [`manifest`](#manifestlocals-stars) by the loader and by compiled output.
+
+## Hot replacement
+
+Template-backed classes delegate to a swappable definition, so live elements can be updated when a module is edited. See
+[Dev server, hot reload and Vite](dev.md#hot-replacement) for what is swapped and what needs a reload.
+
+```ts
+hotReplaceComponent(previous: HTMLComponent, next: HTMLComponent): { ok: true, elements: number } | { ok: false, reason: string }
+hotReplaceStylesheet(previous: HTMLStylesheet, next: HTMLStylesheet): number   // roots swapped
+hotReplaceModule(previous: Namespace, next: Namespace): { reload: boolean, reasons: string[], updated: string[], elements: number }
+```
+
+- `hotReplaceComponent`: re-stamps (template changed) or restyles (styles changed) every live element of `previous`; elements
+  created later use `next`, and `next.define(tag)` for a tag `previous` holds is the same component, not a conflict. Returns
+  `{ ok: false, reason }` and changes nothing for a change that needs a reload.
+- `hotReplaceStylesheet`: swaps the adopted sheet in every root that adopted `previous`, and later `adoptStylesheet(root,
+  previous)` adopts `next`.
+- `hotReplaceModule`: all-or-nothing over a whole module's exports (components, stylesheets; data must be equal). This is
+  what `HTMLModules.hotReload()` and the Vite plugin's HMR code call.

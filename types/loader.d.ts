@@ -36,7 +36,8 @@ export declare function createNamespace(entries: Iterable<[string, unknown]>): i
  * `<title>` and `<link>` keep their head behaviour). The factory is a `DOMParser` document, not
  * `document.implementation.createHTMLDocument()`, because the scripting flag decides how `<noscript>` parses and
  * only a `DOMParser` document is scripting-less in every engine (Firefox treats a `createHTMLDocument()` document
- * as scripting-enabled, so `<noscript>` content became text there). Anything else (another DOM implementation, or no
+ * as scripting-enabled, so `<noscript>` content became text there, and in a fragment parse it does in Firefox whatever the
+ * container's document, so source that mentions `<noscript>` is parsed as a whole document). Anything else (another DOM implementation, or no
  * `DOMParser`) gets a whole document from `DOMParser`; with none it is a TypeError.
  * @param {string} html
  * @param {any} [win]

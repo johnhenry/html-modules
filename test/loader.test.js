@@ -266,5 +266,13 @@ test('parseModuleSource: a browser\'s DOMParser makes a detached container; any 
   const Plain = class { parseFromString(h, t) { calls.push([h, t]); return win.document; } };
   parseModuleSource(html, { DOMParser: Plain });
   assert.deepEqual(calls, [[html, 'text/html']]);
+  // <noscript> parses by a scripting flag that engines take from different places: such a module is a whole document.
+  calls.length = 0;
+  const noscript = '<noscript><html-export name="n"><template>x</template></html-export></noscript>';
+  const noscriptWindow = { DOMParser: Native };
+  parseModuleSource(html, noscriptWindow); // (its empty document is made on first use)
+  made.length = 0;
+  parseModuleSource(noscript, noscriptWindow);
+  assert.deepEqual(made, [[noscript, 'text/html']], 'the whole source went to parseFromString, not into a container');
   assert.throws(() => parseModuleSource(html, {}), /No DOMParser available/);
 });

@@ -150,6 +150,12 @@ const factories = new WeakMap(); // window → a function making a parse contain
 // them can query a detached element (linkedom cannot, for one that holds a <title>).
 const isNative = (f) => typeof f === 'function' && /\[native code\]/.test(Function.prototype.toString.call(f));
 
+// How <noscript> parses depends on a scripting flag that engines take from different places (Firefox parses its
+// content as text in a fragment, as in a scripting-enabled page, wherever the container came from), and a module that
+// has one is parsed as a document, which is always scripting-less. Matching the source text, comments and all, only
+// ever errs towards the whole-document parse.
+const NOSCRIPT = /<noscript[\s/>]/i;
+
 function containerFactory(win, trusted) {
   if (!isNative(win?.DOMParser)) return null;
   const doc = new win.DOMParser().parseFromString(trusted(''), 'text/html');
@@ -166,7 +172,8 @@ function containerFactory(win, trusted) {
  * `<title>` and `<link>` keep their head behaviour). The factory is a `DOMParser` document, not
  * `document.implementation.createHTMLDocument()`, because the scripting flag decides how `<noscript>` parses and
  * only a `DOMParser` document is scripting-less in every engine (Firefox treats a `createHTMLDocument()` document
- * as scripting-enabled, so `<noscript>` content became text there). Anything else (another DOM implementation, or no
+ * as scripting-enabled, so `<noscript>` content became text there, and in a fragment parse it does in Firefox whatever the
+ * container's document, so source that mentions `<noscript>` is parsed as a whole document). Anything else (another DOM implementation, or no
  * `DOMParser`) gets a whole document from `DOMParser`; with none it is a TypeError.
  * @param {string} html
  * @param {any} [win]
@@ -175,7 +182,7 @@ function containerFactory(win, trusted) {
 export function parseModuleSource(html, win = globalThis) {
   if (!factories.has(win)) factories.set(win, containerFactory(win, (s) => trustedHTML(s, win)));
   const make = factories.get(win);
-  if (make) {
+  if (make && !NOSCRIPT.test(html)) {
     const body = make();
     body.innerHTML = trustedHTML(html, win);
     return body;

@@ -14,7 +14,7 @@ const edge = [
   ['full document', '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>t</title><style>x{}</style></head><body><html-export name="a"><style>b{color:red}</style><template><b>x</b></template></html-export></body></html>'],
   ['bare fragment, style first', '<style>:host{display:block}</style><html-export name="a"><template>hi</template></html-export>'],
   ['stylesheet export', '<html-export name="s"><style>a{color:red}</style><style>b{color:blue}</style></html-export>'],
-  ['noscript wrapper', '<noscript><html-export name="n"><template>x</template></html-export></noscript><html-export name="a"><template>y</template></html-export>'],
+  ['noscript wrapper (parsed as a whole document: its content is text in a Firefox fragment)', '<noscript><html-export name="n"><template>x</template></html-export></noscript><html-export name="a"><template>y</template></html-export>'],
   ['stray table tags', '<tr><td>cell</td></tr><html-export name="a"><template><tr><td>in</td></tr></template></html-export>'],
   ['comments, doctype, text', '<!-- c --><!doctype html>text<html-import src="./x.html" as="x"></html-import>tail'],
   ['nested export is rejected', '<html-export name="a"><template>x</template><html-export name="b"><template>y</template></html-export></html-export>'],
@@ -30,8 +30,8 @@ for (const strict of [false, true]) {
     const { results, reportsFromParse, reportsFromDOMParser } = await page.evaluate((sources) => window.__read(sources), [...corpus, ...edge]);
     expect(results.length).toBeGreaterThan(30);
     for (const r of results) {
-      expect(r.viaParse, `${r.name}: same record as DOMParser`).toEqual(r.viaDOMParser);
-      expect(r.shapeOfParse, `${r.name}: agrees with the scanner`).toEqual(r.viaScan);
+      expect.soft(r.viaParse, `${r.name}: same record as DOMParser`).toEqual(r.viaDOMParser);
+      expect.soft(r.shapeOfParse, `${r.name}: agrees with the scanner`).toEqual(r.viaScan);
     }
     // A `style="…"` attribute in markup is blocked by `style-src-attr` whichever way it is parsed (the module author's
     // choice, and the stamp would be blocked too); the point is the `<style>` element.

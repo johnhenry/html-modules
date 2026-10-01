@@ -131,7 +131,7 @@ test('the default runtime specifier is this package\'s own published ./runtime s
   // a stale default would make every compiled file import a package that is
   // not installed (or, unscoped, someone else's).
   const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
-  assert.equal(pkg.exports['./runtime'], './src/runtime.js');
+  assert.equal(pkg.exports['./runtime'].default, './src/runtime.js');
   assert.match(compileHTMLModule(''), new RegExp(`from "${pkg.name}/runtime";`));
 });
 

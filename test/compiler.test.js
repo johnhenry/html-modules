@@ -8,6 +8,7 @@ import { pathToFileURL } from 'node:url';
 import { compileHTMLModule, bindModule, isHTMLComponent, rewriteSpecifier } from '../src/index.js';
 import { main } from '../bin/html-module.js';
 import { setup, fixtures, shared, normalizeHTML, makeWindow } from './helpers.js';
+import { specParse } from './spec-dom.js';
 
 const runtime = new URL('../src/runtime.js', import.meta.url).href;
 const fixture = (name) => readFile(new URL(name, fixtures), 'utf8');
@@ -118,7 +119,7 @@ test('compiler options and errors', async () => {
   assert.match(js, /import \* as \$m0 from "\.\/a\.mjs";/);
   assert.match(js, /\$x_class as class,/, 'reserved words are fine as export names');
   assert.match(js, /from "@johnhenry\/html-modules\/runtime"/);
-  const viaDOM = compileHTMLModule(await fixture('ui.html'), { url: 'ui.html', parse: (html) => new shared.DOMParser().parseFromString(html, 'text/html') });
+  const viaDOM = compileHTMLModule(await fixture('ui.html'), { url: 'ui.html', parse: (html) => specParse(html) });
   assert.equal(viaDOM, compileHTMLModule(await fixture('ui.html'), { url: 'ui.html' }), 'the DOM reader and the scanner compile identically');
   assert.throws(() => compileHTMLModule('<html-export name="a"></html-export>', { url: 'bad.html' }), /needs a <template>.* in bad\.html/);
   assert.throws(() => compileHTMLModule('', { format: 'bundle' }), /Unknown format "bundle"/);

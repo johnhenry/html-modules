@@ -4,8 +4,9 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { readHTMLModule, scanHTMLModule } from '../src/index.js';
 import { makeWindow, normalizeHTML } from './helpers.js';
+import { specParse } from './spec-dom.js';
 
-const parse = (html) => new (makeWindow().DOMParser)().parseFromString(html, 'text/html');
+const parse = (html) => specParse(html);
 const read = (html) => readHTMLModule(parse(html), 'm.html');
 const scan = (html) => scanHTMLModule(html, 'm.html');
 const both = (html) => [read(html), scan(html)];

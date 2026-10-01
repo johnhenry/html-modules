@@ -10,9 +10,10 @@ import { pathToFileURL } from 'node:url';
 import { readHTMLModule, scanHTMLModule, compileHTMLModule, isHTMLComponent, isHTMLStylesheet } from '../src/index.js';
 import { assertExportName } from '../src/names.js';
 import { setup, makeWindow, shared } from './helpers.js';
+import { specParse } from './spec-dom.js';
 
 const runtime = new URL('../src/runtime.js', import.meta.url).href;
-const parse = (html) => new shared.DOMParser().parseFromString(html, 'text/html');
+const parse = (html) => specParse(html);
 const both = (html) => [readHTMLModule(parse(html), 'm.html'), scanHTMLModule(html, 'm.html')];
 const once = (el, type) => new Promise((resolve) => el.addEventListener(type, (e) => resolve(e), { once: true }));
 

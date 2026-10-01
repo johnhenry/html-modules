@@ -13,9 +13,10 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { readHTMLModule, scanHTMLModule, compileHTMLModule, isHTMLComponent } from '../src/index.js';
 import { setup, makeWindow, shared } from './helpers.js';
+import { specParse } from './spec-dom.js';
 
 const runtime = new URL('../src/runtime.js', import.meta.url).href;
-const parse = (html) => new shared.DOMParser().parseFromString(html, 'text/html');
+const parse = (html) => specParse(html);
 const both = (html) => [readHTMLModule(parse(html), 'm.html'), scanHTMLModule(html, 'm.html')];
 
 const SOURCE = `<html-export name="card"><template>card</template></html-export>

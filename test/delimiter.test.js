@@ -13,6 +13,7 @@ import {
 } from '../src/index.js';
 import { main } from '../bin/html-module.js';
 import { setup, makeWindow, shared, fixtures } from './helpers.js';
+import { specParse } from './spec-dom.js';
 
 const runtime = new URL('../src/runtime.js', import.meta.url).href;
 const once = (el, type) => new Promise((resolve) => el.addEventListener(type, (e) => resolve(e), { once: true }));
@@ -168,7 +169,7 @@ const COMPACT = `<html-import src="./icons.html" as="ic" delimiter="-"></html-im
 <html-export name="stars"><template><ic-star></ic-star><icon--heart></icon--heart></template></html-export>`;
 
 test('module-internal imports carry their delimiter in the record; the DOM reader and scanner agree', async () => {
-  const doc = new shared.DOMParser().parseFromString(COMPACT, 'text/html');
+  const doc = specParse(COMPACT);
   const [a, b] = [readHTMLModule(doc, 'c.html'), scanHTMLModule(COMPACT, 'c.html')];
   assert.deepEqual(a.imports, b.imports);
   assert.deepEqual(a.imports, [
@@ -180,7 +181,7 @@ test('module-internal imports carry their delimiter in the record; the DOM reade
     ['<html-import src="./x.html" as="x" delimiter="A"></html-import>', /Invalid delimiter "A".* in m\.html/],
   ]) {
     assert.throws(() => scanHTMLModule(html, 'm.html'), message);
-    assert.throws(() => readHTMLModule(new shared.DOMParser().parseFromString(html, 'text/html'), 'm.html'), message);
+    assert.throws(() => readHTMLModule(specParse(html), 'm.html'), message);
   }
 });
 

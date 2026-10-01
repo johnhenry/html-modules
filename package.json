@@ -63,6 +63,7 @@
     "access": "public"
   },
   "devDependencies": {
-    "linkedom": "^0.18.13"
+    "linkedom": "^0.18.13",
+    "parse5": "^8.0.1"
   }
 }

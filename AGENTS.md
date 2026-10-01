@@ -2,7 +2,7 @@
 
 `@johnhenry/html-modules`: declarative HTML modules (`<html-export>`, `<html-import src as>`) with a shared runtime and
 an optional compiler to ES modules. Single package, Node >= 26, `node:test` (`npm test`) with linkedom as the test
-DOM, ships source (`src/`, `bin/`); no build step. The library is browser code; Node runs only the tests, the
+DOM and parse5 as the spec-parser oracle for the reader-agreement tests (`test/spec-dom.js`), ships source (`src/`, `bin/`); no build step. The library is browser code; Node runs only the tests, the
 compiler/CLI and the numbered examples, so a green `npm test` does not prove anything about real rendering.
 
 `CLAUDE.md` in this directory is a symlink to this file.
@@ -42,6 +42,10 @@ CI (`.github/workflows/ci.yml`) runs steps 1-5 in this order on Node 26. Locally
 - **Browsers cache modules while you verify.** After `npm run examples:compile` or a `src/` edit, a normal reload can
   run the old ES modules (HTTP cache, and the module map for the page's lifetime). Use DevTools "Disable cache" or a
   hard reload; `examples/compiler.html` fetches `compiled/tip.js` with `cache: 'no-cache'` for this reason.
+- **linkedom is not a spec parser either.** Its parser shares the scanner's blind spots, so tests that compare the DOM
+  reader with the scanner read through `specParse()` (parse5, `test/spec-dom.js`), never `shared.DOMParser`. parse5
+  follows the pre-"customizable select" parsing rules: a real current browser finds `<html-export>` inside
+  `<select>`, parse5 does not, so keep `<select>` out of fuzz alphabets.
 - **linkedom is not a browser.** It does not upgrade custom elements inside shadow roots (`test/lazy.test.js`
   upgrades them by hand with `upgradeIn`), does not carry events out of shadow roots, and has no constructable
   stylesheets (styles fall back to `<style>`). Do not "fix" the tests by removing those workarounds; check the real

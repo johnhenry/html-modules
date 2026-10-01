@@ -12,10 +12,11 @@ import {
 } from '../src/index.js';
 import { main } from '../bin/html-module.js';
 import { setup, makeWindow, shared, tick, ORIGIN } from './helpers.js';
+import { specParse } from './spec-dom.js';
 
 const runtime = new URL('../src/runtime.js', import.meta.url).href;
 const once = (el, type) => new Promise((resolve) => el.addEventListener(type, (e) => resolve(e), { once: true }));
-const both = (html, url = 'm.html') => [readHTMLModule(new shared.DOMParser().parseFromString(html, 'text/html'), url), scanHTMLModule(html, url)];
+const both = (html, url = 'm.html') => [readHTMLModule(specParse(html), url), scanHTMLModule(html, url)];
 
 const UI = `<html-export name="card"><template>c</template></html-export>
   <html-export name="custom-card"><template>cc</template></html-export>`;
@@ -329,7 +330,7 @@ test('module settings: records from the DOM reader and the scanner, placement an
     ['<html-import-settings load="lazy"></html-import-settings><html-import src="./t.html"><html-binding export="gold" adopt></html-binding></html-import>', /is lazy but adopts a stylesheet in m\.html/],
   ]) {
     assert.throws(() => scanHTMLModule(html, 'm.html'), message, `scan: ${html}`);
-    assert.throws(() => readHTMLModule(new shared.DOMParser().parseFromString(html, 'text/html'), 'm.html'), message, `dom: ${html}`);
+    assert.throws(() => readHTMLModule(specParse(html), 'm.html'), message, `dom: ${html}`);
   }
   // An eager override makes adopt fine again; settings may be unclosed or nested and still read the same.
   both('<html-import-settings load="lazy"></html-import-settings><html-import src="./t.html" load="eager"><html-binding export="gold" adopt></html-binding></html-import>');

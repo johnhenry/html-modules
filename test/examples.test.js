@@ -12,6 +12,7 @@ import { readHTMLModule, scanHTMLModule } from '../src/index.js';
 import { compileExamples } from '../scripts/compile-examples.js';
 import { checklist, pages, uncovered, allItems } from '../examples/shared/catalog.js';
 import { setup, shared, normalizeHTML } from './helpers.js';
+import { specParse } from './spec-dom.js';
 
 const examples = fileURLToPath(new URL('../examples/', import.meta.url));
 const files = (await readdir(examples, { recursive: true })).map((f) => join(examples, f));
@@ -39,10 +40,10 @@ test('every example HTML module reads the same through the DOM and the scanner',
     const source = await readFile(file, 'utf8');
     if (broken[name] && !name.includes('cycle')) {
       assert.throws(() => scanHTMLModule(source, name), broken[name], name);
-      assert.throws(() => readHTMLModule(new shared.DOMParser().parseFromString(source, 'text/html'), name), broken[name], name);
+      assert.throws(() => readHTMLModule(specParse(source), name), broken[name], name);
       continue;
     }
-    const a = readHTMLModule(new shared.DOMParser().parseFromString(source, 'text/html'), name);
+    const a = readHTMLModule(specParse(source), name);
     const b = scanHTMLModule(source, name);
     assert.deepEqual(normalized(b), normalized(a), name);
     if (a.importSettings || a.moduleSettings) withSettings.push(name);

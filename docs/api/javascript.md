@@ -50,7 +50,7 @@ createHTMLModules(options?: {
   mode?: 'cors' | 'same-origin' | 'no-cors';          // fetch option for HTML modules; = the platform's default
   trustedTypes?: { createHTML(html: string): unknown } | false;  // = a policy named "html-modules" where window.trustedTypes exists
   nonce?: string;                        // CSP nonce for the <style> fallback; no default
-  parseHTML?: (html: string, url: string) => Document;   // = new window.DOMParser().parseFromString(html, 'text/html')
+  parseHTML?: (html: string, url: string) => ParentNode;  // = a detached <body> holding the parsed markup (see Trusted Types and CSP)
   importModule?: (url: string) => Promise<object>;       // = (url) => import(url)
   onEvent?: (event: { type: 'fetch' | 'load' | 'error', url: string, kind?: 'html' | 'js', error?: unknown }) => void;
 }): HTMLModulesInstance
@@ -72,7 +72,7 @@ createHTMLModules(options?: {
 | `mode` | the platform's | The `mode` passed to `fetch()` for HTML modules. `navigate` is not allowed, and `no-cors` gives an opaque response a module cannot be read from, so it is only useful with a custom `fetch`. |
 | `trustedTypes` | `"html-modules"` policy, if `window.trustedTypes` exists | A Trusted Types policy object (`{ createHTML(html) }`) used for the HTML the library parses and stamps in this window; `false` never uses Trusted Types. See [Trusted Types and CSP](#trusted-types-and-csp). |
 | `nonce` | none | The CSP nonce set on the `<style>` elements used where constructable stylesheets are unavailable. |
-| `parseHTML` | the window's `DOMParser` | Parses fetched HTML into a `Document`. Without either, loading an HTML module throws `` TypeError: No DOMParser available; pass `parseHTML` to createLoader() ``. |
+| `parseHTML` | a detached element of the window's `document.implementation.createHTMLDocument()` (a `DOMParser` where that is missing) | Parses fetched HTML into a `Document` or any other node whose descendants are the module's elements. Without either, loading an HTML module throws `` TypeError: No DOMParser available; pass `parseHTML` to createLoader() ``. |
 | `importModule` | native `import()` | Loads JavaScript modules. |
 | `onEvent` | no-op | Observes the loader: `{ type: 'fetch', url }` before an HTML module is fetched; `{ type: 'load', url, kind }` and `{ type: 'error', url, kind, error }` when any module (HTML or JS) settles. |
 
@@ -206,7 +206,7 @@ The underlying [`createLoader()`](#createloaderoptions) object: `{ load, unload,
 ## Trusted Types and CSP
 
 Under `Content-Security-Policy: require-trusted-types-for 'script'`, assigning a string to `template.innerHTML` or
-passing one to `DOMParser.parseFromString` throws. The two places html-modules does this (the loader parsing a
+assigning one to the `innerHTML` of the element a fetched module is parsed into throws. The two places html-modules does this (the loader parsing a
 fetched module, and a component stamping its template) wrap the HTML first:
 
 - With the **`trustedTypes`** option (a policy object with `createHTML(html)`), through your policy. `false` opts out.
@@ -223,7 +223,12 @@ A custom `parseHTML` is yours and is not wrapped. For compiled modules (which ne
 
 `nonce` is put on the `<style data-html-module>` elements inserted where constructable stylesheets are unavailable
 (adopted sheets are not subject to `style-src` nonces). A `<style>` in a module's source is never inserted into the
-page, so no other `nonce` is needed. `script-src` is not involved: html-modules inserts no `<script>`.
+page, so no other `nonce` is needed. The loader parses a module into a detached `<body>` (of a `createHTMLDocument()`
+document) rather than a `DOMParser` document, because Chromium evaluates `style-src` for every `<style>` in a document's
+tree and logs a `style-src-elem` violation (and sends a report) for each one even though nothing is applied; a detached
+element is never checked. The parse is the same fragment parse a document gets after `<body>` (verified record-for-record
+against `DOMParser` in Chromium, Firefox and WebKit). A `style="…"` attribute is different: it is reported as
+`style-src-attr` by every way of parsing markup, so a module that has one reports under a strict `style-src`. `script-src` is not involved: html-modules inserts no `<script>`.
 
 ## Lazy loading
 

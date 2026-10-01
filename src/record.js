@@ -414,10 +414,10 @@ function rawOf(el, order) {
 }
 
 /**
- * Read a parsed HTML module document (e.g. from DOMParser) into a record.
+ * Read a parsed HTML module (a Document, e.g. from DOMParser, or any parent node holding the parsed elements) into a record.
  * `<html-export>` and `<html-import>` inside templates are ignored, as they
  * are not part of the document.
- * @param {Document} doc
+ * @param {ParentNode} doc
  * @param {string} [url]
  * @returns {ModuleRecord}
  */

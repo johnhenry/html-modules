@@ -755,8 +755,11 @@ WebKit 26.6 on Linux):
 | form state restored on history navigation | restored | the engine restored not even a plain form-associated element in an automated back navigation, so the page reports those checks as unsupported | restored |
 
 (Firefox cannot be launched in the sandbox the maintainer's agent runs in, so it is exercised only in CI; Chromium and
-WebKit also run locally.) Chromium reports a `style-src-elem` CSP violation (a report: nothing is applied) for the
-`<style>` inside a module's `DOMParser` document under a strict `style-src`; the specs assert every other directive is clean.
+WebKit also run locally.) Under a strict `style-src` no engine reports a CSP violation for a module's `<style>`: the
+loader parses a module into a detached element rather than a `DOMParser` document (Chromium CSP-checks the `<style>`
+elements of a document, one `style-src-elem` report each), and `test/browser/parse.spec.js` checks in each engine that
+the record is identical to the `DOMParser` one. A `style="…"` *attribute* in a module's markup is a `style-src-attr`
+report whichever way it is parsed (and is blocked when stamped), so keep inline style attributes out of modules.
 
 ## Benchmarks
 
@@ -967,7 +970,7 @@ done with your page's authority.
 - **Registration is all or nothing and never silent.** Tags are checked before any is registered, an existing tag is
   never redefined, and every failure is an `error` event, a rejection or a throw
   ([Errors](#errors)).
-- **Trusted Types and CSP are supported.** The two HTML sinks (`DOMParser.parseFromString` for fetched modules,
+- **Trusted Types and CSP are supported.** The two HTML sinks (`innerHTML` on a detached element for fetched modules,
   `template.innerHTML` for a component's template) go through a `trustedTypes` policy you pass, or a policy named
   `html-modules`; a `nonce` option covers the `<style>` fallback. html-modules inserts no `<script>` and uses no `eval`.
   See [Trusted Types and CSP](docs/api/javascript.md#trusted-types-and-csp).

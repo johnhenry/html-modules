@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { isHTMLComponent, isHTMLStylesheet } from '../src/index.js';
-import { setup, fixtures, tick, ORIGIN } from './helpers.js';
+import { setup, fixtures, tick, ORIGIN, makeWindow } from './helpers.js';
 
 const at = (path) => new URL(path, fixtures).href;
 
@@ -246,4 +246,25 @@ test('integrity on a re-export pins the re-exported module', async () => {
   assert.ok((await ok.modules.load('./barrel.html')).partCard);
   const bad = setup({ files: { 'barrel.html': `<html-export src="./part.html" integrity="${sri}"></html-export>`, 'part.html': `${part} ` } });
   await assert.rejects(bad.modules.load('./barrel.html'), /Integrity check failed for HTML module http:\/\/modules\.test\/part\.html/);
+});
+
+test('parseModuleSource: parses into a detached element (never a CSP-checked document), falling back to DOMParser', async () => {
+  const { parseModuleSource } = await import('../src/loader.js');
+  const { readHTMLModule } = await import('../src/index.js');
+  const win = makeWindow();
+  const html = '<!doctype html><html><head><title>t</title></head><body><html-export name="a"><style>b{}</style><template><b>x</b></template></html-export></body></html>';
+  const made = [];
+  const withImpl = { document: { implementation: { createHTMLDocument: (title) => (made.push(title), { createElement: (name) => win.document.createElement(name) }) } } };
+  const holder = parseModuleSource(html, withImpl);
+  assert.deepEqual(made, [''], 'a scripting-less document made for the purpose');
+  assert.equal(holder.parentNode, null, 'nothing parsed is attached to a document tree');
+  assert.notEqual(holder.nodeType, 9, 'a container element, not a Document');
+  const record = readHTMLModule(holder, 'm.html');
+  assert.deepEqual(record.exports.map((e) => [e.name, e.kind]), [['a', 'component']]);
+  // Without document.implementation the window's DOMParser is used, and a window with neither is a TypeError.
+  const calls = [];
+  const noImpl = { DOMParser: class { parseFromString(h, t) { calls.push([h, t]); return win.document; } } };
+  parseModuleSource(html, noImpl);
+  assert.deepEqual(calls, [[html, 'text/html']]);
+  assert.throws(() => parseModuleSource(html, {}), /No DOMParser available/);
 });

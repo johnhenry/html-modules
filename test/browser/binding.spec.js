@@ -8,9 +8,8 @@ test('strict CSP + Trusted Types: bindings and props work with no violations, ja
   await page.goto('/test/browser/fixtures/strict.html?csp=strict');
   await page.waitForFunction(() => window.__done === true);
   const r = await page.evaluate(() => ({ ...window.__strict, violations: window.__violations, clicked: window.__clicked }));
-  // Chromium reports a style-src-elem violation (and only a report: nothing is applied) for the <style> the module's
-  // DOMParser document contains. Every other directive, notably script-src and require-trusted-types-for, is clean.
-  expect(r.violations.filter((v) => !v.startsWith('style-src-elem'))).toEqual([]);
+  // No directive reports anything: the module's <style> is parsed without a CSP-checked document (see parse.spec.js).
+  expect(r.violations).toEqual([]);
   expect(errors).toEqual([]);
   expect(r.text).toBe('Ada');
   expect(r.href, 'the javascript: href was refused').toBe(false);

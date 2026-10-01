@@ -90,7 +90,7 @@
  * @property {'cors' | 'same-origin' | 'no-cors'} [mode]         fetch `mode` for HTML modules
  * @property {{ createHTML(html: string): unknown } | false} [trustedTypes]  Trusted Types policy for the HTML parsed and stamped (default: a policy named "html-modules" where `window.trustedTypes` exists; `false`: never)
  * @property {string} [nonce]                  CSP nonce for the `<style>` elements used where constructable stylesheets are unavailable
- * @property {(html: string, url: string) => Document} [parseHTML]  default: the window's DOMParser
+ * @property {(html: string, url: string) => ParentNode} [parseHTML]  default: parses into a detached element (no CSP-checked document)
  * @property {(url: string) => Promise<object>} [importModule]      default: native `import()`
  * @property {(event: { type: 'fetch' | 'load' | 'error', url: string, kind?: string, error?: unknown }) => void} [onEvent]
  * @property {any} [window]                    the window whose DOM and registry to use

@@ -145,6 +145,30 @@ export function createNamespace(entries) {
 }
 
 /**
+ * Parse module source into a container whose descendants are the module's elements, without a Document the
+ * engine CSP-checks. `DOMParser` (and `createHTMLDocument()` + `innerHTML`) build a *connected* tree, and Chromium
+ * evaluates the page's `style-src` for every `<style>` inserted into one, logging a `style-src-elem` violation
+ * (and sending a report) per element even though nothing is applied. A detached `<body>` of a scripting-less
+ * `createHTMLDocument()` document takes the same fragment-parsing path with the same insertion mode as a document
+ * parse after `<body>` (`<html>`/`<head>`/`<body>` tags are ignored, `<style>`/`<title>`/`<link>` keep their
+ * head behaviour, and `<noscript>` is parsed as elements, as in a `DOMParser` document), but its tree is never
+ * connected, so nothing is checked. Falls back to `DOMParser` where the window has no `document.implementation`.
+ * @param {string} html
+ * @param {any} [win]
+ * @returns {ParentNode}
+ */
+export function parseModuleSource(html, win = globalThis) {
+  const implementation = win?.document?.implementation;
+  if (typeof implementation?.createHTMLDocument === 'function') {
+    const body = implementation.createHTMLDocument('').createElement('body');
+    body.innerHTML = trustedHTML(html, win);
+    return body;
+  }
+  if (!win?.DOMParser) throw new TypeError('No DOMParser available; pass `parseHTML` to createLoader()');
+  return new win.DOMParser().parseFromString(trustedHTML(html, win), 'text/html');
+}
+
+/**
  * @param {object} [options]
  * @param {string} [options.baseURL]  referrer for top-level loads (default: the document's base URL)
  * @param {(specifier: string) => string|URL|null|undefined} [options.hostResolve]  bare specifiers
@@ -153,7 +177,7 @@ export function createNamespace(entries) {
  * @param {'cors'|'same-origin'|'no-cors'} [options.mode]          fetch `mode` for HTML modules (default: the platform's)
  * @param {{ createHTML(html: string): unknown } | false} [options.trustedTypes]  Trusted Types policy for the HTML parsed and stamped in `window` (default: a policy named "html-modules" where `window.trustedTypes` exists; `false`: never)
  * @param {string} [options.nonce]   CSP nonce for the `<style>` elements used where constructable stylesheets are unavailable
- * @param {(html: string, url: string) => Document} [options.parseHTML]  default: the window's DOMParser
+ * @param {(html: string, url: string) => ParentNode} [options.parseHTML]  default: parses into a detached element (see `parseModuleSource`)
  * @param {(url: string) => Promise<object>} [options.importModule]      default: native import()
  * @param {any} [options.window]
  * @param {(event: { type: 'fetch'|'load'|'error', url: string, kind?: string, error?: unknown }) => void} [options.onEvent]
@@ -176,10 +200,7 @@ export function createLoader({
   if (trustedTypes !== undefined || nonce !== undefined) configureWindow(win, { trustedTypes, nonce });
   /** @type {Map<string, Promise<object>>} */
   const cache = new Map();
-  const parse = parseHTML ?? ((html) => {
-    if (!win?.DOMParser) throw new TypeError('No DOMParser available; pass `parseHTML` to createLoader()');
-    return new win.DOMParser().parseFromString(trustedHTML(html, win), 'text/html');
-  });
+  const parse = parseHTML ?? ((html) => parseModuleSource(html, win));
 
   /** Resolve a specifier to an absolute URL string. */
   function resolve(specifier, referrer = baseURL) {

@@ -3,6 +3,8 @@
 <head>
   <meta charset="utf-8">
   <title>sanitize fixture</title>
+  <!-- safe-fragment loads DOMPurify (its fallback engine: WebKit, and Firefox before it ships a Sanitizer) with import("dompurify"). -->
+  <script type="importmap">{ "imports": { "dompurify": "/node_modules/dompurify/dist/purify.es.mjs" } }</script>
   <script type="module" src="./page.js"></script>
 </head>
 <body>

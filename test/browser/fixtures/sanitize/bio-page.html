@@ -3,6 +3,8 @@
 <head>
   <meta charset="utf-8">
   <title>safe-fragment inside a component template</title>
+  <!-- safe-fragment loads DOMPurify (its fallback engine) with import("dompurify"). -->
+  <script type="importmap">{ "imports": { "dompurify": "/node_modules/dompurify/dist/purify.es.mjs" } }</script>
   <script type="module" src="./bio-page.js"></script>
 </head>
 <body></body>

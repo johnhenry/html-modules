@@ -6,6 +6,25 @@ Fixes found by an audit of the first build. Nothing is published yet, so these a
 
 ### Features
 
+- **safe-fragment `99ac557`: the vendoring workaround is gone, `registerTemplateProfile()` derives from `component-template-v1`,
+  and template ids are kept.** safe-fragment fixed its four issues: #10 (a git install now builds `dist/` through a `prepare`
+  script, `1817d79`), #11 (the built-in `component-template-v1`, `idPolicy: "keep-in-shadow"`, `INVALID_OPTION`, `<style>` a
+  documented non-goal, `77e5151`), #9 (reports list only genuinely removed nodes, `081f92c`) and #12 (zero Trusted Types
+  violations, `f1e2647`), plus a whole-value `srcset` check (`5561b98`). Here: the devDependency pin moves to `99ac557`;
+  `scripts/vendor-safe-fragment.js`, the Playwright `globalSetup`, `npm run vendor:safe-fragment` and `examples/vendor/safe-fragment/`
+  are deleted, and the browser tests and `examples/sanitize.html` load `node_modules/@johnhenry/safe-fragment/dist/index.js`
+  with an import map for `dompurify` (needed because safe-fragment's fallback engine does `import("dompurify")`; the test server
+  already serves `node_modules`). `registerTemplateProfile()` now derives from `component-template-v1` by default (it was
+  `ui-v1` plus a hand-built composition; `base: "ui-v1"` still works and is still completed by hand; the default profile name
+  is `html-modules-component-template-v1`, and with nothing to add the built-in's own name is returned). New adapter option
+  `idPolicy` (default `"keep-in-shadow"`): html-modules stamps every template into a shadow root (no light-DOM mode;
+  `renderDeclarative()` emits `shadowrootmode`), where the clobbering that `user-content-` prefixing prevents cannot happen, so
+  a component's `#id` selectors and `form-control="#id"` work in a sanitized module; the adapter keeps ids only for a component
+  (`context.def`), never for a bare string, and `"prefix"` restores the old behavior. What a template still loses is
+  documented (`<style>`, forms, SVG, `style=""`, `srcset`, most `data-*`, `http:`, unlisted custom elements). The native
+  Sanitizer's report no longer lists what it strips itself (ADR 0007), so the browser tests branch on the engine.
+  Tests: unit tests for the profile derivation and `idPolicy`; a browser test that kept ids clobber nothing and prefixed ids
+  are prefixed. safe-fragment `99ac557`.
 - **Data binding in templates.** `{{attribute}}` in a component template's text and attribute values reads the host
   element's attributes (no expressions, no `eval`, no `innerHTML`: strict CSP and Trusted Types safe); text is set as text,
   URL attributes refuse `javascript:` / `vbscript:` / HTML `data:` URLs, `on*`, `style` and `srcdoc` are never bound; a
@@ -69,8 +88,8 @@ Fixes found by an audit of the first build. Nothing is published yet, so these a
   custom elements); `docs/api/sanitize.md` says what a template loses under each profile. Tested against the real library in
   Chromium, Firefox and WebKit with a module served from a second origin (`img onerror`, `javascript:` links,
   `iframe srcdoc`, handlers and `<script>` run in a control and are gone sanitized; benign templates render unchanged; Trusted
-  Types), and shown in `examples/sanitize.html`. safe-fragment is a devDependency pinned to `ee01b49`; because its git install is
-  empty (no `dist/`, no `prepare`), `scripts/vendor-safe-fragment.js` bundles it for the tests. Filed upstream:
+  Types), and shown in `examples/sanitize.html`. safe-fragment is a devDependency pinned to a commit (first `ee01b49`, whose git
+  install was empty, so `scripts/vendor-safe-fragment.js` bundled it for the tests; see the `99ac557` entry below). Filed upstream:
   safe-fragment#9 (report noise), #10 (git install), #11 (`<style>`, `<slot>`, ids), #12 (Trusted Types violations). `71bb40e`.
 - **`## Security model` in the README**, and the options behind it: `integrity` (Subresource Integrity, verified with
   SubtleCrypto against the fetched bytes; on `<html-import>`, a module's own imports, `load()` and `import()`; HTML

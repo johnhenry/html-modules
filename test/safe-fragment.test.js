@@ -9,6 +9,7 @@ import { setup } from './helpers.js';
 function fakeLibrary({ report = {}, strip = (h) => h } = {}) {
   const profiles = new Map([
     ['ui-v1', { name: 'ui-v1', version: 1, mode: 'html', elements: { div: ['id', 'class'], a: ['href', 'class'] }, urlAttributes: ['href'], urlSchemes: ['relative', 'https:'], allowedDataAttributes: ['data-action'], allowStyleAttribute: false, customElements: [], blockRelativeAutoLoadUrls: false }],
+    ['component-template-v1', { name: 'component-template-v1', version: 1, mode: 'html', elements: { div: ['id', 'class', 'part', 'slot', 'exportparts'], a: ['href', 'class', 'part', 'slot', 'exportparts'], slot: ['name', 'part', 'slot', 'exportparts'] }, urlAttributes: ['href'], urlSchemes: ['relative', 'https:'], allowedDataAttributes: ['data-action'], allowStyleAttribute: false, customElements: [], blockRelativeAutoLoadUrls: false }],
     ['plain-text-v1', { name: 'plain-text-v1', version: 1, mode: 'text', elements: {} }],
   ]);
   const lib = {
@@ -27,9 +28,9 @@ function fakeLibrary({ report = {}, strip = (h) => h } = {}) {
   return lib;
 }
 
-test('registerTemplateProfile derives a profile with <slot>, part and slot, and namespaced custom elements', () => {
+test('registerTemplateProfile adds composition to a base that lacks it (ui-v1): <slot>, part and slot, and namespaced custom elements', () => {
   const lib = fakeLibrary();
-  const name = registerTemplateProfile(lib, { namespaces: ['ui', 'x'], attributes: ['tone'], dataAttributes: ['data-id'] });
+  const name = registerTemplateProfile(lib, { base: 'ui-v1', namespaces: ['ui', 'x'], attributes: ['tone'], dataAttributes: ['data-id'] });
   assert.equal(name, 'html-modules-ui-v1');
   const profile = lib.profiles.get(name);
   assert.deepEqual(profile.elements.slot, ['name']);
@@ -37,10 +38,23 @@ test('registerTemplateProfile derives a profile with <slot>, part and slot, and 
   assert.deepEqual(profile.customElements.map((c) => c.tag), ['ui--*', 'x--*']);
   assert.ok(profile.customElements[0].attributes.includes('tone') && profile.customElements[0].attributes.includes('part') && profile.customElements[0].attributes.includes('exportparts'));
   assert.deepEqual(profile.allowedDataAttributes, ['data-action', 'data-id']);
-  assert.equal(registerTemplateProfile(lib, { namespaces: ['other'] }), name, 'registering the same name again is a no-op: the first registration stands');
+  assert.equal(registerTemplateProfile(lib, { base: 'ui-v1', namespaces: ['other'] }), name, 'registering the same name again is a no-op: the first registration stands');
   assert.equal(lib.profiles.get(name).customElements.length, 2);
-  assert.equal(registerTemplateProfile(lib, { name: 'mine-v1', delimiter: '-', namespaces: ['ui'] }), 'mine-v1');
+  assert.equal(registerTemplateProfile(lib, { base: 'ui-v1', name: 'mine-v1', delimiter: '-', namespaces: ['ui'] }), 'mine-v1');
   assert.equal(lib.profiles.get('mine-v1').customElements[0].tag, 'ui-*');
+});
+
+test('registerTemplateProfile derives from component-template-v1 by default: only the custom elements and data names are added', () => {
+  const lib = fakeLibrary();
+  const name = registerTemplateProfile(lib, { namespaces: ['ui'], attributes: ['tone'], dataAttributes: ['data-id'] });
+  assert.equal(name, 'html-modules-component-template-v1');
+  const profile = lib.profiles.get(name);
+  assert.deepEqual(profile.elements, lib.profiles.get('component-template-v1').elements, 'the built-in already composes: its element map is not rebuilt');
+  assert.deepEqual(profile.customElements.map((c) => c.tag), ['ui--*']);
+  assert.deepEqual(profile.allowedDataAttributes, ['data-action', 'data-id']);
+  assert.equal(registerTemplateProfile(lib), 'component-template-v1', 'nothing to add: the built-in profile itself');
+  assert.equal(lib.profiles.size, 4, 'and nothing was registered for it');
+  assert.throws(() => registerTemplateProfile({ ...fakeLibrary(), getProfile: () => undefined }), /no profile named "component-template-v1" \(it is built in from safe-fragment 99ac557/);
 });
 
 test('registerTemplateProfile refuses what cannot work', () => {
@@ -71,10 +85,10 @@ test('an object profile is registered on first use, once', async () => {
   const lib = fakeLibrary();
   const sanitize = safeFragmentSanitizer({ safeFragment: lib, profile: { namespaces: ['ui'] } });
   const { modules } = setup({ files: { 'a.html': '<html-export name="a"><template>a</template></html-export>', 'b.html': '<html-export name="b"><template>b</template></html-export>' } });
-  assert.equal(lib.profiles.has('html-modules-ui-v1'), false, 'nothing is registered until the first template');
+  assert.equal(lib.profiles.has('html-modules-component-template-v1'), false, 'nothing is registered until the first template');
   await modules.load('./a.html', { sanitize });
   await modules.load('./b.html', { sanitize });
-  assert.equal(lib.calls.map((c) => c.options.profile).join(), 'html-modules-ui-v1,html-modules-ui-v1');
+  assert.equal(lib.calls.map((c) => c.options.profile).join(), 'html-modules-component-template-v1,html-modules-component-template-v1');
   assert.equal([...lib.profiles.keys()].filter((k) => k.startsWith('html-modules')).length, 1);
 });
 
@@ -146,4 +160,20 @@ test('option errors are named', async () => {
   const files = { 'ui.html': '<html-export name="card"><template>a</template></html-export>' };
   const { modules } = setup({ files, sanitize: safeFragmentSanitizer({ safeFragment: {}, profile: 'ui-v1' }) });
   await assert.rejects(modules.load('./ui.html'), /has no sanitizeToFragment\(\)/);
+});
+
+test('ids: kept for a component template (stamped into a shadow root), prefixed for anything else, and opt-out is explicit', async () => {
+  const files = { 'ui.html': '<html-export name="card"><template>a</template></html-export>' };
+  for (const [options, expected] of [[{}, 'keep-in-shadow'], [{ idPolicy: 'prefix' }, 'prefix']]) {
+    const lib = fakeLibrary();
+    const { modules } = setup({ files, sanitize: safeFragmentSanitizer({ safeFragment: lib, profile: 'ui-v1', ...options }) });
+    await modules.load('./ui.html');
+    assert.equal(lib.calls[0].options.idPolicy, expected);
+  }
+  // Called directly (no component, so no known shadow root to put the fragment in), it never keeps ids.
+  const lib = fakeLibrary();
+  const { window } = setup({ files });
+  await safeFragmentSanitizer({ safeFragment: lib, profile: 'ui-v1' })('<p id="a">x</p>', { window });
+  assert.equal(lib.calls[0].options.idPolicy, 'prefix');
+  assert.throws(() => safeFragmentSanitizer({ profile: 'ui-v1', idPolicy: 'none' }), /idPolicy must be "keep-in-shadow" or "prefix", got "none"/);
 });

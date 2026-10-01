@@ -20,7 +20,7 @@ compiler/CLI and the numbered examples, so a green `npm test` does not prove any
 6. For anything that changes rendering, styles, shadow DOM, registries, forms, security, hot reload or lazy loading:
    `npm run test:browser` (Playwright: Chromium, Firefox and WebKit over every `examples/*.html` page and the targeted
    specs in `test/browser/`; `npx playwright install --with-deps` once; `--project=chromium` for one engine; the run
-   bundles the pinned safe-fragment commit first, which needs network: see the gotcha below), and look at
+   loads the pinned safe-fragment from `node_modules`: see the gotcha below), and look at
    the change in a real browser (`node scripts/test-server.js`, cache disabled). Features an engine lacks must be
    reported by the page as *unsupported* (`renderChecks` takes `'unsupported'`), not as a failure.
 7. A genuinely fresh clone: `git clone . /tmp/html-modules-verifyN && cd $_ && npm ci && npm test && npm run examples`.
@@ -57,16 +57,24 @@ CI (`.github/workflows/ci.yml`) runs steps 1-5 in this order on Node 26, plus a 
   slot of the one it replaces (`sameDefinition`). Anything fixed when an element is created (shadow mode, observed
   attributes, props, form association, imports) cannot change under live elements, so `planComponentSwap` reports it and
   the page reloads. Keep `viewOf`, `stamp` and `planComponentSwap` in step when adding per-definition state.
-- **`@johnhenry/safe-fragment` is a pinned git devDependency that installs EMPTY.** It is unpublished, its repository
-  commits no `dist/` and has no `prepare` script (safe-fragment#10), so `npm ci` gives `node_modules/@johnhenry/safe-fragment`
-  with a README and a package.json only (it does bring `dompurify`). `scripts/vendor-safe-fragment.js` (run by
-  `playwright.config.js`'s `globalSetup`, or `npm run vendor:safe-fragment`) fetches the pinned commit from GitHub, bundles
-  `src/index.ts` with Vite and writes the gitignored `examples/vendor/safe-fragment/safe-fragment.js` that
-  `test/browser/sanitize.spec.js` and `examples/sanitize.html` import (the example reports itself *unsupported* without it).
-  The pin lives in `package.json` and `package-lock.json` as `git+https://…#<sha>`: `npm install` rewrites the lockfile's
-  `resolved` to `git+ssh://`, which CI cannot clone, so after any `npm install` change it back to `git+https` (and keep the
-  `package.json` spec the same string). To move the pin, edit both, commit, `npm run vendor:safe-fragment -- --force`. When
-  safe-fragment is published, replace all of this with a semver range and delete the script.
+- **`@johnhenry/safe-fragment` is a pinned git devDependency, built by its own `prepare` script.** Pin: `99ac557` (safe-fragment
+  #10, `1817d79`: a git install runs `prepare`, which builds `dist/` with tsup after installing safe-fragment's devDependencies).
+  Browser tests and `examples/sanitize.html` import `node_modules/@johnhenry/safe-fragment/dist/index.js` directly; there is no
+  vendoring script. `dist/index.js` is unbundled and reaches its fallback engine with `import("dompurify")`, a bare specifier, so
+  every page that loads it carries `<script type="importmap">` mapping `dompurify` to `/node_modules/dompurify/dist/purify.es.mjs`
+  (WebKit, and Firefox before it ships a Sanitizer, use it; Chromium does not need it, so a missing map only shows in WebKit/Firefox).
+  The pin lives in `package.json` and `package-lock.json` as `git+https://…#<sha>`: `npm install` rewrites the lockfile's `resolved`
+  to `git+ssh://`, which CI cannot clone, so after any `npm install` change it back to `git+https` (and keep the `package.json`
+  spec the same string; leave the `integrity` npm wrote). To move the pin, edit both, `npm install`,
+  fix `resolved`, commit. An older safe-fragment has no `component-template-v1`: `registerTemplateProfile()` then says so.
+- **Native-engine reports are incomplete by design** (safe-fragment ADR 0007, `f1e2647`): the Sanitizer API does not say what it
+  strips on its own (`<script>`, `<iframe>`, `on*`, `javascript:`), so Chromium's `sanitize` events list only what the profile
+  removed; DOMPurify's (WebKit) list everything. A test that expects a particular removal note must branch on `details.engine`
+  (see `test/browser/sanitize.spec.js`); asserting on *what is gone from the DOM* is engine-independent.
+- **Template ids are kept, not prefixed, because every template is stamped into a shadow root.** The adapter's `idPolicy` defaults
+  to `keep-in-shadow` (safe-fragment ADR 0005), and only when the loader passes a component (`context.def`). The reasoning breaks
+  the day anything stamps a template into light DOM: such a path must force `idPolicy: 'prefix'` (or the adapter must stop
+  defaulting). `<style>` is not part of a template (safe-fragment ADR 0006): a module's CSS is `<html-export><style>`.
 - **`sanitize` runs in the loader, never in `viewOf()`.** Templates must already be sanitized when a component is registered,
   because stamping is synchronous. Anything new that creates definitions from a record (a new loader path, a reader) must go
   through `loadHTML()`'s `sanitizeRecord()`, and a new thing a sanitized module can import must inherit the importer's

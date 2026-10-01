@@ -1,6 +1,6 @@
 // <safe-fragment> inside a (trusted) component's template: the component hands untrusted text to it as an attribute.
 import { HTMLModules } from '../../../../src/browser.js';
-import * as safeFragment from '../../../../examples/vendor/safe-fragment/safe-fragment.js';
+import * as safeFragment from '../../../../node_modules/@johnhenry/safe-fragment/dist/index.js';
 
 window.__pwned = [];
 try {

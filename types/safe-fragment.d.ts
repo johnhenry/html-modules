@@ -8,7 +8,7 @@
  *
  *   HTMLModules.sanitize = safeFragmentSanitizer({
  *     safeFragment,
- *     profile: { namespaces: ['ui'] },   // ui-v1 + <slot>, part, slot, and ui--* custom elements; or a profile name
+ *     profile: { namespaces: ['ui'] },   // component-template-v1 (ui-v1 + <slot>, part, slot) + ui--* custom elements; or a profile name
  *   });
  *   await HTMLModules.import('https://cdn.example/ui.html', { as: 'ui' });  // its templates come out sanitized
  *
@@ -17,15 +17,21 @@
  * profiles keep and drop is safe-fragment's and is listed in the README's `## Security model`.
  */
 /**
- * Register (once) a safe-fragment profile fit for component templates, derived from a built-in one, and return its name.
- * It keeps everything `base` keeps and adds `<slot name>`, `part` and `slot` on every element, and custom elements
- * under each namespace (`ui--*`). It cannot add `<style>` (safe-fragment refuses it in every profile, and drops a
- * `<style>` it finds in a template with its content: a module's stylesheets belong in `<html-export><style>`, which is
- * never sanitized) or forms and SVG (the built-ins have none).
+ * Register (once) a safe-fragment profile fit for component templates and return its name. The default base is
+ * safe-fragment's built-in `component-template-v1` (`ui-v1` plus `<slot name>` and `part`, `slot`, `exportparts` on every
+ * element: safe-fragment 99ac557, ADR 0005), derived with `deriveProfile()` to add custom elements under each namespace
+ * (`ui--*`) and `data-*` names, which a built-in cannot carry. With nothing to add, the built-in itself is returned.
+ * Any other `base` (`"ui-v1"`, `"article-v1"`) gets the composition attributes added here too.
+ *
+ * What a template loses under it (everything `ui-v1` removes): `<style>` (safe-fragment refuses it in every profile
+ * and drops it with its content, ADR 0006: a module's stylesheets belong in `<html-export><style>`, which is never
+ * sanitized), `<form>` and form controls, SVG and MathML, `style=""`, `srcset`, `data-*` other than `data-action` (plus
+ * the names you list), `http:` links, and every attribute not on the profile's list. Custom elements outside a namespace
+ * you list are unwrapped to their content.
  * @param {{ getProfile(name: string): any, deriveProfile(base: any, overrides: any): any, registerProfile(profile: any): any }} safeFragment
  * @param {object} [options]
- * @param {string} [options.name]          the new profile's name (default `html-modules-<base>`, e.g. `html-modules-ui-v1`; it ends in the base's `-v<N>`)
- * @param {string} [options.base]          the profile to start from (default `"ui-v1"`; `"article-v1"` for read-mostly content)
+ * @param {string} [options.name]          the new profile's name (default `html-modules-<base>`, e.g. `html-modules-component-template-v1`; it ends in the base's `-v<N>`)
+ * @param {string} [options.base]          the profile to start from (default `"component-template-v1"`; `"ui-v1"` or `"article-v1"` for read-mostly content)
  * @param {string[]} [options.namespaces]  namespaces of the custom elements the templates use: `['ui']` keeps `<ui--card>`, `<ui--stat>`, …
  * @param {string} [options.delimiter]     the namespace delimiter (default `"--"`)
  * @param {string[]} [options.attributes]  extra attributes the namespaced custom elements may carry (their props: `label`, `tone`, …)
@@ -53,10 +59,14 @@ export declare function registerTemplateProfile(safeFragment: {
  *        the `@johnhenry/safe-fragment` module; default: `import('@johnhenry/safe-fragment')` through the page's import map or your bundler
  * @param {(report: any, context: { def: any, url: string }) => void} [options.onReport]  called with every sanitization report
  * @param {boolean} [options.quiet]  do not announce removals as `sanitize` events (default: announce them)
+ * @param {'keep-in-shadow' | 'prefix'} [options.idPolicy]  what happens to the `id`s of a template (and the `for`, `aria-*` and `form-control` references to them). Default `"keep-in-shadow"`: html-modules stamps every
+ *        template into a shadow root (`attachShadow()`; there is no light-DOM mode), where named access on `window`/`document` (the DOM-clobbering vector the `user-content-` prefix exists for) cannot reach, so the author's ids
+ *        stay and a component's `#id` selectors and `form-control="#id"` keep working. `"prefix"` has safe-fragment rewrite every id to `user-content-<id>`. It is `"prefix"` regardless when the sanitizer is called
+ *        without a component (no `context.def`), because a fragment of unknown destination must not keep ids.
  * @param {object} [options.sanitizeOptions]  more options for `sanitizeToFragment()` (`maxInputLength`, `baseUrl`, `loadDOMPurify`)
  * @returns {import('./types.js').Sanitizer}
  */
-export declare function safeFragmentSanitizer({ profile, safeFragment, onReport, quiet, sanitizeOptions }?: {
+export declare function safeFragmentSanitizer({ profile, safeFragment, onReport, quiet, idPolicy, sanitizeOptions }?: {
     profile: string | {
         name?: string;
         base?: string;
@@ -76,5 +86,6 @@ export declare function safeFragmentSanitizer({ profile, safeFragment, onReport,
         url: string;
     }) => void;
     quiet?: boolean;
+    idPolicy?: 'keep-in-shadow' | 'prefix';
     sanitizeOptions?: object;
 }): import('./types.js').Sanitizer;

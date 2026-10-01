@@ -75,7 +75,6 @@
     "example:07": "node examples/07-hot-reload-swaps-components-under-live-elements.mjs",
     "examples:compile": "node scripts/compile-examples.js",
     "types:check": "tsc -p tsconfig.usage.json",
-    "vendor:safe-fragment": "node scripts/vendor-safe-fragment.js",
     "test:browser": "playwright test",
     "bench": "node scripts/bench.js"
   },
@@ -102,7 +101,7 @@
     }
   },
   "devDependencies": {
-    "@johnhenry/safe-fragment": "git+https://github.com/johnhenry/safe-fragment.git#ee01b49b28278e1053358200a77e5a4c6de511ad",
+    "@johnhenry/safe-fragment": "git+https://github.com/johnhenry/safe-fragment.git#99ac557c161ed0e8906b7fe3747499dff9fd5f1e",
     "@playwright/test": "^1.63.0",
     "@types/node": "^26.6.3",
     "linkedom": "^0.18.13",

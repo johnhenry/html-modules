@@ -1,5 +1,5 @@
 // The `sanitize` option end to end, in real engines, with the real @johnhenry/safe-fragment (the pinned commit,
-// bundled by scripts/vendor-safe-fragment.js): a module served from a second origin whose templates carry every
+// from node_modules, built by its `prepare` script, with a dompurify import map for the engines that fall back to it): a module served from a second origin whose templates carry every
 // execution vector of html-modules#3, loaded with and without a sanitizer; benign templates; Trusted Types.
 // The vectors record themselves in window.__pwned (see fixtures/sanitize/untrusted.html), so a control run proves
 // each one really fires when nothing sanitizes, and the sanitized runs prove it does not.
@@ -37,10 +37,14 @@ for (const mode of ['import', 'default', 'element']) {
     expect(result.html).toContain('part="badge"');
     expect(result.badgeUpgraded).toBe('<b part="badge-text"><slot></slot></b>');
     expect(result.sheets, 'the module\'s <html-export><style> is still adopted').toBe(1);
-    // The removals are reported on the event channel (and on the document).
+    // The removals are reported on the event channel (and on the document). The DOMPurify engine lists everything it
+    // removed; the native Sanitizer reports nothing about what it strips unconditionally (<script>, <iframe>, on*
+    // handlers, javascript: URLs), so there the report holds what the profile removed: safe-fragment ADR 0007.
+    const engine = events[0]?.details.engine;
     const removed = notes(events);
-    for (const expected of [{ tag: 'iframe' }, { tag: 'script' }, { attribute: 'onerror' }, { attribute: 'onclick' }, { tag: 'a', attribute: 'href' }]) {
-      expect(removed, `${JSON.stringify(expected)} is reported`).toContainEqual(expect.objectContaining(expected));
+    const expectedNotes = engine === 'native' ? [{ tag: 'style' }] : [{ tag: 'iframe' }, { tag: 'script' }, { attribute: 'onerror' }, { attribute: 'onclick' }, { tag: 'a', attribute: 'href' }];
+    for (const expected of expectedNotes) {
+      expect(removed, `${JSON.stringify(expected)} is reported (${engine})`).toContainEqual(expect.objectContaining(expected));
     }
     info.annotations.push({ type: 'sanitizer-engine', description: events[0]?.details.engine ?? 'unknown' });
   });
@@ -81,7 +85,7 @@ test('a profile that keeps no custom elements (ui-v1 as shipped) drops <ui--badg
 test('ids are prefixed user-content- by safe-fragment, and so are the references to them', async ({ page }) => {
   await run(page, 'mode=raw&module=benign');
   const out = await page.evaluate(async () => {
-    const sf = await import('/examples/vendor/safe-fragment/safe-fragment.js');
+    const sf = await import('/node_modules/@johnhenry/safe-fragment/dist/index.js');
     const { fragment } = await sf.sanitizeToFragment('<label for="a">l</label><button id="a" aria-controls="b">x</button><div id="b">y</div>', { profile: 'ui-v1', document });
     const div = document.createElement('div');
     div.append(fragment);
@@ -90,6 +94,31 @@ test('ids are prefixed user-content- by safe-fragment, and so are the references
   expect(out).toContain('id="user-content-a"');
   expect(out).toContain('for="user-content-a"');
   expect(out).toContain('aria-controls="user-content-b"');
+});
+
+test('ids of a sanitized template are kept inside its shadow root (idPolicy keep-in-shadow), and clobber nothing outside it', async ({ page }) => {
+  await run(page, 'mode=raw&module=benign');
+  const out = await page.evaluate(async () => {
+    const { HTMLModules } = await import('/src/browser.js');
+    const { safeFragmentSanitizer } = await import('/src/safe-fragment.js');
+    const safeFragment = await import('/node_modules/@johnhenry/safe-fragment/dist/index.js');
+    const cookieBefore = document.cookie;
+    const record = (policy) => ({ as: policy, sanitize: safeFragmentSanitizer({ safeFragment, profile: { namespaces: [] }, ...(policy === 'prefixed' && { idPolicy: 'prefix' }) }) });
+    const result = {};
+    for (const policy of ['kept', 'prefixed']) {
+      await HTMLModules.import('/test/browser/fixtures/sanitize/ids.html', record(policy));
+      const el = document.createElement(`${policy}--box`);
+      document.body.append(el);
+      const ids = [...el.shadowRoot.querySelectorAll('[id]')].map((n) => n.id);
+      result[policy] = { ids, labelFor: el.shadowRoot.querySelector('label').htmlFor, found: !!el.shadowRoot.getElementById('go'), controls: el.shadowRoot.querySelector('button').getAttribute('aria-controls') };
+    }
+    result.clobbered = { cookie: document.cookie !== cookieBefore || typeof document.cookie !== 'string', body: document.body?.localName !== 'body', windowCookie: 'cookie' in window && window.cookie instanceof Element };
+    return result;
+  });
+  expect(out.kept).toEqual({ ids: ['cookie', 'body', 'go'], labelFor: 'cookie', found: true, controls: 'cookie' });
+  expect(out.prefixed.ids).toEqual(['user-content-cookie', 'user-content-body', 'user-content-go']);
+  expect(out.prefixed.labelFor).toBe('user-content-cookie');
+  expect(out.clobbered).toEqual({ cookie: false, body: false, windowCookie: false });
 });
 
 test('Trusted Types: with the CSP naming html-modules and dompurify, sanitized templates render and nothing runs', async ({ page }, info) => {
@@ -125,7 +154,7 @@ test('a sanitized module cannot import JavaScript: the failure is an error, and 
   const message = await page.evaluate(async () => {
     const { HTMLModules } = await import('/src/browser.js');
     const { safeFragmentSanitizer } = await import('/src/safe-fragment.js');
-    const safeFragment = await import('/examples/vendor/safe-fragment/safe-fragment.js');
+    const safeFragment = await import('/node_modules/@johnhenry/safe-fragment/dist/index.js');
     const sanitize = safeFragmentSanitizer({ safeFragment, profile: 'ui-v1' });
     try {
       await HTMLModules.import('/test/browser/fixtures/sanitize/with-js.html', { as: 'withjs', sanitize });

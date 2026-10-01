@@ -3,7 +3,7 @@
 // remote=<origin of the module host, a second origin>, profile=<profile name>, onlyReport=1
 import { HTMLModules } from '../../../../src/browser.js';
 import { safeFragmentSanitizer } from '../../../../src/safe-fragment.js';
-import * as safeFragment from '../../../../examples/vendor/safe-fragment/safe-fragment.js';
+import * as safeFragment from '../../../../node_modules/@johnhenry/safe-fragment/dist/index.js';
 
 const params = new URLSearchParams(location.search);
 const mode = params.get('mode') ?? 'import';

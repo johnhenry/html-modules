@@ -8,8 +8,6 @@ const OTHER_ORIGIN_PORT = 4174; // the same files on a second origin: a "less-tr
 
 export default defineConfig({
   testDir: 'test/browser',
-  // Bundles the pinned @johnhenry/safe-fragment commit for the pages that use it (scripts/vendor-safe-fragment.js).
-  globalSetup: './test/browser/global-setup.js',
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,

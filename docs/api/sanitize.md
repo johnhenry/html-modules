@@ -175,35 +175,51 @@ safeFragmentSanitizer({
   safeFragment?: typeof import('@johnhenry/safe-fragment'),   // default: import('@johnhenry/safe-fragment'), lazily
   onReport?: (report: SanitizationReport, context: { def, url }) => void,
   quiet?: boolean,                                             // = false: do not announce removals as sanitize events
+  idPolicy?: 'keep-in-shadow' | 'prefix',                      // = 'keep-in-shadow': see below
   sanitizeOptions?: { maxInputLength?, baseUrl?, loadDOMPurify? },
 }): Sanitizer
 ```
 
-For each template it calls `sanitizeToFragment(html, { profile, document: window.document })` and returns the
+For each template it calls `sanitizeToFragment(html, { profile, idPolicy, document: window.document })` and returns the
 `DocumentFragment` (so nothing is parsed again). If the profile removed or rewrote anything it calls `context.report()` with
 `{ profile, engine, removed: [{ what: 'element' | 'attribute' | 'url', tag, attribute?, reason, snippet? }] }`; your
 `onReport` gets the library's whole `SanitizationReport`. DOMPurify's own bookkeeping entries (`body`, `remove`, listed as
 removed from every input: safe-fragment#9) are not treated as removals. Errors from safe-fragment (`SOURCE_TOO_LARGE`,
 `SANITIZER_UNAVAILABLE`, …) reject the load: it fails closed.
 
-`profile` is the name of a profile registered with safe-fragment (`"ui-v1"`), or an options object for
-`registerTemplateProfile()`, which is run once, on the first template.
+`profile` is the name of a profile registered with safe-fragment (`"component-template-v1"`, `"ui-v1"`), or an options object
+for `registerTemplateProfile()`, which is run once, on the first template.
+
+**`idPolicy`.** The default, `"keep-in-shadow"`, leaves a template's `id`s (and the `for`, `aria-*` and `form-control`
+references to them) as the author wrote them; `"prefix"` has safe-fragment rewrite each to `user-content-<id>`. Keeping is
+safe here because html-modules stamps **every** template into a shadow root: `HTMLComponent` calls `attachShadow()` (`shadow`
+is `"open"` or `"closed"`; there is no light-DOM mode), `renderDeclarative()` emits a `<template shadowrootmode>`, and named
+access on `window` and `document`, the DOM-clobbering vector the prefix closes, does not cross a shadow boundary
+([safe-fragment ADR 0005](https://github.com/johnhenry/safe-fragment/blob/99ac557c161ed0e8906b7fe3747499dff9fd5f1e/docs/adr/0005-component-templates-and-id-policy.md)).
+A component's own `#id` selectors and `form-control="#id"` therefore keep working. The adapter keeps ids **only** when
+html-modules calls it for a component (`context.def` is set): called by hand on a string, with no known destination, it
+always uses `"prefix"`. A kept id can still collide with an id the component itself looks up (`shadowRoot.getElementById`),
+so set `idPolicy: 'prefix'` for modules whose templates you want to keep fully apart from their host's lookups. If you take a
+sanitized `def.template` and clone it into light DOM yourself, ids you kept can clobber: the guarantee is html-modules'
+stamping, not the fragment.
 
 ### `registerTemplateProfile(safeFragment, options)`
 
 Registers (once, by name) a profile derived for component templates, and returns its name.
-`deriveProfile(base, …)` keeps everything `base` keeps and adds what a template needs and the built-ins do not allow:
+`deriveProfile(base, …)` keeps everything `base` keeps and adds what a built-in cannot carry, because it is immutable and the
+prefix is yours to choose (custom elements, `data-*` names):
 
 | Option | Default | |
 | --- | --- | --- |
-| `base` | `"ui-v1"` | The profile to derive from (`"article-v1"` for read-mostly content). Must parse markup (not `plain-text-v1`). |
-| `name` | `html-modules-<base>` | The new profile's name (`html-modules-ui-v1`). Registering a name that exists returns it unchanged. |
+| `base` | `"component-template-v1"` | The profile to derive from: safe-fragment's built-in for component templates (from `99ac557`). `"ui-v1"` or `"article-v1"` also work (the adapter adds `<slot name>`, `part` and `slot` for a base that lacks them). Must parse markup (not `plain-text-v1`). |
+| `name` | `html-modules-<base>` | The new profile's name (`html-modules-component-template-v1`). Registering a name that exists returns it unchanged. With the default base and nothing to add (no `namespaces`, no `dataAttributes`, no `name`) the built-in `"component-template-v1"` itself is returned and nothing is registered. |
 | `namespaces` | `[]` | `['ui']` keeps custom elements `ui--*` (prefix pattern): the module's own components. Others are unwrapped, their text kept. |
 | `delimiter` | `"--"` | The namespace delimiter of those tags. |
 | `attributes` | `[]` | More attributes the namespaced elements may carry (their `props`: `tone`, `label`). They already may carry `id`, `class`, `title`, `lang`, `dir`, `role`, `tabindex`, `part`, `slot`, `exportparts` and the `aria-*` of `ui-v1`. |
 | `dataAttributes` | `[]` | More `data-*` names (full names: `data-id`; there are no wildcards). |
 
-and on every element: `part` and `slot`; plus `<slot name>`.
+`component-template-v1` itself already allows `<slot name>` and `part`, `slot` and `exportparts` on every element it allows
+(that is why the adapter no longer builds them by hand); the table above is all the adapter adds on top.
 
 ### `<safe-fragment>` inside a template
 
@@ -231,15 +247,17 @@ preloaded; it throws `SANITIZER_NOT_READY` otherwise, which fails the load close
 ## What a template loses
 
 What a **component template** loses under each safe-fragment profile (checked in Chromium, where safe-fragment uses the native
-Sanitizer API, and in WebKit, where it uses DOMPurify, with the pinned commit; Firefox runs the same tests in CI). A "template"
+Sanitizer API, and in WebKit, where it uses DOMPurify, with the pinned commit `99ac557`; Firefox runs the same tests in CI). A "template"
 below is the `<template>` of an `<html-export>`.
 
 Always removed, under every profile: `<script>`, `<style>`, `<iframe>`, `<object>`, `<embed>`, `<template>`, `<noscript>`,
 `<textarea>`, `<select>`, `<svg>` and `<math>`, each **with its content**; every `on*` attribute, `srcdoc`, `formaction`
 and the `style` attribute; `javascript:`, `vbscript:`, `data:`, `file:` and `blob:` URLs. And always **rewritten**: every
 `id`, and the attributes that refer to one (`for`, `aria-controls`, `aria-labelledby`, `aria-describedby`, `aria-owns`), gets a
-`user-content-` prefix (DOM-clobbering protection): references inside the template still match, but a component's own script,
-`form-control="#id"` or a selector in the module's stylesheet that names the id does not.
+`user-content-` prefix (DOM-clobbering protection) **unless the adapter's `idPolicy` is `"keep-in-shadow"`, its default**, for
+the reason given under [`safeFragmentSanitizer`](#safefragmentsanitizeroptions). With `idPolicy: 'prefix'`, references inside
+the template still match, but a component's own script, `form-control="#id"` or a selector in the module's stylesheet that
+names the id does not.
 
 | Profile | Template survives as | Also lost |
 | --- | --- | --- |
@@ -247,26 +265,32 @@ and the `style` attribute; `javascript:`, `vbscript:`, `data:`, `file:` and `blo
 | `article-v1` | headings, `p`, `div`, `span`, lists, `dl`, `table`s, `a`, `img`, `figure`, inline formatting, `blockquote`, `time`; only `id`, `title`, `lang`, `dir` (and each element's own, such as `href`) | `<slot>` (unwrapped), `part`, `slot`, `class`, `data-*`, `aria-*`, `role`, `<button>`, `<label>`, all custom elements (unwrapped, their text kept), `<details>`, `<video>`, forms, `http:` and `srcset` |
 | `ui-v1` | `div`, `span`, `section`, `header`, `footer`, `nav`, `main`, `article`, `aside`, `p`, `h1`-`h6`, `ul`/`ol`/`li`, `pre`, `code`, `a`, `img`, `label`, `button` (forced to `type="button"`); `class`, `id`, `role`, `tabindex`, `aria-*` (on the interactive elements), `data-action` | `<slot>` (unwrapped), `part`, `slot`, custom elements (unwrapped), `table`, forms, `<details>`, media, other `data-*`, `http:` and `srcset` |
 | `email-v1` (scaffold) | table layout, inline formatting, links, images | `class`, `<button>`, `<label>`, `<slot>`, `part`, custom elements, relative `img src`, `http:` |
-| derived by `registerTemplateProfile()` | `ui-v1`, **plus** `<slot name>`, `part` and `slot` on every element, and custom elements `<ns>--*` with their allowlisted attributes | `<style>`, `table`, forms (`<input>`, `<form>`, so a `form-associated` component loses its control), `<details>`, media, `style=""`, `data-*` other than the ones you add, `http:` and `srcset` |
+| `component-template-v1` (from safe-fragment `99ac557`) | `ui-v1`, **plus** `<slot name>`, and `part`, `slot` and `exportparts` on every element | `<style>`, custom elements (unwrapped: a built-in cannot name your prefix), `table`, forms (`<input>`, `<form>`, so a `form-associated` component loses its control), `<details>`, media, `style=""`, other `data-*`, `http:` and `srcset` |
+| derived by `registerTemplateProfile()` (the default) | `component-template-v1`, **plus** custom elements `<ns>--*` with their allowlisted attributes and the `data-*` names you list | the same, except the custom elements and `data-*` you added |
 
 URLs: `https:`, `mailto:` and relative URLs only (protocol-relative `//host` takes the page's scheme, so it is dropped on an
 `http:` page). A relative `img src` loads on render (safe-fragment#6).
 
 **What safe-fragment cannot carry, and what we did about it:**
 
-- **`<style>` in a template: not supportable today.** It is refused in every profile (including derived ones) and a `<style>` in
-  the input is removed with its content. html-modules is unaffected only because a module's styles live outside the template
-  (`<html-export><style>`), which the sanitizer does not see (see above). Filed as
-  [safe-fragment#11](https://github.com/johnhenry/safe-fragment/issues/11).
-- **`<slot>`, `part`, `slot`**: possible only through a derived profile, which `registerTemplateProfile()` writes for you
-  (also in #11).
-- **Under Trusted Types** safe-fragment's DOMPurify fallback needs `dompurify` in the CSP's `trusted-types` list, and on
-  the native path every sanitization is a blocked-sink violation report in Chromium
-  ([safe-fragment#12](https://github.com/johnhenry/safe-fragment/issues/12)); the sanitizer still works, and with a CSP that
-  does not allow the policy it fails closed (the module does not load).
-- **A git install of safe-fragment is empty** (no `dist/`, no `prepare`;
-  [safe-fragment#10](https://github.com/johnhenry/safe-fragment/issues/10)); this repository bundles the pinned commit with
-  `npm run vendor:safe-fragment` for its tests.
+- **`<style>` in a template: a non-goal, not a gap.** It is refused in every profile (including derived ones) and a `<style>`
+  in the input is removed with its content ([safe-fragment ADR 0006](https://github.com/johnhenry/safe-fragment/blob/99ac557c161ed0e8906b7fe3747499dff9fd5f1e/docs/adr/0006-style-element-is-a-non-goal.md)).
+  html-modules is unaffected because a module's styles live outside the template (`<html-export><style>`), which the
+  sanitizer does not see (see above); that is where a sanitized module's CSS belongs.
+- **`<slot>`, `part`, `slot`, `exportparts`**: now built in as `component-template-v1`
+  ([safe-fragment#11](https://github.com/johnhenry/safe-fragment/issues/11), `77e5151`), which the adapter derives from.
+- **Under Trusted Types** safe-fragment's DOMPurify fallback needs `dompurify` in the CSP's `trusted-types` list; with a CSP
+  that does not allow the policy it fails closed (the module does not load). The native path no longer touches a gated sink
+  at all: zero violations ([safe-fragment#12](https://github.com/johnhenry/safe-fragment/issues/12), `f1e2647`). The price,
+  in the report: the native Sanitizer reports nothing about what it strips on its own (`<script>`, `<iframe>`, `on*`
+  handlers, `javascript:` URLs), so under it a `sanitize` event lists only what the profile removed (such as `<style>`),
+  while DOMPurify's lists everything ([ADR 0007](https://github.com/johnhenry/safe-fragment/blob/99ac557c161ed0e8906b7fe3747499dff9fd5f1e/docs/adr/0007-no-gated-sink-in-the-native-report.md)).
+  The security outcome is the same either way.
+- **A git install of safe-fragment now builds `dist/`** through a `prepare` script
+  ([safe-fragment#10](https://github.com/johnhenry/safe-fragment/issues/10), `1817d79`), so
+  `node_modules/@johnhenry/safe-fragment/dist/index.js` works directly. Its fallback engine does `import("dompurify")`, a bare
+  specifier: a page needs an import map for it (`"dompurify": "/node_modules/dompurify/dist/purify.es.mjs"` in this
+  repository's tests) wherever the native Sanitizer is missing (WebKit, Firefox before it ships one).
 
 ## Errors
 
@@ -280,4 +304,5 @@ URLs: `https:`, `mailto:` and relative URLs only (protocol-relative `//host` tak
 | A sanitized module imports JavaScript | `Error: Refusing to import the JavaScript module <url> from a sanitized HTML module: import() runs it with the page's authority, and a sanitizer only vets templates. Remove that <html-import>, or import the module from the page` |
 | `safeFragmentSanitizer()` without a usable `profile` | `TypeError: safeFragmentSanitizer: pass { profile }: the name of a registered safe-fragment profile (e.g. "ui-v1"), or options for registerTemplateProfile() (e.g. { namespaces: ["ui"] })` |
 | `safeFragment` is not the library | `TypeError: safeFragmentSanitizer: the safe-fragment module has no sanitizeToFragment() (pass the namespace of @johnhenry/safe-fragment)` (rejects the load) |
-| `registerTemplateProfile()` | `TypeError: registerTemplateProfile: pass the @johnhenry/safe-fragment module (it needs getProfile, deriveProfile and registerProfile)`; `Error: registerTemplateProfile: safe-fragment has no profile named "<base>"`; `Error: registerTemplateProfile: "<base>" does not parse markup (its mode is "text"), so it cannot sanitize a template` |
+| `safeFragmentSanitizer()` with another `idPolicy` | `TypeError: safeFragmentSanitizer: idPolicy must be "keep-in-shadow" or "prefix", got "<value>"` |
+| `registerTemplateProfile()` | `TypeError: registerTemplateProfile: pass the @johnhenry/safe-fragment module (it needs getProfile, deriveProfile and registerProfile)`; `Error: registerTemplateProfile: safe-fragment has no profile named "<base>"` (for `component-template-v1`, with ` (it is built in from safe-fragment 99ac557; with an older one, pass base: "ui-v1")`); `Error: registerTemplateProfile: "<base>" does not parse markup (its mode is "text"), so it cannot sanitize a template` |

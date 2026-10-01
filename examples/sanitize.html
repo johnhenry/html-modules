@@ -12,6 +12,8 @@
     .stage { min-height: 2rem; padding: 0.5rem; border: 1px dashed var(--border); border-radius: 10px; margin: 0.4rem 0; }
     .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 0.8rem; }
   </style>
+  <!-- safe-fragment's fallback engine (WebKit, and Firefox before it ships a Sanitizer) does import("dompurify"). -->
+  <script type="importmap">{ "imports": { "dompurify": "../node_modules/dompurify/dist/purify.es.mjs" } }</script>
   <script type="module" src="../src/browser.js"></script>
 </head>
 <body>
@@ -53,7 +55,7 @@
       </div>
       <div class="step">
         <h3>With @johnhenry/safe-fragment</h3>
-        <p class="small"><code>safeFragmentSanitizer({ profile })</code> from <code>@johnhenry/html-modules/safe-fragment</code>: <code>sanitizeToFragment()</code> under a versioned profile (here <code>ui-v1</code> plus <code>&lt;slot&gt;</code>, <code>part</code> and <code>ui--*</code> elements, derived by <code>registerTemplateProfile()</code>). safe-fragment is a peer you pass in, not a dependency; this page loads a bundle of the pinned commit (<code>npm run vendor:safe-fragment</code>).</p>
+        <p class="small"><code>safeFragmentSanitizer({ profile })</code> from <code>@johnhenry/html-modules/safe-fragment</code>: <code>sanitizeToFragment()</code> under a versioned profile (here <code>ui-v1</code> plus <code>&lt;slot&gt;</code>, <code>part</code> and <code>ui--*</code> elements, derived by <code>registerTemplateProfile()</code>). safe-fragment is a peer you pass in, not a dependency; this page loads the devDependency from <code>node_modules</code> (<code>npm ci</code>; DOMPurify, safe-fragment's fallback engine, comes through the import map in this page's head).</p>
         <div class="stage" id="stage-sf"></div>
         <ul id="checks-sf"></ul>
       </div>
@@ -156,12 +158,12 @@
 
     // --- safe-fragment -----------------------------------------------------------------------------------
     {
-      // A bundle of the pinned commit, made by `npm run vendor:safe-fragment` (gitignored). Computed, so a page
-      // served without it reports "unsupported" instead of failing.
-      const url = new URL('./vendor/safe-fragment/safe-fragment.js', location.href).href;
+      // The devDependency, as installed (its `prepare` script builds dist/ for a git install). Computed, so a page
+      // served without node_modules reports "unsupported" instead of failing.
+      const url = new URL('../node_modules/@johnhenry/safe-fragment/dist/index.js', location.href).href;
       const safeFragment = await import(url).catch(() => null);
       if (!safeFragment) {
-        show('checks-sf', [['safe-fragment is not bundled here (run <code>npm run vendor:safe-fragment</code>)', 'unsupported']]);
+        show('checks-sf', [['safe-fragment is not installed here (run <code>npm ci</code>)', 'unsupported']]);
       } else {
         const events = [];
         const lab = createHTMLModules({ onEvent: (e) => events.push(e) });
@@ -179,11 +181,14 @@
         const root = card.shadowRoot;
         const removed = events.filter((e) => e.type === 'sanitize').flatMap((e) => e.details.removed);
         const badge = root.querySelector('ui--badge');
+        const native = !events.some((e) => e.type === 'sanitize' && e.details.engine === 'dompurify'); // the native Sanitizer reports only what a profile removes
         show('checks-sf', [
           ['no payload ran (<code>window.__pwned</code> is still empty)', window.__pwned.length === 0],
           ['<code>&lt;script&gt;</code>, <code>&lt;iframe&gt;</code>, <code>onerror</code>, <code>onclick</code> and the <code>javascript:</code> href are gone', !root.querySelector('script, iframe') && !root.querySelector('[onerror], [onclick]') && !root.querySelector('a.js')?.hasAttribute('href')],
           ['<code>&lt;slot&gt;</code>, <code>part</code> and the <code>&lt;ui--badge&gt;</code> custom element are kept, and the badge upgraded', !!root.querySelector('slot') && badge?.getAttribute('part') === 'badge' && !!badge.shadowRoot?.querySelector('b')],
-          ['the removals were reported: an iframe, <code>onerror</code>, <code>onclick</code> and an <code>href</code>', ['iframe'].every((t) => removed.some((n) => n.tag === t)) && ['onerror', 'onclick', 'href'].every((a) => removed.some((n) => n.attribute === a))],
+          native
+            ? ['the removals were reported (the native Sanitizer strips <code>&lt;script&gt;</code>, <code>&lt;iframe&gt;</code>, <code>on*</code> and <code>javascript:</code> by itself and does not report it; the DOMPurify engine does)', 'unsupported']
+            : ['the removals were reported: an iframe, <code>onerror</code>, <code>onclick</code> and an <code>href</code>', ['iframe'].every((t) => removed.some((n) => n.tag === t)) && ['onerror', 'onclick', 'href'].every((a) => removed.some((n) => n.attribute === a))],
         ]);
       }
     }

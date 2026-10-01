@@ -864,7 +864,6 @@ npm run check               # every source file parses; entry points import
 npm run examples            # the numbered Node examples, each self-verifying
 npm run examples:compile    # regenerate examples/compiled/
 npm run test:browser        # Playwright: Chromium, Firefox, WebKit
-npm run vendor:safe-fragment  # bundle the pinned @johnhenry/safe-fragment commit (the browser tests do it themselves)
 npm run types               # regenerate the .d.ts files; npm run types:check compiles a typed consumer
 npm run bench               # non-gating benchmark
 ```
@@ -1043,12 +1042,14 @@ document.addEventListener('html-modules:sanitize', (e) => console.warn('removed'
   still wraps what is parsed, and a fragment never reaches an HTML sink.
 - **Reports are events**: a sanitizer calls `report(details)`, and it arrives as `{ type: 'sanitize', url, name, details }` on
   `onEvent` and as `html-modules:sanitize` on the document. The safe-fragment adapter reports every element, attribute and URL its
-  profile removed.
+  profile removed (the native Sanitizer API does not report what it strips by itself: `<script>`, `<iframe>`, handlers, `javascript:`; DOMPurify's report does).
 - **What a template loses** depends on the profile. `registerTemplateProfile()` (what `profile: { namespaces: ['ui'] }` runs)
-  derives `ui-v1` plus `<slot>`, `part`, `slot` and `ui--*` custom elements. Under it, or any safe-fragment profile, a template
-  loses `<style>` (safe-fragment cannot carry it: the module's own stylesheets are outside the template and untouched),
-  forms and their inputs (so a `form-associated` component loses its control), SVG, `style=""`, `data-*` beyond what you list, `http:`
-  URLs, and gets every `id` (and `for`/`aria-*` reference) prefixed `user-content-`. Per-profile table:
+  derives safe-fragment's `component-template-v1` (`ui-v1` plus `<slot>`, `part`, `slot`, `exportparts`) and adds `ui--*` custom
+  elements. Under it, or any safe-fragment profile, a template loses `<style>` (a safe-fragment non-goal, ADR 0006: the module's
+  own stylesheets are outside the template and untouched), forms and their inputs (so a `form-associated` component loses its
+  control), SVG, `style=""`, `data-*` beyond what you list, `http:` URLs. Its `id`s (and the `for`/`aria-*` references) are kept
+  (`idPolicy: 'keep-in-shadow'`, the adapter's default, because html-modules stamps every template into a shadow root);
+  `idPolicy: 'prefix'` rewrites them to `user-content-<id>`. Per-profile table:
   [Sanitizing templates](docs/api/sanitize.md#what-a-template-loses).
 - **Trusted Types**: with `require-trusted-types-for 'script'`, safe-fragment's DOMPurify fallback needs `dompurify` in your
   `trusted-types` list next to `html-modules`; without it the module fails to load rather than loading unsanitized.
@@ -1073,9 +1074,9 @@ depends on neither of these packages, and neither depends on it.
   from somewhere less trusted. Two mechanisms, neither a dependency in either direction:
   - **The `sanitize` hook**, wired by [`safeFragmentSanitizer()`](docs/api/sanitize.md#the-safe-fragment-adapter) from
     `@johnhenry/html-modules/safe-fragment`: every component template of a less-trusted module goes through safe-fragment's
-    `sanitizeToFragment()` under a profile (derived from `ui-v1`, with `<slot>`, `part` and `ui--*` custom elements) and the
-    returned `DocumentFragment` is stamped. Safe-fragment is a peer you pass in (here it is a devDependency pinned to a
-    commit, bundled for the tests).
+    `sanitizeToFragment()` under a profile (derived from `component-template-v1`, with `ui--*` custom elements) and the
+    returned `DocumentFragment` is stamped. Safe-fragment is a peer you pass in (here it is a devDependency pinned to
+    a commit, `99ac557`, whose `prepare` script builds `dist/`; the browser tests load it from `node_modules`).
   - **`<safe-fragment>` inside a component template**, for text a *page* hands a component you trust:
     `<safe-fragment profile="article-v1" content="{{bio}}"></safe-fragment>` renders the host's `bio` attribute sanitized and
     re-renders when it changes (`content` is safe-fragment's lowest-precedence source and logs a console note; it is the one a

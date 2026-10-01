@@ -228,7 +228,8 @@ document, so `<noscript>` parses as it does in a `DOMParser` document in every e
 tree and logs a `style-src-elem` violation (and sends a report) for each one even though nothing is applied; a detached
 element is never checked. The parse is the same fragment parse a document gets after `<body>` (verified record-for-record
 against `DOMParser` in Chromium, Firefox and WebKit). Only a browser's native `DOMParser` gets this path: another DOM implementation
-(linkedom, jsdom) has no CSP and gets a whole document, as before. A `style="…"` attribute is different: it is reported as
+(linkedom, jsdom) has no CSP and gets a whole document, as before, and so does a module whose source mentions `<noscript>` (Firefox parses
+`<noscript>` content in any fragment as text, which would make the record differ from the scanner's). A `style="…"` attribute is different: it is reported as
 `style-src-attr` by every way of parsing markup, so a module that has one reports under a strict `style-src`. `script-src` is not involved: html-modules inserts no `<script>`.
 
 ## Lazy loading

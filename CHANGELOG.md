@@ -24,7 +24,7 @@ Fixes found by an audit of the first build. Nothing is published yet, so these a
   documented (`<style>`, forms, SVG, `style=""`, `srcset`, most `data-*`, `http:`, unlisted custom elements). The native
   Sanitizer's report no longer lists what it strips itself (ADR 0007), so the browser tests branch on the engine.
   Tests: unit tests for the profile derivation and `idPolicy`; a browser test that kept ids clobber nothing and prefixed ids
-  are prefixed. safe-fragment `99ac557`.
+  are prefixed. `bf3174e`; safe-fragment `99ac557`.
 - **Data binding in templates.** `{{attribute}}` in a component template's text and attribute values reads the host
   element's attributes (no expressions, no `eval`, no `innerHTML`: strict CSP and Trusted Types safe); text is set as text,
   URL attributes refuse `javascript:` / `vbscript:` / HTML `data:` URLs, `on*`, `style` and `srcdoc` are never bound; a

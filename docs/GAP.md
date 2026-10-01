@@ -232,10 +232,11 @@ in the loader, after the record is read and before definitions exist, because th
 a custom element definition cannot wait; it never sees module source (so `<html-export>` and `<html-import>` survive), a
 sanitized module sanitizes what it imports and **cannot import JavaScript**, and a module is cached per sanitizer.
 `@johnhenry/html-modules/safe-fragment` adapts `@johnhenry/safe-fragment` (an optional peer, not a dependency) and
-derives a profile with `<slot>`, `part` and `ui--*` custom elements. Deliberately not done: a `sanitize` attribute or
+derives a profile from safe-fragment's `component-template-v1` with `ui--*` custom elements; templates keep their ids
+(`idPolicy: "keep-in-shadow"`, because every template is stamped into a shadow root). Deliberately not done: a `sanitize` attribute or
 `<html-import-settings>` entry (a function is not a setting; the compiler and scanner would have to agree on it), sanitizing
-stylesheets (safe-fragment has no CSS support: [safe-fragment#11](https://github.com/johnhenry/safe-fragment/issues/11)) or compiled
-output, and bundling a sanitizer. See [Sanitizing templates](api/sanitize.md).
+stylesheets (`<style>` is a non-goal in safe-fragment, ADR 0006; a module's own `<html-export><style>` is outside
+what the hook sees) or compiled output, and bundling a sanitizer. See [Sanitizing templates](api/sanitize.md).
 
 ## Extension beyond the PRD: TypeScript declarations
 

@@ -17,6 +17,35 @@ import {
   defineHTMLComponent, defineHTMLStylesheet, lookupExport, manifest, namespaceComponents,
 } from './runtime.js';
 import { camelCase } from './names.js';
+import { checkFetchOptions, parseIntegrity } from './settings.js';
+
+const STRENGTH = { sha256: 0, sha384: 1, sha512: 2 };
+const SUBTLE_NAME = { sha256: 'SHA-256', sha384: 'SHA-384', sha512: 'SHA-512' };
+const toBase64 = (bytes) => {
+  let bin = '';
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin);
+};
+const normalizeBase64 = (b64) => b64.replace(/-/g, '+').replace(/_/g, '/').replace(/=+$/, '');
+
+/**
+ * Check fetched bytes against Subresource Integrity metadata with SubtleCrypto, as the platform does for
+ * `<script integrity>`: of the algorithms listed, the strongest one decides, and any of its digests may match.
+ * Fails closed: without `crypto.subtle` the load is refused rather than trusted.
+ * @returns {Promise<void>} rejects with an Error naming `url` when the digest does not match
+ */
+export async function verifyIntegrity(bytes, integrity, url, win = globalThis) {
+  const tokens = parseIntegrity(integrity, ` for ${url}`);
+  const subtle = win?.crypto?.subtle ?? globalThis.crypto?.subtle;
+  if (!subtle) throw new TypeError(`Cannot verify the integrity of ${url}: this environment has no crypto.subtle (SubtleCrypto needs a secure context: https or localhost)`);
+  const strongest = Math.max(...tokens.map((t) => STRENGTH[t.algorithm]));
+  const candidates = tokens.filter((t) => STRENGTH[t.algorithm] === strongest);
+  const algorithm = candidates[0].algorithm;
+  const digest = toBase64(new Uint8Array(await subtle.digest(SUBTLE_NAME[algorithm], bytes)));
+  if (!candidates.some((t) => normalizeBase64(t.hash) === normalizeBase64(digest))) {
+    throw new Error(`Integrity check failed for HTML module ${url}: its ${algorithm} digest is ${algorithm}-${digest}, which matches none of integrity="${integrity}"`);
+  }
+}
 
 const HTML_EXT = /\.html?(?:[?#]|$)/i;
 const URL_LIKE = /^(?:\.{0,2}\/)/;
@@ -30,13 +59,13 @@ const URL_LIKE = /^(?:\.{0,2}\/)/;
  * `lazy` loader from `options.lazy(src, type)` instead of a `module`.
  * @param {import('./record.js').ModuleRecord} record
  * @param {Map<string, object>} modules src (as written) → loaded namespace
- * @param {{ lazy?: (src: string, type?: string) => () => Promise<object> }} [options]
+ * @param {{ lazy?: (src: string, type?: string, integrity?: string) => () => Promise<object> }} [options]
  */
 export function linkHTMLModule(record, modules, { lazy } = {}) {
   const { url } = record;
   const imports = record.imports.map((i) => {
     const entry = { module: modules.get(i.src), from: i.src, ...(i.as && { as: i.as }), ...moduleImportOptions(record, i), bindings: i.bindings };
-    if (entry.module === undefined && entry.load === 'lazy' && lazy) entry.lazy = lazy(i.src, i.type);
+    if (entry.module === undefined && entry.load === 'lazy' && lazy) entry.lazy = lazy(i.src, i.type, i.integrity);
     return entry;
   });
   const named = new Map();
@@ -107,6 +136,8 @@ export function createNamespace(entries) {
  * @param {string} [options.baseURL]  referrer for top-level loads (default: the document's base URL)
  * @param {(specifier: string) => string|URL|null|undefined} [options.hostResolve]  bare specifiers
  * @param {typeof fetch} [options.fetch]
+ * @param {'omit'|'same-origin'|'include'} [options.credentials]  fetch `credentials` for HTML modules (default: the platform's)
+ * @param {'cors'|'same-origin'|'no-cors'} [options.mode]          fetch `mode` for HTML modules (default: the platform's)
  * @param {(html: string, url: string) => Document} [options.parseHTML]  default: the window's DOMParser
  * @param {(url: string) => Promise<object>} [options.importModule]      default: native import()
  * @param {any} [options.window]
@@ -116,11 +147,14 @@ export function createLoader({
   baseURL = globalThis.document?.baseURI ?? globalThis.location?.href,
   hostResolve,
   fetch: fetchImpl = (...a) => globalThis.fetch(...a),
+  credentials,
+  mode,
   parseHTML,
   importModule = (url) => import(url),
   window: win = globalThis,
   onEvent = () => {},
 } = {}) {
+  checkFetchOptions({ credentials, mode }, ' in createLoader()');
   /** @type {Map<string, Promise<object>>} */
   const cache = new Map();
   const parse = parseHTML ?? ((html) => {
@@ -161,58 +195,76 @@ export function createLoader({
     return null;
   }
 
-  async function loadDependency(importer, src, type, referrer = importer) {
+  async function loadDependency(importer, src, type, referrer = importer, integrity) {
     const url = resolve(src, referrer);
     const cycle = waitPath(url, importer);
     if (cycle) throw new Error(`Circular HTML module dependency: ${[importer, ...cycle].join(' -> ')}`);
     if (!waitsFor.has(importer)) waitsFor.set(importer, new Set());
     waitsFor.get(importer).add(url);
     try {
-      return await start(url, type);
+      return await start(url, type, { integrity });
     } finally {
       waitsFor.get(importer)?.delete(url);
       if (!waitsFor.get(importer)?.size) waitsFor.delete(importer);
     }
   }
 
-  async function loadHTML(url) {
+  async function loadHTML(url, { integrity, credentials: c = credentials, mode: m = mode } = {}) {
     onEvent({ type: 'fetch', url });
-    const res = await fetchImpl(url);
+    const init = { ...(c !== undefined && { credentials: c }), ...(m !== undefined && { mode: m }) };
+    const res = await (Object.keys(init).length ? fetchImpl(url, init) : fetchImpl(url));
     if (!res.ok) throw new Error(`Failed to fetch HTML module ${url}: ${res.status}`);
-    const record = readHTMLModule(parse(await res.text(), url), url);
+    let source;
+    if (integrity) {
+      if (typeof res.arrayBuffer !== 'function') throw new TypeError(`Cannot verify the integrity of ${url}: the response has no arrayBuffer() (the fetch option must return a Response)`);
+      const bytes = await res.arrayBuffer();
+      await verifyIntegrity(bytes, integrity, url, win);
+      source = new TextDecoder().decode(bytes);
+    } else source = await res.text();
+    const record = readHTMLModule(parse(source, url), url);
     // The module's <html-import-settings base> is resolved against the module's own URL.
     const referrer = record.importSettings?.base ? new URL(record.importSettings.base, url).href : url;
     const wanted = new Map();
-    for (const i of record.imports) if (moduleImportOptions(record, i).load !== 'lazy') wanted.set(i.src, i.type);
-    for (const e of record.exports) if (e.kind === 'reexport' && !wanted.has(e.src)) wanted.set(e.src, undefined);
-    const modules = new Map(await Promise.all([...wanted].map(async ([src, type]) => [src, await loadDependency(url, src, type, referrer)])));
-    return linkHTMLModule(record, modules, { lazy: (src, type) => () => loadDependency(url, src, type, referrer) });
+    for (const i of record.imports) if (moduleImportOptions(record, i).load !== 'lazy') wanted.set(i.src, [i.type, i.integrity]);
+    for (const e of record.exports) if (e.kind === 'reexport' && !wanted.has(e.src)) wanted.set(e.src, []);
+    const modules = new Map(await Promise.all([...wanted].map(async ([src, [type, sri]]) => [src, await loadDependency(url, src, type, referrer, sri)])));
+    return linkHTMLModule(record, modules, { lazy: (src, type, sri) => () => loadDependency(url, src, type, referrer, sri) });
   }
 
-  function start(url, type) {
-    if (!cache.has(url)) {
-      const kind = type ?? (HTML_EXT.test(url) ? 'html' : 'js');
-      const promise = kind === 'html' ? loadHTML(url) : Promise.resolve().then(() => importModule(url));
-      cache.set(url, promise);
+  function start(url, type, options = {}) {
+    const kind = type ?? (HTML_EXT.test(url) ? 'html' : 'js');
+    const { integrity } = options;
+    if (integrity !== undefined) {
+      parseIntegrity(integrity, ` for ${url}`);
+      if (kind !== 'html') throw new TypeError(`integrity applies to HTML modules only: ${url} is loaded with import(), which cannot verify it (to pin a JavaScript module, use the "integrity" field of an import map)`);
+    }
+    // A load with integrity is cached apart from one without: an unverified copy must not satisfy it.
+    const key = integrity ? `${url}#integrity=${integrity.trim().split(/\s+/).join(' ')}` : url;
+    if (!cache.has(key)) {
+      const promise = kind === 'html' ? loadHTML(url, options) : Promise.resolve().then(() => importModule(url));
+      cache.set(key, promise);
       promise.then(
         () => onEvent({ type: 'load', url, kind }),
         (error) => {
-          if (cache.get(url) === promise) cache.delete(url);
+          if (cache.get(key) === promise) cache.delete(key);
           onEvent({ type: 'error', url, kind, error });
         },
       );
     }
-    return cache.get(url);
+    return cache.get(key);
   }
 
   /**
    * Load a module namespace (HTML or JS), cached by resolved URL.
    * @param {string} specifier
    * @param {string} [referrer]
-   * @param {{ type?: 'html'|'js' }} [options]
+   * @param {{ type?: 'html'|'js', integrity?: string, credentials?: string, mode?: string }} [options]
+   *        `integrity` (SRI, HTML modules only), `credentials` and `mode` apply to this fetch; the
+   *        module's own dependencies use the loader's defaults.
    */
-  async function load(specifier, referrer, { type } = {}) {
-    return start(resolve(specifier, referrer || baseURL), type);
+  async function load(specifier, referrer, { type, integrity, credentials: c, mode: m } = {}) {
+    checkFetchOptions({ integrity, credentials: c, mode: m }, ' in load()');
+    return start(resolve(specifier, referrer || baseURL), type, { integrity, credentials: c, mode: m });
   }
 
   return { load, resolve, cache, baseURL };

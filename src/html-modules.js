@@ -13,7 +13,7 @@
  */
 import { createLoader } from './loader.js';
 import { bindModule } from './runtime.js';
-import { IMPORT_DEFAULTS, checkOptions, reportLoudly } from './settings.js';
+import { IMPORT_DEFAULTS, checkFetchOptions, checkOptions, reportLoudly } from './settings.js';
 import { lazyTargets, watchLazy } from './lazy.js';
 
 /**
@@ -21,6 +21,8 @@ import { lazyTargets, watchLazy } from './lazy.js';
  *                            `importModule`, `onEvent`) plus these defaults for this instance's imports
  *                            (lowest precedence: `<html-import>` attributes and the page's
  *                            `<html-import-settings>` override them; they never apply inside modules):
+ * @param {'omit'|'same-origin'|'include'} [options.credentials]  fetch `credentials` for HTML modules (default: the platform's)
+ * @param {'cors'|'same-origin'|'no-cors'} [options.mode]          fetch `mode` for HTML modules (default: the platform's)
  * @param {any} [options.window]                   the window whose DOM and registry to use
  * @param {CustomElementRegistry} [options.registry]
  * @param {string} [options.delimiter]            namespace delimiter (default "--")
@@ -53,8 +55,8 @@ export function createHTMLModules({
   const bind = (module, { as, delimiter: d = options.delimiter, bindings, from, root, conflict: c = options.conflict } = {}) =>
     bindModule(module, { as, delimiter: d, bindings, from, conflict: c, registry: reg(), window: win, root: root ?? win.document });
 
-  async function importNow(src, { as, delimiter: d, bindings, base: b, type, root, conflict: c }) {
-    const module = await api.load(src, { base: b, type });
+  async function importNow(src, { as, delimiter: d, bindings, base: b, type, root, conflict: c, integrity, credentials, mode }) {
+    const module = await api.load(src, { base: b, type, integrity, credentials, mode });
     return { module, ...bind(module, { as, delimiter: d, bindings, from: src, root, conflict: c }) };
   }
 
@@ -80,9 +82,11 @@ export function createHTMLModules({
     /**
      * Load an HTML (or JS) module and return its namespace, without registering anything.
      * @param {string} src
-     * @param {{ base?: string, type?: 'html'|'js' }} [options]
+     * @param {{ base?: string, type?: 'html'|'js', integrity?: string, credentials?: 'omit'|'same-origin'|'include', mode?: 'cors'|'same-origin'|'no-cors' }} [options]
+     *        `integrity` is Subresource Integrity metadata checked against the fetched bytes (HTML modules only);
+     *        `credentials` and `mode` are the fetch options for this module, over the instance's.
      */
-    load: (src, { base: b, type } = {}) => loader.load(src, b ?? instanceBase(), { type }),
+    load: (src, { base: b, type, integrity, credentials, mode } = {}) => loader.load(src, b ?? instanceBase(), { type, integrity, credentials, mode }),
 
     /**
      * Bind a loaded namespace: see `bindModule()`.
@@ -102,16 +106,18 @@ export function createHTMLModules({
      * or a component's shadow root, or when `load()` is called.
      * @param {string} src
      * @param {{ as?: string, delimiter?: string, bindings?: object[], base?: string, type?: 'html'|'js', root?: Document|ShadowRoot,
-     *           conflict?: 'error'|'reuse', load?: 'eager'|'lazy', errors?: 'event'|'throw' }} [options]
+     *           conflict?: 'error'|'reuse', load?: 'eager'|'lazy', errors?: 'event'|'throw',
+     *           integrity?: string, credentials?: string, mode?: string }} [options]
      */
-    import(src, { as, delimiter: d = options.delimiter, bindings, base: b, type, root, conflict: c = options.conflict, load: l = 'eager', errors: e = options.errors } = {}) {
-      const call = { as, delimiter: d, bindings, base: b, type, root, conflict: c };
+    import(src, { as, delimiter: d = options.delimiter, bindings, base: b, type, root, conflict: c = options.conflict, load: l = 'eager', errors: e = options.errors, integrity, credentials, mode } = {}) {
+      const call = { as, delimiter: d, bindings, base: b, type, root, conflict: c, integrity, credentials, mode };
       const loud = (promise) => {
         if (e === 'throw') promise.catch((error) => reportLoudly(error, win));
         return promise;
       };
       try {
         checkOptions({ delimiter: d, conflict: c, load: l, errors: e }, ' in HTMLModules.import()');
+        checkFetchOptions({ integrity, credentials, mode }, ' in HTMLModules.import()');
       } catch (error) {
         return loud(Promise.reject(error));
       }

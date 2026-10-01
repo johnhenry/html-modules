@@ -37,6 +37,7 @@ const cases = [
   [`<html-import src="./ui.html" as="UI"></html-import>`, /Invalid namespace "UI"/],
   [`<html-import src="./ui.html" base="./lib/"></html-import>`, /"base" cannot be set on <html-import> in m\.html: it is document-level only/],
   [`<html-import src="./ui.html" load="soon"></html-import>`, /Invalid load="soon" on <html-import> in m\.html: use "eager" or "lazy"/],
+  [`<html-import src="./ui.html" integrity="md5-abc"></html-import>`, /Invalid integrity "md5-abc" on <html-import src="\.\/ui\.html"> in m\.html: use Subresource Integrity metadata/],
   [`<html-import src="./ui.html"><html-binding element="x-y"></html-binding></html-import>`, /<html-binding> requires an "export" attribute/],
   [`<html-import src="./t.html" load="lazy"><html-binding export="gold" adopt></html-binding></html-import>`, /is lazy but adopts a stylesheet in m\.html/],
   // Settings

@@ -45,7 +45,7 @@
  * module's own templates always know their tags).
  *
  * @typedef {{ export: string, element?: string, adopt?: boolean }} BindingRecord
- * @typedef {{ src: string, as?: string, delimiter?: string, type?: string, conflict?: 'error'|'reuse', load?: 'eager'|'lazy', errors?: 'event'|'throw', bindings: BindingRecord[] }} ImportRecord
+ * @typedef {{ src: string, as?: string, delimiter?: string, type?: string, integrity?: string, conflict?: 'error'|'reuse', load?: 'eager'|'lazy', errors?: 'event'|'throw', bindings: BindingRecord[] }} ImportRecord
  * @typedef {{ kind: 'component', name: string|null, default?: true, template: string, shadow: 'open'|'closed', delegatesFocus: boolean, styles: string[] }
  *         | { kind: 'stylesheet', name: string|null, default?: true, css: string }
  *         | { kind: 'data', name: string|null, default?: true, value: unknown }
@@ -60,7 +60,7 @@
  */
 import { assertExportName, assertNamespace } from './names.js';
 import {
-  EXPORT_DEFAULTS, IMPORT_DEFAULTS, booleanAttribute, readImportOptions, readImportSettings, readModuleSettings,
+  EXPORT_DEFAULTS, IMPORT_DEFAULTS, assertOption, booleanAttribute, readImportOptions, readImportSettings, readModuleSettings,
 } from './settings.js';
 
 const JSON_TYPE = /^(application|text)\/([\w.+-]+\+)?json$/i;
@@ -96,9 +96,11 @@ export function importRecord(raw, url = '') {
   }
   const { delimiter, conflict, load, errors } = readImportOptions(raw.attrs, where);
   const type = nonEmpty(raw.attrs.type);
+  const integrity = nonEmpty(raw.attrs.integrity);
+  if (integrity) assertOption('integrity', integrity, ` on <html-import src="${src}">${where}`);
   const bindings = raw.children.filter((c) => c.tag === 'html-binding').map((c) => bindingRecord(c.attrs, where));
   return {
-    src, ...(as && { as }), ...(delimiter !== undefined && { delimiter }), ...(type && { type }),
+    src, ...(as && { as }), ...(delimiter !== undefined && { delimiter }), ...(type && { type }), ...(integrity && { integrity }),
     ...(conflict && { conflict }), ...(load && { load }), ...(errors && { errors }), bindings,
   };
 }

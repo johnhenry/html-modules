@@ -45,6 +45,8 @@ createHTMLModules(options?: {
   baseURL?: string;                      // = document.baseURI ?? location.href
   hostResolve?: (specifier: string) => string | URL | null | undefined;
   fetch?: typeof fetch;                  // = globalThis.fetch
+  credentials?: 'omit' | 'same-origin' | 'include';   // fetch option for HTML modules; = the platform's default
+  mode?: 'cors' | 'same-origin' | 'no-cors';          // fetch option for HTML modules; = the platform's default
   parseHTML?: (html: string, url: string) => Document;   // = new window.DOMParser().parseFromString(html, 'text/html')
   importModule?: (url: string) => Promise<object>;       // = (url) => import(url)
   onEvent?: (event: { type: 'fetch' | 'load' | 'error', url: string, kind?: 'html' | 'js', error?: unknown }) => void;
@@ -62,7 +64,9 @@ createHTMLModules(options?: {
 | `errors` | `"event"` | `throw` also passes failures to `reportError()`. |
 | `baseURL` | `document.baseURI`, else `location.href` | The referrer for top-level relative specifiers. |
 | `hostResolve` | none | Resolves bare specifiers. `/browser` passes `(s) => import.meta.resolve(s)`, which applies the page's import map. Return a falsy value for "unresolvable". |
-| `fetch` | `globalThis.fetch` | Fetches HTML modules. Only `ok`, `status` and `text()` of the response are used. |
+| `fetch` | `globalThis.fetch` | Fetches HTML modules, called as `fetch(url)` or, when `credentials` / `mode` are set, `fetch(url, { credentials, mode })`. Only `ok`, `status` and `text()` of the response are used, plus `arrayBuffer()` when an `integrity` is checked. |
+| `credentials` | the platform's | The `credentials` passed to `fetch()` for HTML modules (JavaScript modules go through `import()`, which has no such option). Overridable per `load()` / `import()`. See [Security model](../../README.md#security-model). |
+| `mode` | the platform's | The `mode` passed to `fetch()` for HTML modules. `navigate` is not allowed, and `no-cors` gives an opaque response a module cannot be read from, so it is only useful with a custom `fetch`. |
 | `parseHTML` | the window's `DOMParser` | Parses fetched HTML into a `Document`. Without either, loading an HTML module throws `` TypeError: No DOMParser available; pass `parseHTML` to createLoader() ``. |
 | `importModule` | native `import()` | Loads JavaScript modules. |
 | `onEvent` | no-op | Observes the loader: `{ type: 'fetch', url }` before an HTML module is fetched; `{ type: 'load', url, kind }` and `{ type: 'error', url, kind, error }` when any module (HTML or JS) settles. |
@@ -79,7 +83,10 @@ createHTMLModules()` in the message: `Invalid load="soon" in createHTMLModules()
 ### `load`
 
 ```ts
-instance.load(src: string, options?: { base?: string, type?: 'html' | 'js' }): Promise<namespace>
+instance.load(src: string, options?: {
+  base?: string, type?: 'html' | 'js',
+  integrity?: string, credentials?: 'omit' | 'same-origin' | 'include', mode?: 'cors' | 'same-origin' | 'no-cors',
+}): Promise<namespace>
 ```
 
 Resolve, fetch, parse and link a module, and resolve with its namespace, **without registering anything**. HTML
@@ -87,6 +94,17 @@ modules (`.html` / `.htm`, or `type: 'html'`) are fetched and read; anything els
 `base` overrides the instance `base` as the referrer for a relative `src`. Cached by resolved URL (see
 [caching](#caching-and-cycles)). Rejects on a fetch failure (`Error: Failed to fetch HTML module <url>: <status>`),
 any module `SyntaxError`, a dependency failure, or a cycle.
+
+`integrity` is [Subresource Integrity](https://developer.mozilla.org/docs/Web/Security/Subresource_Integrity) metadata
+(`"sha384-<base64>"`, several tokens separated by spaces; sha256, sha384 and sha512): the response is read with
+`arrayBuffer()` and checked with `crypto.subtle.digest`. As for `<script integrity>`, the strongest algorithm listed
+decides and any digest of it may match. A mismatch rejects with `Error: Integrity check failed for HTML module <url>:
+its <alg> digest is <alg>-<digest>, which matches none of integrity="<metadata>"`; malformed metadata is a
+`SyntaxError`; a JavaScript module (`import()` cannot verify) is a `TypeError`; no `crypto.subtle` (an insecure
+context) is a `TypeError`, because the check fails closed. A load with `integrity` is cached apart from one without
+it, so an unverified copy never satisfies it (and a failed check is evicted like any failed load). `credentials` and
+`mode` apply to this module's fetch only; the module's own dependencies use the instance defaults and their own
+`integrity` attribute.
 
 A loaded HTML module's dependencies are loaded too (eager ones), but its components are only registered, and their
 dependencies bound, when something registers them: `ns.card.define('my-card')`, `bind()`, `import()`, or an
@@ -99,6 +117,7 @@ instance.import(src: string, options?: {
   as?: string, delimiter?: string, bindings?: Array<{ export: string, element?: string, adopt?: boolean }>,
   base?: string, type?: 'html' | 'js', root?: Document | ShadowRoot,
   conflict?: 'error' | 'reuse', load?: 'eager' | 'lazy', errors?: 'event' | 'throw',
+  integrity?: string, credentials?: string, mode?: string,   // as for load()
 }): Promise<{ module, elements, values, tags }> | LazyHandle
 ```
 

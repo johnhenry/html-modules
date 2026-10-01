@@ -138,3 +138,56 @@ test('HTMLModules.bind() and definition.define() on a loaded module', async () =
   const Mine = ui.customCard.define('my-custom-card', { window });
   assert.equal(window.customElements.get('my-custom-card'), Mine);
 });
+
+// ---- Security: integrity, credentials, mode -------------------------------------------------------------------
+
+import { createHash } from 'node:crypto';
+const SRI = (alg, text) => `${alg}-${createHash(alg).update(text).digest('base64')}`;
+
+test('integrity: the fetched bytes are checked with SubtleCrypto; a mismatch rejects and is evicted', async () => {
+  const body = '<html-export name="ok"><template>ok</template></html-export>';
+  const { modules } = setup({ files: { 'ok.html': body } });
+  assert.ok((await modules.load('./ok.html', { integrity: SRI('sha384', body) })).ok);
+  await assert.rejects(modules.load('./ok.html', { integrity: SRI('sha384', 'something else') }), /Integrity check failed for HTML module http:\/\/modules\.test\/ok\.html: its sha384 digest is sha384-.* matches none of integrity=/);
+  // The strongest algorithm decides, any of its digests may match, and several tokens are space-separated.
+  assert.ok((await modules.load('./ok.html', { integrity: `${SRI('sha256', 'nope')} ${SRI('sha512', body)} ${SRI('sha512', 'also nope')}` })).ok);
+  await assert.rejects(modules.load('./ok.html', { integrity: `${SRI('sha256', body)} ${SRI('sha512', 'nope')}` }), /Integrity check failed/);
+});
+
+test('integrity: an unverified cached copy does not satisfy a load that asks for it', async () => {
+  const body = '<html-export name="ok"><template>ok</template></html-export>';
+  const { modules, fetch } = setup({ files: { 'ok.html': body } });
+  await modules.load('./ok.html');
+  await assert.rejects(modules.load('./ok.html', { integrity: SRI('sha256', 'wrong') }), /Integrity check failed/);
+  assert.equal(fetch.log.length, 2, 'fetched again to verify');
+});
+
+test('integrity: malformed metadata is a SyntaxError, and a JavaScript module cannot be verified', async () => {
+  const { modules } = setup({ files: { 'ok.html': '<html-export name="ok"><template>ok</template></html-export>' } });
+  await assert.rejects(modules.load('./ok.html', { integrity: 'md5-abc' }), (e) => e instanceof SyntaxError && /Invalid integrity "md5-abc"/.test(e.message));
+  await assert.rejects(modules.load('./x.js', { integrity: SRI('sha256', 'x') }), /integrity applies to HTML modules only/);
+});
+
+test('integrity: <html-import integrity> and a module import record carry it to the loader', async () => {
+  const dep = '<html-export name="b"><template>b</template></html-export>';
+  const host = `<html-import src="./dep.html" as="dep" integrity="${SRI('sha256', dep)}"></html-import>`;
+  const ok = setup({ files: { 'dep.html': dep, 'host.html': host } });
+  assert.ok(await ok.modules.load('./host.html'));
+  const bad = setup({ files: { 'dep.html': `${dep} `, 'host.html': host } });
+  await assert.rejects(bad.modules.load('./host.html'), /Integrity check failed for HTML module http:\/\/modules\.test\/dep\.html/);
+  const page = setup({ elements: true, files: { 'dep.html': `${dep}  ` } });
+  page.document.body.innerHTML = `<html-import src="./dep.html" as="d" integrity="${SRI('sha256', dep)}"></html-import>`;
+  await assert.rejects(page.document.querySelector('html-import').ready, /Integrity check failed/);
+});
+
+test('credentials and mode reach fetch for HTML modules: instance defaults, overridden per load', async () => {
+  const { modules, fetch } = setup({ files: { 'a.html': '<html-export name="a"><template>a</template></html-export>', 'b.html': '<html-export name="b"><template>b</template></html-export>' }, credentials: 'include', mode: 'cors' });
+  await modules.load('./a.html');
+  await modules.load('./b.html', { credentials: 'omit', mode: 'same-origin' });
+  assert.deepEqual(fetch.inits, [{ credentials: 'include', mode: 'cors' }, { credentials: 'omit', mode: 'same-origin' }]);
+  const plain = setup({ files: { 'a.html': '<html-export name="a"><template>a</template></html-export>' } });
+  await plain.modules.load('./a.html');
+  assert.deepEqual(plain.fetch.inits, [undefined], 'no options: fetch(url) as before');
+  assert.throws(() => setup({ credentials: 'always' }), /Invalid credentials="always" in createLoader\(\): use "omit" or "same-origin" or "include"/);
+  await assert.rejects(modules.import('./a.html', { mode: 'navigate' }), /Invalid mode="navigate"/);
+});

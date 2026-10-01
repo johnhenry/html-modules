@@ -24,6 +24,8 @@ const CHOICES = {
   load: ['eager', 'lazy'],
   errors: ['event', 'throw'],
   shadow: ['open', 'closed'],
+  credentials: ['omit', 'same-origin', 'include'],
+  mode: ['cors', 'same-origin', 'no-cors'],
 };
 
 /** Import options that `<html-import>` (and a module's import records) may set per import. */
@@ -35,6 +37,19 @@ export const MODULE_SETTINGS_ATTRIBUTES = ['shadow', 'delegates-focus'];
 
 // Attributes any settings element may carry without meaning anything to it.
 const NEUTRAL = /^(?:id|class|data-[\w.-]+)$/;
+
+/** Subresource Integrity metadata: one or more `sha256|sha384|sha512-<base64>` tokens separated by spaces. */
+const SRI_TOKEN = /^(sha256|sha384|sha512)-([A-Za-z0-9+/]+={0,2}|[A-Za-z0-9_-]+)(\?\S*)?$/;
+
+/** The valid tokens of an SRI string as `[{ algorithm, hash }]`, or throw a SyntaxError naming `where`. */
+export function parseIntegrity(value, where = '') {
+  const tokens = typeof value === 'string' ? value.split(/\s+/).filter(Boolean) : [];
+  const parsed = tokens.map((t) => SRI_TOKEN.exec(t)).filter(Boolean).map((m) => ({ algorithm: m[1], hash: m[2] }));
+  if (!tokens.length || parsed.length !== tokens.length) {
+    throw new SyntaxError(`Invalid integrity ${JSON.stringify(value)}${where}: use Subresource Integrity metadata such as "sha384-<base64 digest>" (sha256, sha384 or sha512; several may be separated by spaces)`);
+  }
+  return parsed;
+}
 
 const quoteList = (list) => list.map((v) => `"${v}"`).join(' or ');
 
@@ -57,6 +72,10 @@ export function assertOption(name, value, where = '') {
     if (typeof value !== 'string' || value.trim() === '') {
       throw new SyntaxError(`Invalid base ${JSON.stringify(value)}${where}: use a URL, relative to the document, e.g. "./vendor/ui@2/"`);
     }
+    return;
+  }
+  if (name === 'integrity') {
+    parseIntegrity(value, where);
     return;
   }
   const choices = CHOICES[name];
@@ -140,6 +159,14 @@ export function readImportOptions(attrs, where = '') {
  */
 export function checkOptions(options, where = '') {
   for (const name of [...IMPORT_OPTIONS, 'base']) {
+    if (options[name] !== undefined) assertOption(name, options[name], where);
+  }
+  return options;
+}
+
+/** Validate the fetch options of a load: `integrity`, `credentials`, `mode` (undefined values are skipped). */
+export function checkFetchOptions(options, where = '') {
+  for (const name of ['integrity', 'credentials', 'mode']) {
     if (options[name] !== undefined) assertOption(name, options[name], where);
   }
   return options;

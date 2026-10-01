@@ -64,6 +64,7 @@ Nothing is silently ignored: a mistake is an exception, a rejection, or an `erro
 | `SyntaxError` | `Invalid delimiter "<d>": use one or more characters allowed in custom element names (lower-case letters, digits, "-", ".", "_", …), e.g. "--" or "-" on <html-import> in <url>` |
 | `SyntaxError` | `Invalid <conflict\|load\|errors>="<value>" on <html-import> in <url>: use "<a>" or "<b>"` |
 | `SyntaxError` | `"base" cannot be set on <html-import> in <url>: it is document-level only; use <html-import-settings base="…">, or write the full path in src` |
+| `SyntaxError` | `Invalid integrity "<value>" on <html-import src="<src>"> in <url>: use Subresource Integrity metadata such as "sha384-<base64 digest>" (sha256, sha384 or sha512; several may be separated by spaces)` |
 | `SyntaxError` | `<html-binding> requires an "export" attribute in <url>` |
 | `SyntaxError` | `<html-import src="<src>"> is lazy but adopts a stylesheet in <url>: a module's components need their stylesheets when they render, so write load="eager" on this import` |
 | `SyntaxError` | `More than one <html-import-settings> in <url>: a module has at most one` (same for `<html-module-settings>`) |
@@ -87,6 +88,8 @@ Nothing is silently ignored: a mistake is an exception, a rejection, or an `erro
 | `base` that does not resolve | `SyntaxError: Invalid base "<b>" on <html-import-settings>: it does not resolve to a URL against <document URL>` | every `<html-import>` of that document |
 | `<html-module-settings>` in a page | `SyntaxError: <html-module-settings> only applies inside an HTML module (a file loaded with <html-import>); in a page it has no exports to configure. For this page's imports, use <html-import-settings>` | the element |
 | Module fetch fails | `Error: Failed to fetch HTML module <url>: <status>` | `<html-import>` |
+| `integrity` does not match | `Error: Integrity check failed for HTML module <url>: its <alg> digest is <alg>-<digest>, which matches none of integrity="<metadata>"` | `<html-import>` |
+| Malformed `integrity` | `SyntaxError: Invalid integrity "<value>" …: use Subresource Integrity metadata such as "sha384-<base64 digest>" …` | `<html-import>` |
 | Unresolvable bare `src` | `TypeError: Unable to resolve bare specifier "<s>" from <referrer>` | `<html-import>` |
 | JS module with no components, imported with `as` | `` TypeError: The module '<src>' does not export any HTML components: export a `components` manifest or definitions made with defineHTMLComponent(), or bind exports explicitly with <html-binding> `` | `<html-import>` |
 | A tag the delimiter makes invalid (namespace import) | `SyntaxError: Cannot bind '<export>' under namespace "<as>" with delimiter "<d>": <<tag>> is not a valid custom element name (<reason>)` (checked for every tag before any is registered) | `<html-import>` |
@@ -104,9 +107,9 @@ Nothing is silently ignored: a mistake is an exception, a rejection, or an `erro
 
 | Where | Error and message |
 | --- | --- |
-| `createHTMLModules()` | `SyntaxError: Invalid delimiter "<d>": … in createHTMLModules()`, `Invalid <option>="<v>" in createHTMLModules(): use "<a>" or "<b>"`, `Invalid base "<v>" in createHTMLModules(): …` (thrown) |
+| `createHTMLModules()` | `SyntaxError: Invalid credentials="<v>" in createLoader(): …` / `Invalid mode="<v>" …` (from the loader it builds); `SyntaxError: Invalid delimiter "<d>": … in createHTMLModules()`, `Invalid <option>="<v>" in createHTMLModules(): use "<a>" or "<b>"`, `Invalid base "<v>" in createHTMLModules(): …` (thrown) |
 | `HTMLModules.import()` | the same, ending ` in HTMLModules.import()` (a rejected promise), plus everything `load()` and `bind()` raise |
-| `HTMLModules.load()`, `createLoader().load()` | `Error: Failed to fetch HTML module <url>: <status>`; `TypeError: Unable to resolve bare specifier "<s>" from <referrer>`; `TypeError: Cannot resolve "<s>" without a base URL`; `` TypeError: No DOMParser available; pass `parseHTML` to createLoader() ``; every module `SyntaxError`; `Error: Circular HTML module dependency: …`; a JS module's own import error (rejected) |
+| `HTMLModules.load()`, `createLoader().load()` | `Error: Integrity check failed for HTML module <url>: …`; `TypeError: integrity applies to HTML modules only: <url> is loaded with import(), which cannot verify it (…)`; `TypeError: Cannot verify the integrity of <url>: this environment has no crypto.subtle (…)`; `SyntaxError: Invalid integrity "<v>" in load(): …`, `Invalid credentials="<v>" in load(): use "omit" or "same-origin" or "include"`, `Invalid mode="<v>" …`; `Error: Failed to fetch HTML module <url>: <status>`; `TypeError: Unable to resolve bare specifier "<s>" from <referrer>`; `TypeError: Cannot resolve "<s>" without a base URL`; `` TypeError: No DOMParser available; pass `parseHTML` to createLoader() ``; every module `SyntaxError`; `Error: Circular HTML module dependency: …`; a JS module's own import error (rejected) |
 | `bind()`, `bindModule()` | `SyntaxError: Invalid namespace …`, `Invalid delimiter …`, `Invalid conflict="<v>": use "error" or "reuse"`, and everything `applyBinding()` / `registerComponents()` raise (thrown) |
 | `applyBinding()` | `SyntaxError: <html-binding> requires an "export" attribute`; missing export; invalid tag; `Binding the default export of '<from>' needs element="…"`; the `adopt` / `element` `TypeError`s; the conflict `Error` |
 | `registerComponents()` | as `bindModule()` with `as`; without `as`, `SyntaxError: "<name>" is not a valid custom element name: <reason>` for an export name that is not a valid tag |

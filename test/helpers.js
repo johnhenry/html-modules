@@ -18,13 +18,14 @@ for (const k of ['HTMLElement', 'customElements', 'document', 'CustomEvent', 'DO
 
 /** fetch over file: URLs, plus an in-memory table of url → source. Logs every request. */
 export function makeFetch(files = {}) {
-  const fetch = async (url) => {
+  const fetch = async (url, init) => {
     url = String(url);
     fetch.log.push(url);
+    fetch.inits.push(init);
     if (url in files) {
       const body = files[url];
       if (typeof body === 'number') return { ok: false, status: body, text: async () => '' };
-      return { ok: true, status: 200, text: async () => body };
+      return { ok: true, status: 200, text: async () => body, arrayBuffer: async () => new TextEncoder().encode(body).buffer };
     }
     if (url.startsWith('file:')) {
       try {
@@ -35,6 +36,7 @@ export function makeFetch(files = {}) {
     return { ok: false, status: 404, text: async () => '' };
   };
   fetch.log = [];
+  fetch.inits = [];
   return fetch;
 }
 

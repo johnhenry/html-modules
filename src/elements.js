@@ -285,7 +285,7 @@ export function defineHTMLModuleElements({ modules, window: win = globalThis, re
       this.#module ??= (async () => {
         const src = this.getAttribute('src');
         if (!src) throw new SyntaxError('<html-import> requires a "src" attribute');
-        return modules.load(src, { base: this.#config.base, type: this.getAttribute('type') || undefined });
+        return modules.load(src, { base: this.#config.base, type: this.getAttribute('type') || undefined, integrity: this.getAttribute('integrity') || undefined });
       })();
       return this.#module;
     }

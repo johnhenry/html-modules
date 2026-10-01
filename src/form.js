@@ -232,7 +232,9 @@ export function setupForm(el, root, selector, internalsOf, role) {
   if (state.role) {
     state.nativeInner = Boolean(root.querySelector(NATIVE_ACTIVATABLE));
     if (first) bindButton(el, state);
-    if (!state.internals.role) {
+    // A native <button>/<a>/control inside carries the role (and the name) itself; a host role="button" around it is
+    // a nested interactive control, which axe reports as `nested-interactive` (serious).
+    if (!state.nativeInner && !state.internals.role) {
       try {
         state.internals.role = 'button';
       } catch {} // ARIA reflection on ElementInternals is not everywhere

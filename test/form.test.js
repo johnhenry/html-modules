@@ -334,6 +334,7 @@ test('a button component: Enter and Space on the host click it, Space on keyup; 
   el.__internals.form = form;
   el.connectedCallback();
   assert.equal(el.getAttribute('tabindex'), '0', 'focusable, so it can be operated from the keyboard');
+  assert.equal(el.__internals.role, 'button', 'a button with no native control inside is a button to assistive technology');
   const key = (type, k, extra = {}) => { const e = Object.assign(new win.Event(type, { bubbles: true, cancelable: true }), { key: k }, extra); el.dispatchEvent(e); return e; };
   el.click();
   await settle();
@@ -367,6 +368,7 @@ test('a button component with a native <button> in its template leaves keyboard 
   el.__internals.form = form;
   el.connectedCallback();
   assert.equal(el.hasAttribute('tabindex'), false);
+  assert.ok(!el.__internals.role, 'no host role="button" around a native <button>: axe reports nested-interactive');
   root.querySelector('button').dispatchEvent(Object.assign(new win.Event('keydown', { bubbles: true, cancelable: true, composed: true }), { key: 'Enter' }));
   await settle();
   assert.deepEqual(form.log, [], 'the host does not also activate');

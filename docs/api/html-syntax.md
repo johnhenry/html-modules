@@ -10,6 +10,7 @@ syntax; an import inside a module is private to that module.
 - [`<html-export>`](#html-export): exports of a module
 - [Data binding in templates](#data-binding-in-templates): `{{attribute}}` and `props`
 - [Form-associated components](#form-associated-components): `form-associated`, `form-control`
+- [Scoped registries](#scoped-registries): `registry="scoped"` in a module
 - [`<html-import>`](#html-import): imports into a page or a module
 - [`<html-binding>`](#html-binding): selective bindings of one import
 - [`<html-import-settings>`](#html-import-settings): import defaults for one document
@@ -254,6 +255,43 @@ control inside the shadow root (use `<slot>`-ed labels inside the component), an
 `ElementInternals` form association (the element then throws a `TypeError` when constructed). Linkedom, the unit-test
 DOM, has none either, so the behaviour is proven in real browsers.
 
+## Scoped registries
+
+Custom element names are global, so two versions of a library that both use `<icon--star>` *inside* their components
+collide. `registry="scoped"` on a **module's** import (or on its `<html-import-settings>`, for all of them) gives that
+module's own imports a registry of their own:
+
+```html
+<!-- lib.html -->
+<html-import-settings registry="scoped"></html-import-settings>
+<html-import src="./icons.html" as="icon"></html-import>
+<html-export name="rating"><template><icon--star></icon--star><slot></slot></template></html-export>
+```
+
+```html
+<!-- the page -->
+<html-import src="./v1/lib.html" as="lib1"></html-import>
+<html-import src="./v2/lib.html" as="lib2"></html-import>      <!-- also says <icon--star>: no conflict -->
+<lib1--rating></lib1--rating> <lib2--rating></lib2--rating>
+```
+
+- **What is scoped.** Each component definition with a scoped import gets one `new CustomElementRegistry()` per window.
+  Its scoped imports are bound into it (`icon--star` is defined there and not in `customElements`), its shadow roots are
+  attached with `attachShadow({ customElementRegistry })`, and its template is stamped with
+  `document.importNode(content, { deep: true, customElementRegistry })`, which is how elements in the template upgrade
+  against the scoped registry. Registering the component under several tags shares the one registry. An import of the
+  same module without `registry="scoped"` stays in the registry the component itself is registered in.
+- **Only inside modules.** A page's tags must be defined where the document upgrades them (the global registry), so
+  `registry` on a page's `<html-import>` / `<html-import-settings>`, or in `HTMLModules.import()`, is a `SyntaxError`.
+- **Where it is unsupported** (Firefox at the time of writing, and older Chromium and Safari), the page can ask:
+  `supportsScopedRegistries(window)` (it *tries* `new CustomElementRegistry()` and `attachShadow({ customElementRegistry })`
+  rather than trusting the constructor). A scoped import then **falls back to the registry the component is registered in**
+  and logs one `console.warn` per window naming the component; two versions with the same inner tag then conflict as they
+  always did. A compiled module behaves the same.
+- **Not covered:** a server-rendered (declarative) root keeps the registry it was created with (use
+  `shadowrootcustomelementregistry` and initialize it yourself); `registry` does not scope the *page's* elements, only what
+  the module's components use; hot reload keeps the registry (its imports may not change).
+
 ## `<html-import>`
 
 ```html
@@ -281,6 +319,7 @@ data exports are not elements and are not registered by `as` (bind them with `<h
 | `conflict` | `error`, `reuse` | `error` | When a tag this import wants is already defined by a *different* definition: `error` fails the binding (naming the tag and who defined it); `reuse` keeps the existing definition and records the binding with `reused: true`. The same definition under the same tag again is always a no-op. |
 | `load` | `eager`, `lazy` | `eager` | `lazy`: fetch nothing until one of the import's tags is used; see [Lazy loading](javascript.md#lazy-loading). |
 | `errors` | `event`, `throw` | `event` | `throw`: failures are also passed to `reportError()` (the console, `window.onerror`), in addition to `error` events and rejections. For development. |
+| `registry` | `global`, `scoped` | `global` | **In an HTML module only.** `scoped`: the tags this import binds are registered in a [scoped custom element registry](#scoped-registries) of the importing module's components instead of the global one. On a page it is a `SyntaxError`. |
 
 - `delimiter`, `conflict`, `load` and `errors` default from the document's `<html-import-settings>`, then (pages
   only) the instance options; see [Precedence](#precedence-of-import-options).
@@ -368,6 +407,7 @@ optional.
 | `conflict` | `error`, `reuse` | `error` | as on `<html-import>` |
 | `load` | `eager`, `lazy` | `eager` | as on `<html-import>` |
 | `errors` | `event`, `throw` | `event` | as on `<html-import>` |
+| `registry` | `global`, `scoped` | `global` | **In an HTML module only** (on a page it is a `SyntaxError`): as on `<html-import>`, for every import of the module. See [Scoped registries](#scoped-registries). |
 
 `id`, `class` and `data-*` attributes are allowed and mean nothing. Any other attribute, or a bad value, is a
 `SyntaxError` whose message lists the valid attributes or values.

@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scoped registries · html-modules</title>
+  <script>try { const t = localStorage.getItem('html-modules-examples-theme'); if (t) document.documentElement.dataset.theme = t; } catch {}</script>
+  <link rel="stylesheet" href="./shared/site.css">
+  <style>.split > div { min-width: 0; } .note { margin: 0.5rem 0; }</style>
+  <script type="module" src="../src/browser.js"></script>
+</head>
+<body>
+  <header class="site-header">
+    <a class="home" href="./index.html">html-modules</a>
+    <span class="crumb">Scoped registries</span>
+    <span class="spacer"></span>
+    <button class="theme-toggle" type="button">Dark mode</button>
+  </header>
+  <main class="page">
+    <nav class="site-nav"></nav>
+    <h1>Scoped custom element registries</h1>
+    <p class="lede">
+      Custom element names are global, so two versions of a library that both use <code>&lt;icon--star&gt;</code> inside their
+      components collide. With <code>&lt;html-import-settings registry="scoped"&gt;</code> in a module, that module's own imports are
+      registered in a registry of their own, used by the shadow roots of its components. Both versions below render their own
+      icons on one page. Needs a browser with scoped custom element registries; elsewhere this page says so.
+    </p>
+    <div class="covers" data-page="scoped"></div>
+
+    <section class="card">
+      <h2>Two versions of one library</h2>
+      <p id="support" class="small muted"></p>
+      <div class="split">
+        <div><p class="label">Version 1 (<code>&lt;lib1--rating&gt;</code>)</p><lib1--rating>rated by v1</lib1--rating></div>
+        <div><p class="label">Version 2 (<code>&lt;lib2--rating&gt;</code>)</p><lib2--rating>rated by v2</lib2--rating></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>The library module</h2>
+      <pre data-source="./components/scoped/v2/lib.html"></pre>
+      <p class="small muted">Both versions are the same markup with different <code>icons.html</code>; the page imports them as namespaces <code>lib1</code> and <code>lib2</code>.
+      Without <code>registry="scoped"</code> the second import fails: <code>Cannot bind &lt;icon--star&gt;: it is already defined</code>.</p>
+    </section>
+
+    <section class="card">
+      <h2>Checks</h2>
+      <ul id="checks"></ul>
+    </section>
+
+    <div class="pager"><a href="./forms.html">← Forms</a><a href="./errors.html">Errors →</a></div>
+  </main>
+
+  <script type="module">
+    import { HTMLModules } from '../src/browser.js';
+    import { supportsScopedRegistries } from '../src/runtime.js';
+    import { renderChecks } from './shared/site.js';
+
+    const supported = supportsScopedRegistries(window);
+    document.getElementById('support').textContent = supported
+      ? 'This browser supports scoped custom element registries.'
+      : 'This browser does not support scoped custom element registries (new CustomElementRegistry() with attachShadow({ customElementRegistry })), so the demo is not run. Imports with registry="scoped" would fall back to the global registry with a console warning.';
+    const results = [];
+    const check = (label, ok) => results.push([label, supported ? ok : 'unsupported']);
+    let one;
+    let two;
+    if (supported) {
+      await HTMLModules.import('./components/scoped/v1/lib.html', { as: 'lib1' });
+      await HTMLModules.import('./components/scoped/v2/lib.html', { as: 'lib2' });
+      await customElements.whenDefined('lib2--rating');
+      [one, two] = [document.querySelector('lib1--rating'), document.querySelector('lib2--rating')];
+    }
+    const glyph = (el) => el?.shadowRoot?.querySelector('icon--star')?.shadowRoot?.querySelector('[part=glyph]')?.textContent;
+    check('both versions are on the page, each with its own <code>&lt;icon--star&gt;</code> (v1 ★, v2 ✦)', glyph(one) === '★' && glyph(two) === '✦');
+    check('<code>icon--star</code> is not in the global registry', customElements.get('icon--star') === undefined);
+    check('each library\'s shadow roots use a registry of their own', one?.shadowRoot.customElementRegistry !== customElements && one?.shadowRoot.customElementRegistry !== two?.shadowRoot.customElementRegistry);
+    check('the icons live in their library\'s registry', one?.shadowRoot.customElementRegistry.get('icon--star') !== undefined && one?.shadowRoot.customElementRegistry.get('icon--star') !== two?.shadowRoot.customElementRegistry.get('icon--star'));
+    check('slotted light DOM is still the page\'s', one?.textContent === 'rated by v1' && two?.textContent === 'rated by v2');
+    renderChecks(document.getElementById('checks'), results);
+  </script>
+  <script type="module" src="./shared/site.js"></script>
+</body>
+</html>

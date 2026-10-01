@@ -100,6 +100,11 @@ export const checklist = [
     ['frm.reset', 'form.reset() restores the default value; state restore after navigation'],
     ['frm.internals', 'one ElementInternals, shared with a closed shadow root and with subclasses'],
   ] },
+  { group: 'Scoped registries', items: [
+    ['reg.scoped', 'registry="scoped" in a module: its own imports register in a registry its components\' shadow roots use'],
+    ['reg.coexist', 'two versions of a library using the same inner tag coexist on one page'],
+    ['reg.fallback', 'where unsupported: reported (supportsScopedRegistries), and a warned fallback to the global registry'],
+  ] },
   { group: 'Dev tooling', items: [
     ['dev.server', 'html-module dev [dir]: a static server that watches the directory and pushes changes over SSE'],
     ['dev.hot', 'HTMLModules.hotReload(): a module edit re-stamps live elements and swaps their styles in place'],
@@ -189,6 +194,11 @@ export const pages = [
     id: 'forms', href: 'forms.html', title: 'Form-associated components',
     summary: 'form-associated on an export: components that take part in <form>: FormData, validity and :invalid, disabled fieldsets, reset, a closed shadow root, and a subclass sharing the same ElementInternals.',
     covers: ['frm.associated', 'frm.control', 'frm.validity', 'frm.disabled', 'frm.reset', 'frm.internals', 'fmt.shadow'],
+  },
+  {
+    id: 'scoped', href: 'scoped.html', title: 'Scoped registries',
+    summary: 'registry="scoped" in a module: its own imports are registered in a registry its components\' shadow roots use, so two versions of a library with the same inner tag names coexist. Reports itself unsupported where the browser has no scoped registries.',
+    covers: ['reg.scoped', 'reg.coexist', 'reg.fallback', 'set.module-settings', 'fmt.nested'],
   },
   {
     id: 'errors', href: 'errors.html', title: 'Errors',

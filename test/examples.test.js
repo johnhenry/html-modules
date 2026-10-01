@@ -49,7 +49,7 @@ test('every example HTML module reads the same through the DOM and the scanner',
     if (a.importSettings || a.moduleSettings) withSettings.push(name);
   }
   // The settings elements are exercised by real example modules.
-  assert.deepEqual(withSettings.sort(), ['components/gallery.html', 'components/stamp.html', 'components/vault.html']);
+  assert.deepEqual(withSettings.sort(), ['components/gallery.html', 'components/scoped/v1/lib.html', 'components/scoped/v2/lib.html', 'components/stamp.html', 'components/vault.html']);
 });
 
 test('every example HTML module loads, and the broken ones fail as documented', async () => {

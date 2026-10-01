@@ -145,13 +145,16 @@ export function createHTMLModules({
      *           conflict?: 'error'|'reuse', load?: 'eager'|'lazy', errors?: 'event'|'throw',
      *           integrity?: string, credentials?: string, mode?: string }} [options]
      */
-    import(src, { as, delimiter: d = options.delimiter, bindings, base: b, type, root, conflict: c = options.conflict, load: l = 'eager', errors: e = options.errors, integrity, credentials, mode } = {}) {
+    import(src, { as, delimiter: d = options.delimiter, bindings, base: b, type, root, conflict: c = options.conflict, load: l = 'eager', errors: e = options.errors, integrity, credentials, mode, registry: moduleRegistry } = {}) {
       const call = { as, delimiter: d, bindings, base: b, type, root, conflict: c, integrity, credentials, mode };
       const loud = (promise) => {
         if (e === 'throw') promise.catch((error) => reportLoudly(error, win));
         return promise;
       };
       try {
+        if (moduleRegistry !== undefined) {
+          throw new SyntaxError('"registry" cannot be set in HTMLModules.import(): it applies to the imports of an HTML module\'s own components (write <html-import-settings registry="scoped"> in the module); a page\'s tags always live in the document\'s registry');
+        }
         checkOptions({ delimiter: d, conflict: c, load: l, errors: e }, ' in HTMLModules.import()');
         checkFetchOptions({ integrity, credentials, mode }, ' in HTMLModules.import()');
       } catch (error) {

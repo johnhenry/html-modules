@@ -141,6 +141,54 @@ export const isHTMLComponent = (value) => value != null && value[COMPONENT] === 
 
 const pascal = (name) => (name ? camelCase(name).replace(/^./, (c) => c.toUpperCase()) : 'HTMLModuleElement');
 
+// ---------------------------------------------------------------------------
+// Scoped custom element registries
+
+const scopedSupport = new WeakMap(); // window → boolean
+
+/**
+ * True when `win` supports scoped custom element registries: `new CustomElementRegistry()` and
+ * `attachShadow({ customElementRegistry })`. Detected by trying it (feature-detecting only the constructor would
+ * claim support in browsers that have the interface but ignore the shadow root option).
+ * @param {any} [win]
+ */
+export function supportsScopedRegistries(win = globalThis) {
+  if (!scopedSupport.has(win)) {
+    let ok = false;
+    try {
+      const registry = new win.CustomElementRegistry();
+      const root = win.document.createElement('div').attachShadow({ mode: 'open', customElementRegistry: registry });
+      ok = root.customElementRegistry === registry;
+    } catch {}
+    scopedSupport.set(win, ok);
+  }
+  return scopedSupport.get(win);
+}
+
+const warnedScoped = new WeakSet(); // windows already told
+
+const hasScopedImports = (def) => def.imports.some((i) => i.registry === 'scoped');
+
+/**
+ * The registry a definition's own scoped imports are bound into, one per definition and window: the one its
+ * shadow roots are created with. Null when the definition has no scoped imports, or when the window cannot do
+ * scoped registries (the imports then use the registry the component is registered in, with one warning).
+ */
+function scopedRegistryOf(def, win) {
+  if (!hasScopedImports(def)) return null;
+  const slot = slotOf(def);
+  if (!slot.scoped.has(win)) {
+    let registry = null;
+    if (supportsScopedRegistries(win)) registry = new win.CustomElementRegistry();
+    else if (!warnedScoped.has(win)) {
+      warnedScoped.add(win);
+      (win.console ?? console).warn(`html-modules: ${describeDefinition(def)} has an import with registry="scoped", but this browser does not support scoped custom element registries (new CustomElementRegistry() with attachShadow({ customElementRegistry })): its tags are registered in the global registry instead, so two versions of the same tag will conflict`);
+    }
+    slot.scoped.set(win, registry);
+  }
+  return slot.scoped.get(win);
+}
+
 /**
  * Per-element state: `{ root, live, win, def }`: the shadow root, the bound template sites, the window, and the
  * definition last stamped into it (a hot reload swaps it).
@@ -208,7 +256,7 @@ function viewOf(def, win) {
  */
 const slots = new WeakMap(); // def → slot
 const slotOf = (def) => {
-  if (!slots.has(def)) slots.set(def, { def, instances: new Set(), windows: new Set(), observed: null });
+  if (!slots.has(def)) slots.set(def, { def, instances: new Set(), windows: new Set(), observed: null, scoped: new Map() });
   return slots.get(def);
 };
 
@@ -222,7 +270,8 @@ const observedFor = (def, view) => [...new Set([...def.props.map((p) => p.name),
 function stamp(el, state, def) {
   const { root, win } = state;
   const view = viewOf(def, win);
-  const fragment = (el.ownerDocument ?? win.document).importNode(view.content(), true);
+  // A scoped shadow root only upgrades what is created for it: importNode must be told which registry.
+  const fragment = (el.ownerDocument ?? win.document).importNode(view.content(), state.registry ? { deep: true, customElementRegistry: state.registry } : true);
   const live = view.info.sites.length ? resolveSites(fragment, view.info) : null;
   root.append(fragment);
   state.def = def;
@@ -257,11 +306,12 @@ function templateElementClass(def, win) {
       super();
       const current = slot.def; // the latest definition: a hot reload may have replaced the one this class was made from
       const view = viewOf(current, win);
+      const registry = scopedRegistryOf(current, win); // null unless the module's own imports are scoped (and supported)
       // A server-rendered (declarative) shadow root is kept, not re-stamped, but still gets the component's styles.
       let root = existingShadowRoot(this, current.shadow === 'closed');
       if (!root) {
         try {
-          root = this.attachShadow({ mode: current.shadow, delegatesFocus: current.delegatesFocus });
+          root = this.attachShadow({ mode: current.shadow, delegatesFocus: current.delegatesFocus, ...(registry && { customElementRegistry: registry }) });
         } catch (error) {
           // A declarative root of the other mode: `shadowRoot` hides a closed one, `attachInternals()` shows it.
           root = existingShadowRoot(this, true);
@@ -292,7 +342,7 @@ function templateElementClass(def, win) {
           this[property] = value;
         }
       }
-      const state = { root, live: null, win, def: current };
+      const state = { root, live: null, win, def: current, registry };
       states.set(this, state);
       slot.instances.add(new WeakRef(this));
       applyComponentStyles(root, current, win);
@@ -643,13 +693,19 @@ const lazyDeps = new WeakMap(); // registry → Set of lazy import entries alrea
  * thrown to whoever is registering the component, and with `errors: 'throw'`
  * also reported with reportError().
  */
+const bound = new WeakMap(); // registry → WeakSet of import entries already bound into it
+
 function bindImports(def, registry, win) {
   for (const dep of def.imports) {
-    const options = { as: dep.as, delimiter: dep.delimiter, bindings: dep.bindings, from: dep.from, conflict: dep.conflict, registry, window: win };
+    // A scoped import goes to the registry of the definition's own shadow roots; otherwise where the component is registered.
+    const target = (dep.registry === 'scoped' && scopedRegistryOf(def, win)) || registry;
+    if (!bound.has(target)) bound.set(target, new WeakSet());
+    if (bound.get(target).has(dep)) continue;
+    const options = { as: dep.as, delimiter: dep.delimiter, bindings: dep.bindings, from: dep.from, conflict: dep.conflict, registry: target, window: win };
     if (dep.module === undefined && typeof dep.lazy === 'function') {
-      if (!lazyDeps.has(registry)) lazyDeps.set(registry, new WeakSet());
-      if (lazyDeps.get(registry).has(dep)) continue;
-      watchLazyDep(dep, options, registry, win, new WeakSet());
+      if (!lazyDeps.has(target)) lazyDeps.set(target, new WeakSet());
+      if (lazyDeps.get(target).has(dep)) continue;
+      watchLazyDep(dep, options, target, win, new WeakSet());
       continue;
     }
     try {
@@ -658,6 +714,7 @@ function bindImports(def, registry, win) {
       if (dep.errors === 'throw') reportLoudly(error, win);
       throw error;
     }
+    bound.get(target).add(dep);
   }
 }
 

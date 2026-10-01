@@ -365,3 +365,15 @@ hotReplaceModule(previous: Namespace, next: Namespace): { reload: boolean, reaso
   previous)` adopts `next`.
 - `hotReplaceModule`: all-or-nothing over a whole module's exports (components, stylesheets; data must be equal). This is
   what `HTMLModules.hotReload()` and the Vite plugin's HMR code call.
+
+## `supportsScopedRegistries(window)`
+
+```ts
+supportsScopedRegistries(window = globalThis): boolean
+```
+
+True when the window supports scoped custom element registries: it tries `new window.CustomElementRegistry()` and
+`attachShadow({ customElementRegistry })` and checks that the shadow root reports that registry (feature-detecting only
+the constructor would claim support in an engine that has the interface but ignores the option). Cached per window. Used by the
+runtime for `registry="scoped"` imports (see [Scoped registries](html-syntax.md#scoped-registries)), which fall back to
+the registry the component is registered in, with one warning, where this is false.

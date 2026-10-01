@@ -45,14 +45,14 @@
  * module's own templates always know their tags).
  *
  * @typedef {{ export: string, element?: string, adopt?: boolean }} BindingRecord
- * @typedef {{ src: string, as?: string, delimiter?: string, type?: string, integrity?: string, conflict?: 'error'|'reuse', load?: 'eager'|'lazy', errors?: 'event'|'throw', bindings: BindingRecord[] }} ImportRecord
+ * @typedef {{ src: string, as?: string, delimiter?: string, type?: string, integrity?: string, conflict?: 'error'|'reuse', load?: 'eager'|'lazy', errors?: 'event'|'throw', registry?: 'global'|'scoped', bindings: BindingRecord[] }} ImportRecord
  * @typedef {{ kind: 'component', name: string|null, default?: true, template: string, shadow: 'open'|'closed', delegatesFocus: boolean, styles: string[], props?: Array<{ name: string, type: 'string'|'number'|'boolean' }>, formAssociated?: true, formControl?: string }
  *         | { kind: 'stylesheet', name: string|null, default?: true, css: string }
  *         | { kind: 'data', name: string|null, default?: true, value: unknown }
  *         | { kind: 'reexport', src: string, type?: string, integrity?: string, name?: string|null, default?: true, import?: string }} ExportRecord
  * (a re-export without a `name` key is a star re-export; `import: "*"` is a namespace re-export)
  * @typedef {{ url: string, imports: ImportRecord[], exports: ExportRecord[],
- *   importSettings?: { delimiter?: string, base?: string, conflict?: string, load?: string, errors?: string },
+ *   importSettings?: { delimiter?: string, base?: string, conflict?: string, load?: string, errors?: string, registry?: string },
  *   moduleSettings?: { shadow?: 'open'|'closed', delegatesFocus?: boolean } }} ModuleRecord
  *
  * A "raw element" is the neutral input both readers produce:
@@ -153,14 +153,14 @@ export function importRecord(raw, url = '') {
       throw new SyntaxError(`${error.message}${where}`);
     }
   }
-  const { delimiter, conflict, load, errors } = readImportOptions(raw.attrs, where);
+  const { delimiter, conflict, load, errors, registry } = readImportOptions(raw.attrs, where, { inModule: true });
   const type = nonEmpty(raw.attrs.type);
   const integrity = nonEmpty(raw.attrs.integrity);
   if (integrity) assertOption('integrity', integrity, ` on <html-import src="${src}">${where}`);
   const bindings = raw.children.filter((c) => c.tag === 'html-binding').map((c) => bindingRecord(c.attrs, where));
   return {
     src, ...(as && { as }), ...(delimiter !== undefined && { delimiter }), ...(type && { type }), ...(integrity && { integrity }),
-    ...(conflict && { conflict }), ...(load && { load }), ...(errors && { errors }), bindings,
+    ...(conflict && { conflict }), ...(load && { load }), ...(errors && { errors }), ...(registry && { registry }), bindings,
   };
 }
 
@@ -317,12 +317,12 @@ function settingsElement(list, before, what, where) {
  * the rest are the built-in defaults (a page's options never reach a module).
  * @param {ModuleRecord} record
  * @param {ImportRecord} i
- * @returns {{ delimiter?: string, conflict?: string, load?: string, errors?: string }}
+ * @returns {{ delimiter?: string, conflict?: string, load?: string, errors?: string, registry?: string }}
  */
 export function moduleImportOptions(record, i) {
   const s = record.importSettings ?? {};
   const out = {};
-  for (const name of ['delimiter', 'conflict', 'load', 'errors']) {
+  for (const name of ['delimiter', 'conflict', 'load', 'errors', 'registry']) {
     const v = i[name] ?? s[name];
     if (v !== undefined) out[name] = v;
   }
@@ -353,7 +353,7 @@ export function recordFromRaw({ imports, exports, importSettings: iset = [], mod
   }
   const iel = settingsElement(iset, imports, 'html-import', where);
   const mel = settingsElement(mset, exports, 'html-export', where);
-  const importSettings = iel ? readImportSettings(iel.attrs, where) : null;
+  const importSettings = iel ? readImportSettings(iel.attrs, where, { inModule: true }) : null;
   const moduleSettings = mel ? readModuleSettings(mel.attrs, where) : null;
   const record = {
     url,

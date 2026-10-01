@@ -26,6 +26,7 @@ const CHOICES = {
   shadow: ['open', 'closed'],
   credentials: ['omit', 'same-origin', 'include'],
   mode: ['cors', 'same-origin', 'no-cors'],
+  registry: ['global', 'scoped'],
   cache: ['default', 'no-store', 'reload', 'no-cache', 'force-cache', 'only-if-cached'],
 };
 
@@ -33,6 +34,16 @@ const CHOICES = {
 export const IMPORT_OPTIONS = ['delimiter', 'conflict', 'load', 'errors'];
 /** Attributes of `<html-import-settings>`. */
 export const IMPORT_SETTINGS_ATTRIBUTES = ['delimiter', 'base', 'conflict', 'load', 'errors'];
+/**
+ * Inside an HTML module an import may also choose its registry: `"global"` (the default: the tags it binds live where
+ * its importer's do) or `"scoped"` (a custom element registry of its own, used by the module's components' shadow roots).
+ * It means nothing on a page, whose tags always live in the document's registry, so a page rejects it.
+ */
+export const MODULE_IMPORT_OPTIONS = [...IMPORT_OPTIONS, 'registry'];
+export const MODULE_IMPORT_SETTINGS_ATTRIBUTES = [...IMPORT_SETTINGS_ATTRIBUTES, 'registry'];
+
+const registryOnPage = (tag, where) => `"registry" cannot be set on <${tag}>${where}: it applies to the imports of an HTML module's own components (the registry their shadow roots use), so write it in the module; a page's tags always live in the document's registry`;
+
 /** Attributes of `<html-module-settings>`. */
 export const MODULE_SETTINGS_ATTRIBUTES = ['shadow', 'delegates-focus'];
 
@@ -103,13 +114,16 @@ function checkAttributes(tag, attrs, allowed, where) {
 
 /**
  * Validate the attributes of an `<html-import-settings>` and return the
- * options it sets (only those written): `{ delimiter?, base?, conflict?, load?, errors? }`.
+ * options it sets (only those written): `{ delimiter?, base?, conflict?, load?, errors? }`, and, in a module,
+ * `registry?`.
  */
-export function readImportSettings(attrs, where = '') {
+export function readImportSettings(attrs, where = '', { inModule = false } = {}) {
   const at = ` on <html-import-settings>${where}`;
-  checkAttributes('html-import-settings', attrs, IMPORT_SETTINGS_ATTRIBUTES, where);
+  if (!inModule && Object.prototype.hasOwnProperty.call(attrs, 'registry')) throw new SyntaxError(registryOnPage('html-import-settings', where));
+  const allowed = inModule ? MODULE_IMPORT_SETTINGS_ATTRIBUTES : IMPORT_SETTINGS_ATTRIBUTES;
+  checkAttributes('html-import-settings', attrs, allowed, where);
   const out = {};
-  for (const name of IMPORT_SETTINGS_ATTRIBUTES) {
+  for (const name of allowed) {
     if (!Object.prototype.hasOwnProperty.call(attrs, name)) continue;
     assertOption(name, attrs[name], at);
     out[name] = attrs[name];
@@ -140,13 +154,14 @@ export function readModuleSettings(attrs, where = '') {
  * plain object): `{ delimiter?, conflict?, load?, errors? }`. `base` is
  * document-level only and is an error here.
  */
-export function readImportOptions(attrs, where = '') {
+export function readImportOptions(attrs, where = '', { inModule = false } = {}) {
   const at = ` on <html-import>${where}`;
+  if (!inModule && Object.prototype.hasOwnProperty.call(attrs, 'registry')) throw new SyntaxError(registryOnPage('html-import', where));
   if (Object.prototype.hasOwnProperty.call(attrs, 'base')) {
     throw new SyntaxError(`"base" cannot be set on <html-import>${where}: it is document-level only; use <html-import-settings base="…">, or write the full path in src`);
   }
   const out = {};
-  for (const name of IMPORT_OPTIONS) {
+  for (const name of inModule ? MODULE_IMPORT_OPTIONS : IMPORT_OPTIONS) {
     if (!Object.prototype.hasOwnProperty.call(attrs, name)) continue;
     assertOption(name, attrs[name], at);
     out[name] = attrs[name];

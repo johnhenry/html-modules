@@ -73,6 +73,14 @@ binding is thrown when the component is **registered** (`define()`, an import's 
 A bound URL attribute that would run script (`javascript:`, `vbscript:`, an HTML `data:` document) is not an error:
 the attribute is removed.
 
+### `registry`
+
+| Error | Message |
+| --- | --- |
+| `SyntaxError` | `Invalid registry="<value>" on <html-import> in <url>: use "global" or "scoped"` (also `on <html-import-settings>`) |
+| `SyntaxError` (page element, `HTMLModules.import()`) | `"registry" cannot be set on <html-import>: it applies to the imports of an HTML module's own components (the registry their shadow roots use), so write it in the module; a page's tags always live in the document's registry` (also `<html-import-settings>`; `"registry" cannot be set in HTMLModules.import(): …`) |
+| `console.warn` (not an error), once per window | `html-modules: "<name>" from <url> has an import with registry="scoped", but this browser does not support scoped custom element registries (…): its tags are registered in the global registry instead, so two versions of the same tag will conflict` |
+
 ## Module source (defaults and re-exports)
 
 | Error | Message |
@@ -108,7 +116,7 @@ the attribute is removed.
 | `SyntaxError` | `<html-import src="<src>"> is lazy but adopts a stylesheet in <url>: a module's components need their stylesheets when they render, so write load="eager" on this import` |
 | `SyntaxError` | `More than one <html-import-settings> in <url>: a module has at most one` (same for `<html-module-settings>`) |
 | `SyntaxError` | `<html-import-settings> must come before any <html-import> in <url>` / `<html-module-settings> must come before any <html-export> in <url>` |
-| `SyntaxError` | `Unknown attribute "<x>" on <html-import-settings> in <url>: use "delimiter", "base", "conflict", "load", "errors"` / `… on <html-module-settings> in <url>: use "shadow", "delegates-focus"` |
+| `SyntaxError` | `Unknown attribute "<x>" on <html-import-settings> in <url>: use "delimiter", "base", "conflict", "load", "errors", "registry"` (on a page the list has no `"registry"`) / `… on <html-module-settings> in <url>: use "shadow", "delegates-focus"` |
 | `SyntaxError` | `Invalid <option>="<value>" on <html-import-settings> in <url>: use "<a>" or "<b>"`, `Invalid shadow="<value>" on <html-module-settings> in <url>: use "open" or "closed"`, `Invalid delegates-focus="<value>" on <html-module-settings> in <url>: it is a boolean attribute; …` |
 | `SyntaxError` | `Invalid base "<value>" on <html-import-settings> in <url>: use a URL, relative to the document, e.g. "./vendor/ui@2/"` (a blank `base`) |
 

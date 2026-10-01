@@ -54,6 +54,7 @@ dependencies.
 - [Form-associated components](#form-associated-components)
 - [Settings](#settings)
 - [Lazy loading](#lazy-loading)
+- [Scoped registries](#scoped-registries)
 - [JavaScript API](#javascript-api)
 - [JavaScript-authored components](#javascript-authored-components)
 - [The compiler](#the-compiler)
@@ -515,6 +516,25 @@ place.
 
 Full detail: [Lazy loading](docs/api/javascript.md#lazy-loading).
 
+## Scoped registries
+
+Where the browser has scoped custom element registries (`new CustomElementRegistry()` and
+`attachShadow({ customElementRegistry })`: Chromium and Safari today), a module's own imports can register into a
+registry of their own instead of the global one, so two versions of a library that both use `<icon--star>` inside their
+components coexist on one page:
+
+```html
+<!-- lib.html: its imports are private to the registry its components' shadow roots use -->
+<html-import-settings registry="scoped"></html-import-settings>
+<html-import src="./icons.html" as="icon"></html-import>
+```
+
+`registry="scoped"` works on a module's `<html-import>` or `<html-import-settings>` (never on a page: a page's tags live
+in the document's registry). Where it is unsupported, `supportsScopedRegistries(window)` says so, and a scoped import
+falls back to the global registry with one console warning. Firefox did not support scoped registries when this was
+written, so its page is reported as "unsupported", not failed. Details: [HTML syntax](docs/api/html-syntax.md#scoped-registries);
+live: [`examples/scoped.html`](examples/scoped.html).
+
 ## JavaScript API
 
 `@johnhenry/html-modules/browser` defines the elements and exposes the shared instance as `HTMLModules` (exported,
@@ -727,7 +747,7 @@ responsible for HTML. Package and CDN routing (version ranges, mirrors, lockfile
 [`@johnhenry/mport`](https://github.com/johnhenry/mport), and point a page import map at what it resolves (see
 [Family](#family)).
 
-Deferred PRD items (HTML Include, further export metadata, a `bundle` compiler format, scoped registries) are
+Deferred PRD items (HTML Include, further export metadata, a `bundle` compiler format) are
 listed with reasons in [`docs/GAP.md`](docs/GAP.md#deferred).
 
 ## Project layout
@@ -812,13 +832,12 @@ shared record, plus the equivalence test, is what keeps them in step.
 
 ## Honest limitations
 
-- **Custom element names are global and permanent, and scoped registries are not supported yet.** Once a tag is
-  defined in a window it cannot be undefined or redefined: removing an `<html-import>` unregisters nothing (it only un-adopts the stylesheets its `adopt` bindings adopted), and a
-  second version of a library needs its own namespace (or `conflict="reuse"`, which keeps the first). The runtime
-  takes a `registry` option, but a component's shadow root is attached without one, so the tags inside its template
-  resolve against the global registry. Scoped custom element registries are deferred until native support settles
-  ([`docs/GAP.md`](docs/GAP.md#deferred)); selective `<html-binding>` imports are the way to keep the global registry
-  small meanwhile.
+- **Custom element names are global and permanent; scoped registries only help inside modules, where supported.** Once a
+  tag is defined in a window it cannot be undefined or redefined: removing an `<html-import>` unregisters nothing (it only
+  un-adopts the stylesheets its `adopt` bindings adopted), and a second version of a library needs its own namespace
+  (or `conflict="reuse"`, which keeps the first). `registry="scoped"` in a module lets two versions use the same *inner*
+  tags (see [Scoped registries](#scoped-registries)), but the tags a page uses are always global, and the option needs
+  a browser with scoped registries (it falls back, with a warning, elsewhere).
 - **Lazy loading only sees trees it can observe.** It watches the document and the shadow roots html-modules itself
   creates (open or closed). A tag used inside a shadow root made by other code (a JS component's own
   `attachShadow()`), in another document (an iframe), in `<template>` content not yet cloned into a watched tree, or

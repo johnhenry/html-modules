@@ -35,6 +35,9 @@ const cases = [
   [`<html-export name="f" form-associated form-control="">${T}</html-export>`, /form-control="" is empty; write a selector for the control inside the template/],
   [`<html-export name="f" form-associated props="value">${T}</html-export>`, /"value" cannot be a prop of a form-associated component: it is a built-in property \(name, value/],
   [`<html-export name="f" form-associated><style>p{}</style></html-export>`, /"form-associated" only applies to an export with a <template> in m\.html/],
+  // Scoped registries
+  [`<html-import src="./a.html" as="a" registry="isolated"></html-import>`, /Invalid registry="isolated" on <html-import> in m\.html: use "global" or "scoped"/],
+  [`<html-import-settings registry="shadow"></html-import-settings>`, /Invalid registry="shadow" on <html-import-settings> in m\.html: use "global" or "scoped"/],
   // Defaults
   [`<html-export default>${T}</html-export>`, /"default" needs a name to go with it; write name="default" for a default-only export/],
   [`<html-export name="default" default>${T}</html-export>`, /name="default" is already the default export; drop the "default" attribute/],
@@ -62,7 +65,7 @@ const cases = [
   // Settings
   [`<html-import src="./a.html"></html-import><html-import-settings delimiter="-"></html-import-settings>`, /<html-import-settings> must come before any <html-import> in m\.html/],
   [`<html-import-settings></html-import-settings><html-import-settings></html-import-settings>`, /More than one <html-import-settings> in m\.html: a module has at most one/],
-  [`<html-import-settings shadow="open"></html-import-settings>`, /Unknown attribute "shadow" on <html-import-settings> in m\.html: use "delimiter", "base", "conflict", "load", "errors"/],
+  [`<html-import-settings shadow="open"></html-import-settings>`, /Unknown attribute "shadow" on <html-import-settings> in m\.html: use "delimiter", "base", "conflict", "load", "errors", "registry"/],
   [`<html-module-settings shadow="none"></html-module-settings>`, /Invalid shadow="none" on <html-module-settings> in m\.html: use "open" or "closed"/],
   [`<html-export name="a">${T}</html-export><html-module-settings shadow="closed"></html-module-settings>`, /<html-module-settings> must come before any <html-export> in m\.html/],
 ];

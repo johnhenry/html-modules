@@ -25,6 +25,7 @@ type ModuleRecord = {
   exports: ExportRecord[],                       // document order
   importSettings?: {                             // present when the module has an <html-import-settings>
     delimiter?: string, base?: string, conflict?: 'error' | 'reuse', load?: 'eager' | 'lazy', errors?: 'event' | 'throw',
+    registry?: 'global' | 'scoped',      // modules only
   },
   moduleSettings?: { shadow?: 'open' | 'closed', delegatesFocus?: boolean },   // from <html-module-settings>
 };
@@ -32,7 +33,7 @@ type ModuleRecord = {
 type ImportRecord = {
   src: string,                                   // as written
   as?: string, delimiter?: string, type?: string,
-  conflict?: 'error' | 'reuse', load?: 'eager' | 'lazy', errors?: 'event' | 'throw',
+  conflict?: 'error' | 'reuse', load?: 'eager' | 'lazy', errors?: 'event' | 'throw', registry?: 'global' | 'scoped',
   bindings: BindingRecord[],                     // always present, possibly []
 };
 

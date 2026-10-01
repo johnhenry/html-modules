@@ -1,0 +1,12 @@
+<!--
+  Version 1 of a small component library. Its own import of icons.html is scoped: <icon--star> is registered in a
+  registry that only this library's shadow roots use, so another version of the library (which also says
+  <icon--star>, meaning something else) can live on the same page.
+-->
+<html-import-settings registry="scoped"></html-import-settings>
+<html-import src="./icons.html" as="icon"></html-import>
+
+<html-export name="rating">
+  <style>:host { display: inline-flex; gap: 0.25rem; align-items: center; }</style>
+  <template><icon--star></icon--star><icon--star></icon--star><slot></slot></template>
+</html-export>

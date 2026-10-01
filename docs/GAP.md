@@ -212,6 +212,13 @@ from JavaScript and gives them the same HMR. These are development tools: the de
 module loader (the PRD's non-goals), only a static server with a change feed. See
 [Dev server, hot reload and Vite](api/dev.md).
 
+## Extension beyond the PRD: scoped custom element registries
+
+`registry="scoped"` on a module's import (or `<html-import-settings>`): its tags are registered in a per-component-definition
+`CustomElementRegistry` that the component's shadow roots are created with, so two versions of a library that share inner tag
+names coexist. Feature-detected (`supportsScopedRegistries()`), with a warned fallback to the global registry; page-level
+use is rejected because a page's tags live in the document's registry. See [HTML syntax](api/html-syntax.md#scoped-registries).
+
 ## Deferred
 
 | Item | Why |
@@ -219,6 +226,5 @@ module loader (the PRD's non-goals), only a static server with a change feed. Se
 | **HTML Include** (§7, optional sixth concept; `<html-include src="./layout.html#header">`) | The PRD marks it optional and "may later be provided"; it composes DOM rather than defining components, and deserves its own design pass (slot projection, re-rendering, fragments). |
 | **Further export metadata** (§9.3: registration behaviour, version, hydration hints, lifecycle modules) | §9.3 forbids adding metadata before it has concrete semantics. |
 | **Compiler `--format bundle`** (conversation §7) | Mentioned as a possibility; a bundle needs a dependency walk over the file system and adds nothing to semantics. Dependencies compile file by file today (the CLI accepts several inputs). |
-| **Scoped custom-element registries** | Not in the PRD; native support is still arriving. The runtime takes a `registry` option so a scoped registry can be passed in later. |
 | **Rewriting relative URLs in templates** | A template is stamped into the page, so `<img src="./x.png">` resolves against the page, not the module. A correct rewrite is an HTML-aware pass over every URL-bearing attribute (`src`, `href`, `srcset`, `poster`, `<use href>`, inline `style`), and it would break URLs meant for the page. Documented instead; a module's `<style>` already resolves against the module (`baseURL`). |
 | **Hybrid script semantics** (a `<script>` inside an export that supplies the class) | The conversation explicitly leaves it out of V1. JS behaviour attaches by extending a definition's `.element` in a JS module instead. |

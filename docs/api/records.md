@@ -124,17 +124,43 @@ scanHTMLModule(source: string, url?: string /* = "" */): ModuleRecord
 ```
 
 Read HTML **source text** into the same record, with a small dependency-free scanner (this is what the compiler
-uses). It follows the HTML parsing rules that matter here: comments and `<!…>` / `<?…>` constructs are skipped;
-raw-text elements (`script`, `style`, `textarea`, `title`, `xmp`, `iframe`, `noembed`, `noframes`) end only at
-their own end tag; attribute names are lower-cased, values may be double-quoted, single-quoted or unquoted, the first
-of duplicate attributes wins, and character references in values are decoded (numeric ones, and `&amp;` `&lt;`
-`&gt;` `&quot;` `&apos;` `&nbsp;`); void elements have no content; self-closing syntax is ignored on normal
-elements; `<template>` content is kept verbatim (nested templates included) and is not part of the document.
+uses). It follows the HTML tokenizer where it matters here:
 
-The test suite checks that the scanner and the DOM reader produce the same record for every example module and for
-tricky source. Known differences: the scanner decodes only the named character references listed above. Both
-readers record a nested `<html-export>` / `<html-import>` with its enclosing element (`nestedIn`), and
+- The input is preprocessed as a browser does: CRLF and lone CR become LF, so a Windows-edited file records the same
+  CSS and template text as it does at runtime; NUL becomes U+FFFD in `<style>` / `<script>` text and attribute values.
+- Comments end at `-->` or `--!>`, and `<!-->` and `<!--->` are complete (empty) comments. `<!…>`, `<?…>` and
+  `<![CDATA[…>` are bogus comments that end at the first `>`; `</` followed by anything but a letter is too (`</>`
+  vanishes, and `</` at the very end is text).
+- Raw-text elements (`script`, `style`, `textarea`, `title`, `xmp`, `iframe`, `noembed`, `noframes`) end only at
+  their own end tag, which may carry attributes (a `>` inside a quoted value does not end it). `<script>` follows the
+  script-data escape states (`<!--` … `<script>` … `</script>` … `-->`), and `<plaintext>` never ends.
+- A tag the source ends inside (an unterminated `<html-export name="a"` or an unclosed quote) is dropped, and a
+  `<template>` that is never closed runs to the end of the source, as in a browser.
+- Attribute names are ASCII-lower-cased; values may be double-quoted, single-quoted or unquoted; the first of
+  duplicate attributes wins; character references in values are decoded (see
+  [Character references](#character-references)).
+- Void elements have no content; self-closing syntax is ignored on normal elements; `<template>` content is kept
+  verbatim (nested templates included) and is not part of the document.
+- Enough tree construction to know which elements are *direct children* of an `<html-export>`: `<p>` closes an open
+  `<p>`, an end tag for a non-"special" element does not close past a special one (an unclosed `<div>` keeps
+  `</html-export>` from closing the export, as in a browser), `<html>`/`<head>`/`<body>` tags are ignored, and a
+  `<frameset>` that replaces the body (nothing but neutral content before it) leaves the module empty.
+
+The test suite checks that the scanner and a **spec parser** (parse5, reading through the same
+[`readHTMLModule`](#readhtmlmoduledoc-url)) produce the same record for every example module, for a table of tokenizer
+edge cases, and for 4,000 seeded random tag-soup documents (`test/scan-spec.test.js`). Not modelled, so the two can
+disagree: foreign content (`<svg>` / `<math>`, whose `<style>` and `<script>` are not raw text there and whose
+self-closing tags are honoured), tables and other foster parenting, formatting elements and the adoption agency
+(`<a>`, `<b>`, …), and `<li>`/`<dd>`/`<option>`-style implied end tags. Put an export's children directly inside it, as
+every example does, and none of this matters. The same goes for `<select>`: a current browser parses an
+`<html-export>` inside a `<select>` (customizable select), as the scanner does; older parsers drop it. Both readers
+record a nested `<html-export>` / `<html-import>` with its nearest enclosing export or import (`nestedIn`), and
 `recordFromRaw` rejects it (see [Placement and nesting rules](html-syntax.md#placement-and-nesting-rules)).
+
+### Character references
+
+Numeric references and `&amp;` `&lt;` `&gt;` `&quot;` `&apos;` `&nbsp;` are decoded in attribute values; other named
+references are not yet (they are left as written).
 
 ## `recordFromRaw(raw, url)`
 

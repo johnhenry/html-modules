@@ -5,7 +5,7 @@
 // needs over a parse5 tree: querySelectorAll over the document (not into
 // <template> content), localName, attributes, children, parentElement.closest,
 // innerHTML (templates) and textContent.
-import { parse, serialize } from 'parse5';
+import { parse, parseFragment, serialize } from 'parse5';
 
 const textOf = (node) => {
   if (node.nodeName === '#text') return node.value;
@@ -68,3 +68,13 @@ export function specParse(html) {
 
 /** Stand-in for `new DOMParser().parseFromString(html, 'text/html')`. */
 export const specDOMParser = { parseFromString: (html) => specParse(html) };
+
+/**
+ * Template-content HTML as a spec parser would normalize it: parsed as a fragment and serialized again.
+ * (A <plaintext>, or a <script> after an escaping `<!--`, inside a template does not survive a serialize/parse
+ * round trip, since its serialization grows closing tags that it then swallows; such templates compare as one marker.)
+ */
+export function canonicalHTML(html) {
+  const out = serialize(parseFragment(html)).replace(/\s+/g, ' ').trim();
+  return /<plaintext|<!--[^]*<script/i.test(out) ? '[unstable]' : out;
+}

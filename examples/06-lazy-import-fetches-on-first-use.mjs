@@ -1,7 +1,8 @@
 // load="lazy": nothing is fetched until one of an import's tags is actually
 // used. A namespace import waits for any tag starting with <as><delimiter>;
 // an import with <html-binding> children waits for exactly the tags they bind;
-// an import with nothing to wait for loads only on el.load(). The JavaScript
+// an import with nothing to wait for (no `as`, no tag-producing binding) is an
+// error, since nothing could ever load it. el.load() loads any other now. The JavaScript
 // form returns a handle instead of a promise. linkedom stands in for the
 // browser (it has MutationObserver), and fetch reads from disk.
 //
@@ -30,7 +31,7 @@ const { document, customElements } = window;
 assert.deepEqual(lazyTargets({ as: 'ui' }), { tags: [], prefixes: ['ui--'] });
 assert.deepEqual(lazyTargets({ as: 'ui', delimiter: '-' }), { tags: [], prefixes: ['ui-'] });
 assert.deepEqual(lazyTargets({ bindings: [{ export: 'default', element: 'my-tip' }] }), { tags: ['my-tip'], prefixes: [] });
-assert.deepEqual(lazyTargets({}), { tags: [], prefixes: [] }, 'nothing to wait for: only load() loads it');
+assert.deepEqual(lazyTargets({}), { tags: [], prefixes: [] }, 'nothing to wait for: a lazy import like that is an error');
 
 document.body.innerHTML = `
   <html-import-settings load="lazy"></html-import-settings>

@@ -73,7 +73,7 @@
     await customElements.whenDefined('app--reading-list');
     document.getElementById('list').load(bindings);
     await document.getElementById('app').ready;
-    document.getElementById('loaded').innerHTML = [...HTMLModules.cache.keys()].map((u) => `<code>${u.replace(location.href.replace(/[^/]*$/, ''), '')}</code>`).join(', ');
+    document.getElementById('loaded').innerHTML = [...HTMLModules.cache.keys()].map((u) => `<code>${u.replace(/^(html|js):/, '').replace(location.href.replace(/[^/]*$/, ''), '')}</code>`).join(', ');
   </script>
   <script type="module" src="./shared/site.js"></script>
 </body>

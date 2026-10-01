@@ -123,7 +123,7 @@
     renderChecks(document.getElementById('warm-checks'), [
       ['the module loaded: its namespace has <code>' + Object.keys(warm.module).join(', ') + '</code>', !!warm.module.star],
       ['nothing was registered (<code>el.elements</code> is empty)', Object.keys(warm.elements).length === 0],
-      ['it is cached, so a later import of the same URL does not fetch again', HTMLModules.cache.has(new URL('./components/icons.html', location.href).href)],
+      ['it is cached, so a later import of the same URL does not fetch again', HTMLModules.cache.has(`html:${new URL('./components/icons.html', location.href).href}`)],
     ]);
 
     const log = (text) => document.getElementById('late-log').insertAdjacentHTML('beforeend', `<div>${text}</div>`);

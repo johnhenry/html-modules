@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scripting and lifecycle · html-modules</title>
+  <script>try { const t = localStorage.getItem('html-modules-examples-theme'); if (t) document.documentElement.dataset.theme = t; } catch {}</script>
+  <link rel="stylesheet" href="./shared/site.css">
+  <style>
+    .step { border-top: 1px solid var(--border); padding-top: 0.8rem; margin-top: 0.8rem; }
+    .step:first-of-type { border-top: 0; padding-top: 0; margin-top: 0; }
+    .stage { min-height: 2rem; padding: 0.5rem; border: 1px dashed var(--border); border-radius: 10px; margin: 0.4rem 0; }
+  </style>
+  <script type="module" src="../src/browser.js"></script>
+</head>
+<body>
+  <header class="site-header">
+    <a class="home" href="./index.html">html-modules</a>
+    <span class="crumb">Scripting and lifecycle</span>
+    <span class="spacer"></span>
+    <button class="theme-toggle" type="button">Dark mode</button>
+  </header>
+  <main class="page">
+    <nav class="site-nav"></nav>
+    <h1>Scripting and lifecycle</h1>
+    <p class="lede">
+      Everything here is driven from script and checked live: creating an <code>&lt;html-import&gt;</code> and setting its properties, un-adopting a
+      stylesheet, evicting a module from the cache, server-rendered (declarative) shadow DOM, a self-closed <code>&lt;html-binding /&gt;</code>, a lazy
+      import with nothing to wait for, and the security options (<code>integrity</code>, <code>credentials</code>, <code>mode</code>, a Trusted Types policy).
+    </p>
+    <div class="covers" data-page="scripting"></div>
+    <div class="summary-row" id="summary"></div>
+
+    <section class="card">
+      <div class="step">
+        <h3>A scripted <code>&lt;html-import&gt;</code></h3>
+        <p class="small"><code>createElement</code>, <code>append</code>, then set <code>src</code> and <code>as</code>: the import starts after the script, so both are seen. Changing <code>src</code> after it started is an <code>error</code> event, not a silent no-op.</p>
+        <ul id="checks-scripted"></ul>
+      </div>
+      <div class="step">
+        <h3>Un-adopting and unloading</h3>
+        <p class="small">Removing an <code>adopt</code> binding gives its stylesheet back; <code>HTMLModules.unload(src)</code> evicts the cache entry so the next load fetches again (tags stay registered).</p>
+        <ul id="checks-lifecycle"></ul>
+      </div>
+      <div class="step">
+        <h3>Server-rendered shadow DOM</h3>
+        <p class="small"><code>renderDeclarative(def, innerHTML)</code> produces <code>&lt;template shadowrootmode&gt;</code> markup. The browser's parser builds the shadow roots (open and closed); upgrading keeps their content and still applies the component's styles.</p>
+        <div class="stage" id="ssr-stage"></div>
+        <ul id="checks-ssr"></ul>
+      </div>
+      <div class="step">
+        <h3>Markup mistakes that used to be silent</h3>
+        <p class="small"><code>&lt;html-binding export="card" /&gt;</code> does not close the element in HTML, so the next binding became its child and was dropped. Now it is an <code>error</code> event; so is a lazy import with no tag to wait for.</p>
+        <ul id="checks-markup"></ul>
+      </div>
+      <div class="step">
+        <h3>Security options</h3>
+        <p class="small"><code>integrity</code> is checked with SubtleCrypto against the fetched bytes; <code>credentials</code> and <code>mode</code> reach <code>fetch()</code>; a <code>trustedTypes</code> policy wraps the HTML the library parses.</p>
+        <ul id="checks-security"></ul>
+      </div>
+    </section>
+
+    <div class="pager"><a href="./lazy.html">← Lazy loading</a><a href="./index.html">All examples →</a></div>
+  </main>
+
+  <div id="host" hidden></div>
+  <script type="module">
+    import { HTMLModules } from '../src/browser.js';
+    import { createHTMLModules, defineHTMLComponent, renderDeclarative, componentRoot } from '../src/index.js';
+    import { renderChecks } from './shared/site.js';
+
+    const $ = (id) => document.getElementById(id);
+    const host = $('host');
+    const tick = (ms = 0) => new Promise((r) => setTimeout(r, ms));
+    const once = (el, type) => new Promise((resolve) => el.addEventListener(type, (e) => resolve(e), { once: true }));
+    const groups = [];
+    const show = (id, checks) => { groups.push(renderChecks($(id), checks)); };
+
+    // --- A scripted <html-import> -----------------------------------------------------------------------
+    {
+      const imp = document.createElement('html-import');
+      host.append(imp);
+      imp.as = 'sc';
+      imp.src = './components/ui.html';
+      const detail = await imp.ready;
+      const heard = once(imp, 'error');
+      imp.src = './components/icons.html';
+      const changed = (await heard).detail.error;
+      show('checks-scripted', [
+        ['<code>append()</code> then <code>src = …</code> loaded the module and registered <code>&lt;sc--card&gt;</code>', !!customElements.get('sc--card') && imp.state === 'loaded'],
+        ['the reflected properties read back (<code>src</code>, <code>as</code>, <code>delimiter</code>, <code>loadMode</code>)', imp.as === 'sc' && imp.delimiter === '--' && imp.loadMode === 'eager' && imp.src.endsWith('icons.html')],
+        ['changing <code>src</code> after loading started fired an <code>error</code> event', /was changed from .* after loading started/.test(changed.message)],
+        ['…and kept what had loaded', Object.keys(detail.elements).includes('sc--card') && !customElements.get('sc--star')],
+      ]);
+    }
+
+    // --- Un-adopting and unloading ----------------------------------------------------------------------
+    {
+      const before = document.adoptedStyleSheets.length;
+      const wrap = document.createElement('div');
+      wrap.innerHTML = '<html-import src="./components/themes.html"><html-binding export="ocean" adopt></html-binding></html-import>';
+      host.append(wrap);
+      await wrap.firstElementChild.ready;
+      const adopted = document.adoptedStyleSheets.length;
+      const binding = wrap.querySelector('html-binding');
+      binding.remove();
+      const removed = document.adoptedStyleSheets.length;
+      wrap.firstElementChild.append(binding);
+      const again = document.adoptedStyleSheets.length;
+
+      const log = [];
+      const lab = createHTMLModules({ onEvent: (e) => e.type === 'fetch' && log.push(e.url) });
+      await lab.load('./components/ui.html');
+      await lab.load('./components/ui.html');
+      const cached = log.length;
+      const evicted = lab.unload('./components/ui.html');
+      await lab.load('./components/ui.html');
+      show('checks-lifecycle', [
+        ['an <code>adopt</code> binding adopted <code>ocean</code> into the document', adopted === before + 1],
+        ['removing the binding un-adopted it', removed === before],
+        ['putting it back adopted it again', again === before + 1],
+        ['two loads, one fetch', cached === 1],
+        ['<code>unload()</code> evicted the entry (<code>true</code>) and the next load fetched again', evicted === true && log.length === 2],
+        ['<code>unload()</code> of something not loaded is <code>false</code>', lab.unload('./components/never.html') === false],
+      ]);
+    }
+
+    // --- Server-rendered shadow DOM ----------------------------------------------------------------------
+    {
+      const open = defineHTMLComponent({ name: 'ssr-open', template: '<b class="stamped">stamped</b><slot></slot>', styles: [':host { display: block; color: rebeccapurple; }'] });
+      const closed = defineHTMLComponent({ name: 'ssr-closed', template: '<b class="stamped">stamped</b>', shadow: 'closed', styles: ['b { font-weight: 800; }'] });
+      const markup = renderDeclarative(open, 'light')
+        .replace('<b class="stamped">stamped</b>', '<i class="server">server</i>');
+      const markupClosed = renderDeclarative(closed).replace('<b class="stamped">stamped</b>', '<i class="server">server</i>');
+      const stage = $('ssr-stage');
+      // Parse with the browser's own parser: declarative shadow roots need setHTMLUnsafe / parseHTMLUnsafe.
+      stage.setHTMLUnsafe?.(`<ssr-open id="o">${markup}</ssr-open> <ssr-closed id="c">${markupClosed}</ssr-closed>`);
+      const supported = !!stage.querySelector('#o')?.shadowRoot;
+      open.define('ssr-open');
+      closed.define('ssr-closed');
+      await tick();
+      const o = stage.querySelector('#o');
+      const c = stage.querySelector('#c');
+      const closedRoot = componentRoot(c);
+      show('checks-ssr', supported
+        ? [
+          ['the open server-rendered root was kept (<code>&lt;i class="server"&gt;</code>, no <code>&lt;b class="stamped"&gt;</code>)', !!o.shadowRoot.querySelector('i.server') && !o.shadowRoot.querySelector('b.stamped')],
+          ['…and adopted the component\'s stylesheet', o.shadowRoot.adoptedStyleSheets.length === 1 && getComputedStyle(o).color === 'rgb(102, 51, 153)'],
+          ['the closed root is invisible to <code>shadowRoot</code> but was found through <code>attachInternals()</code> and kept', c.shadowRoot === null && !!closedRoot?.querySelector('i.server') && !closedRoot.querySelector('b.stamped')],
+          ['…and adopted its stylesheet too', closedRoot?.adoptedStyleSheets.length === 1],
+        ]
+        : [['this browser has no <code>setHTMLUnsafe()</code> (declarative shadow DOM from script); nothing to check', true]]);
+    }
+
+    // --- Markup mistakes ---------------------------------------------------------------------------------
+    {
+      const errors = [];
+      const listener = (e) => errors.push(e);
+      document.addEventListener('error', listener);
+      // The real parser nests the second binding inside the first.
+      const a = document.createElement('div');
+      a.innerHTML = '<html-import src="./components/ui.html" as="sm"><html-binding export="card"/><html-binding export="button"/></html-import>';
+      host.append(a);
+      await a.firstElementChild.ready.catch(() => {});
+      await tick(20);
+      const nested = errors.find((e) => /is nested inside <html-binding export="card">/.test(e.detail?.error?.message ?? ''));
+      const b = document.createElement('div');
+      b.innerHTML = '<html-import src="./components/hint.html" load="lazy"></html-import>';
+      host.append(b);
+      await b.firstElementChild.ready.catch(() => {});
+      await tick(20);
+      const lazy = errors.find((e) => /is lazy but has no tag to wait for/.test(e.detail?.error?.message ?? ''));
+      document.removeEventListener('error', listener);
+      show('checks-markup', [
+        ['<code>&lt;html-binding … /&gt;</code> nested the next binding, and the nested one reported an error', !!nested && nested.target.localName === 'html-binding' && /"\/>" does not close an element/.test(nested.detail.error.message)],
+        ['a lazy import with no tag to wait for failed instead of waiting forever', !!lazy && b.firstElementChild.state === 'error'],
+      ]);
+    }
+
+    // --- Security options --------------------------------------------------------------------------------
+    {
+      const text = await (await fetch('./components/icons.html', { cache: 'no-cache' })).arrayBuffer();
+      const digest = btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.digest('SHA-384', text))));
+      const lab = createHTMLModules();
+      const ok = await lab.load('./components/icons.html', { integrity: `sha384-${digest}` }).then(() => true, () => false);
+      const bad = await lab.load('./components/icons.html', { integrity: `sha384-${'A'.repeat(64)}` }).then(() => null, (e) => e);
+      const inits = [];
+      const spy = createHTMLModules({ credentials: 'same-origin', mode: 'cors', fetch: (url, init) => (inits.push(init), fetch(url, init)) });
+      await spy.load('./components/icons.html');
+      const policyCalls = [];
+      let policy = null;
+      try {
+        policy = window.trustedTypes?.createPolicy(`examples-${Date.now()}`, { createHTML: (s) => (policyCalls.push(s.length), s) });
+      } catch {}
+      let withPolicy = null;
+      if (policy) {
+        const tt = createHTMLModules({ trustedTypes: policy });
+        const ns = await tt.load('./components/icons.html');
+        ns.star.define('tt-star');
+        const el = document.createElement('tt-star');
+        document.body.append(el);
+        el.remove();
+        withPolicy = policyCalls.length >= 2;
+      }
+      show('checks-security', [
+        ['<code>integrity: "sha384-…"</code> accepted the matching bytes', ok === true],
+        ['…and a wrong digest rejected with <code>Integrity check failed</code>', /Integrity check failed for HTML module .*icons\.html/.test(bad?.message ?? '')],
+        ['<code>credentials</code> and <code>mode</code> reached <code>fetch()</code>', inits[0]?.credentials === 'same-origin' && inits[0]?.mode === 'cors'],
+        withPolicy === null
+          ? ['this browser has no Trusted Types; the policy option is not exercised', true]
+          : ['a <code>trustedTypes</code> policy wrapped the module source and the template', withPolicy],
+      ]);
+    }
+
+    const passed = groups.filter(Boolean).length;
+    $('summary').innerHTML = `<div><span class="num">${passed}/${groups.length}</span><span class="muted small">groups fully passing</span></div>`;
+  </script>
+  <script type="module" src="./shared/site.js"></script>
+</body>
+</html>

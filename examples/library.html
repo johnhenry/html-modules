@@ -172,7 +172,7 @@
     const widgets = await import('./components/widgets.js');
     renderChecks(document.getElementById('kit-checks'), [
       ['the barrel re-exports the <em>same</em> definitions: <code>kit.card === ui.card</code>', kit.card === ui.card],
-      ['one cache entry per URL: the page import, the barrel and <code>load()</code> all share one namespace', (await HTMLModules.cache.get(new URL('./components/ui.html', location.href).href)) === ui && (await HTMLModules.load('./components/ui.html')) === ui],
+      ['one cache entry per URL: the page import, the barrel and <code>load()</code> all share one namespace', (await HTMLModules.cache.get(`html:${new URL('./components/ui.html', location.href).href}`)) === ui && (await HTMLModules.load('./components/ui.html')) === ui],
       ['<code>rating</code> is <code>rating.html</code>\'s <code>stars</code>, renamed', kit.rating?.name === 'stars'],
       ['rating.html\'s own import registered <code>&lt;icon--star&gt;</code> for its template', !!customElements.get('icon--star') && !!rating.shadowRoot.querySelector('icon--star')?.shadowRoot],
       ['its adopted <code>gold</code> sheet is inside <code>&lt;kit--rating&gt;</code> only, not the page', rating.shadowRoot.adoptedStyleSheets.length === 2 && document.adoptedStyleSheets.length === 0],

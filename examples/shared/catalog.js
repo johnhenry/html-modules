@@ -97,6 +97,14 @@ export const checklist = [
     ['cmp.in-browser', 'compileHTMLModule() in the browser'],
     ['cmp.settings', 'settings compile too: export defaults in definitions, import settings in $imports'],
   ] },
+  { group: 'Scripting and lifecycle', items: [
+    ['scr.element-props', 'a scripted <html-import>: createElement, append, then set src/as; reflected properties; src changed after loading is an error'],
+    ['scr.unadopt', 'removing an adopt <html-binding> un-adopts its stylesheet'],
+    ['scr.unload', 'HTMLModules.unload(src) evicts a module from the cache'],
+    ['scr.dsd', 'server-rendered (declarative) shadow DOM, open and closed, kept and styled; renderDeclarative()'],
+    ['scr.markup', 'a self-closed <html-binding /> and a lazy import with nothing to wait for are errors, not silence'],
+    ['scr.security', 'integrity (SRI), credentials, mode and a Trusted Types policy'],
+  ] },
   { group: 'Errors', items: [
     ['err.fetch', 'missing module (404)'],
     ['err.missing-export', 'binding an export the module does not have'],
@@ -176,6 +184,11 @@ export const pages = [
     id: 'lazy', href: 'lazy.html', title: 'Lazy loading',
     summary: 'load="lazy": a live network panel shows each module fetched only when its first element appears, including a tag inside a component\'s shadow root, a binding\'s exact tag, a module\'s own lazy import, el.load(), disconnecting before load, and a lazy HTMLModules.import() handle.',
     covers: ['lazy.first-use', 'lazy.prefix', 'lazy.shadow', 'lazy.bindings', 'lazy.module', 'lazy.load', 'lazy.disconnect', 'lazy.api', 'set.import-settings', 'set.precedence', 'up.async', 'up.defined', 'imp.element-api'],
+  },
+  {
+    id: 'scripting', href: 'scripting.html', title: 'Scripting and lifecycle',
+    summary: 'Live checks for driving the library from script: a scripted <html-import>, un-adopting a stylesheet, unload(), server-rendered shadow DOM (open and closed), markup mistakes that used to be silent, and the security options.',
+    covers: ['scr.element-props', 'scr.unadopt', 'scr.unload', 'scr.dsd', 'scr.markup', 'scr.security', 'imp.element-api', 'imp.adopt', 'rt.cache'],
   },
 ];
 

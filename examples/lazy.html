@@ -29,7 +29,7 @@
   <html-import id="tip" src="./components/tip.html"><html-binding export="default" element="lazy-tip"></html-binding></html-import>
   <html-import id="gallery" src="./components/gallery.html" as="gallery" load="eager"></html-import>
   <html-import id="gone" src="./components/tally.html" as="gone"></html-import>
-  <html-import id="manual" src="./components/hint.html"></html-import>
+  <html-import id="manual" src="./components/hint.html"><html-binding export="default" element="manual-hint"></html-binding></html-import>
 
   <header class="site-header">
     <a class="home" href="./index.html">html-modules</a>
@@ -57,7 +57,9 @@
 &lt;/html-import&gt;
 &lt;html-import src="./components/gallery.html" as="gallery" load="eager"&gt;&lt;/html-import&gt;  <span class="muted">&lt;!-- the attribute wins --&gt;</span>
 &lt;html-import id="gone" src="./components/tally.html" as="gone"&gt;&lt;/html-import&gt;
-&lt;html-import id="manual" src="./components/hint.html"&gt;&lt;/html-import&gt;    <span class="muted">&lt;!-- nothing to watch: only .load() --&gt;</span></code></pre>
+&lt;html-import id="manual" src="./components/hint.html"&gt;                   <span class="muted">&lt;!-- waits for a &lt;manual-hint&gt; that never comes --&gt;</span>
+  &lt;html-binding export="default" element="manual-hint"&gt;&lt;/html-binding&gt;
+&lt;/html-import&gt;</code></pre>
 
     <div class="split">
       <section class="card">
@@ -110,7 +112,7 @@
 
         <div class="step">
           <h3>5. <code>el.load()</code></h3>
-          <p class="small"><code>#manual</code> has no <code>as</code> and no bindings, so there is no tag to wait for. <code>load()</code> loads any import now.</p>
+          <p class="small"><code>#manual</code> waits for a <code>&lt;manual-hint&gt;</code> that this page never adds. <code>load()</code> loads any import now. (A lazy import with <em>no</em> tag to wait for, no <code>as</code> and no tag-producing binding, is an error: it could never load.)</p>
           <button type="button" data-step="5">manual.load()</button>
           <ul id="checks-5"></ul>
         </div>
@@ -150,7 +152,7 @@ handle.state;   <span class="muted">// "waiting"; also handle.ready, handle.load
       </div>
     </div>
 
-    <div class="pager"><a href="./settings.html">← Settings</a><a href="./index.html">All examples →</a></div>
+    <div class="pager"><a href="./settings.html">← Settings</a><a href="./scripting.html">Scripting and lifecycle →</a></div>
   </main>
 
   <script type="module">

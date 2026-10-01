@@ -1,8 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.0.0 — first release, as `@johnhenry/html-modules` (2026-09-28)
 
-Fixes found by an audit of the first build. Nothing is published yet, so these are folded into `0.0.0` when it ships.
+Not published yet: everything in this entry ships as `0.0.0`. Work since the initial build comes first; the initial build itself is under "Initial build" below.
 
 ### Features
 
@@ -151,7 +151,7 @@ Fixes found by an audit of the first build. Nothing is published yet, so these a
 - parse5 is now the oracle for the DOM-reader/scanner agreement tests (`test/spec-dom.js`): linkedom's parser shares
   the scanner's blind spots, so comparing against it proved nothing. `e02dfa6`.
 
-## 0.0.0 — first release, as `@johnhenry/html-modules` (2026-09-28)
+### Initial build (2026-09-28)
 
 The first published version under any name. The package was developed locally as `web-module-graph` (from
 `e03cced`), renamed to `html-modules` in `2e04caa`, and never published under either name; `0.0.0` is not a

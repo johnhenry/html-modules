@@ -90,6 +90,7 @@ Nothing is silently ignored: a mistake is an exception, a rejection, or an `erro
 | `base` that does not resolve | `SyntaxError: Invalid base "<b>" on <html-import-settings>: it does not resolve to a URL against <document URL>` | every `<html-import>` of that document |
 | `<html-module-settings>` in a page | `SyntaxError: <html-module-settings> only applies inside an HTML module (a file loaded with <html-import>); in a page it has no exports to configure. For this page's imports, use <html-import-settings>` | the element |
 | Lazy import with no tag to wait for | `SyntaxError: <html-import src="<src>"> is lazy but has no tag to wait for: it would never load. …` (also for a lazy `<html-binding>` with no `export`: that binding's error, reported at once) | `<html-import>` |
+| `src` changed after loading started | `Error: <html-import src> was changed from "<a>" to "<b>" after loading started: an import's src is read once and the module is not reloaded; create a new <html-import> to import another module` | `<html-import>` (the import keeps what it loaded) |
 | Module fetch fails | `Error: Failed to fetch HTML module <url>: <status>` | `<html-import>` |
 | `integrity` does not match | `Error: Integrity check failed for HTML module <url>: its <alg> digest is <alg>-<digest>, which matches none of integrity="<metadata>"` | `<html-import>` |
 | Malformed `integrity` | `SyntaxError: Invalid integrity "<value>" …: use Subresource Integrity metadata such as "sha384-<base64 digest>" …` | `<html-import>` |

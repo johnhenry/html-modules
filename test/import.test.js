@@ -198,3 +198,62 @@ test('errors: a tag already bound to a different component', async () => {
   $('#a').insertAdjacentHTML('afterend', '<html-import id="b" src="./two.html" as="dup"></html-import>');
   await assert.rejects($('#b').ready, new RegExp(`Cannot bind <dup--card>: it is already defined by "card" from ${ORIGIN}one\\.html`));
 });
+
+test('a scripted <html-import>: createElement, append, then setAttribute("src") loads it (it starts after the script)', async () => {
+  const { document, window, fetch } = page('', { files: { 'ui.html': '<html-export name="card"><template>c</template></html-export>' } });
+  const imp = document.createElement('html-import');
+  document.body.append(imp);
+  imp.setAttribute('as', 'ui');
+  imp.src = './ui.html';
+  assert.equal(imp.src, './ui.html');
+  assert.equal(imp.as, 'ui');
+  const { elements } = await imp.ready;
+  assert.deepEqual(Object.keys(elements), ['ui--card']);
+  assert.ok(window.customElements.get('ui--card'));
+  assert.deepEqual(fetch.log, [`${ORIGIN}ui.html`]);
+});
+
+test('an <html-import> that had no src when it started errors, and starts over when one is set', async () => {
+  const { document, window } = page('', { files: { 'ui.html': '<html-export name="card"><template>c</template></html-export>' } });
+  const imp = document.createElement('html-import');
+  imp.as = 'late';
+  document.body.append(imp);
+  const heard = once(imp, 'error');
+  await assert.rejects(imp.ready, /<html-import> requires a "src" attribute/);
+  assert.match((await heard).detail.error.message, /requires a "src"/);
+  assert.equal(imp.state, 'error');
+  imp.src = './ui.html';
+  const { elements } = await imp.ready;
+  assert.deepEqual(Object.keys(elements), ['late--card']);
+  assert.ok(window.customElements.get('late--card'));
+});
+
+test('reflected properties: src, as, type, integrity write attributes; delimiter, conflict, loadMode, errors read what is in effect', async () => {
+  const { document } = page('', { delimiter: '-', conflict: 'reuse' });
+  const imp = document.createElement('html-import');
+  assert.deepEqual([imp.src, imp.as, imp.type, imp.integrity], ['', '', '', '']);
+  assert.deepEqual([imp.delimiter, imp.conflict, imp.loadMode, imp.errors], ['-', 'reuse', 'eager', 'event'], 'instance defaults');
+  Object.assign(imp, { src: './x.html', as: 'x', type: 'html', integrity: 'sha256-AAAA', delimiter: '--', conflict: 'error', loadMode: 'lazy', errors: 'throw' });
+  assert.equal(imp.getAttribute('src'), './x.html');
+  assert.equal(imp.getAttribute('integrity'), 'sha256-AAAA');
+  assert.deepEqual([imp.delimiter, imp.conflict, imp.loadMode, imp.errors], ['--', 'error', 'lazy', 'throw']);
+  assert.equal(imp.getAttribute('load'), 'lazy');
+  imp.loadMode = null;
+  assert.equal(imp.hasAttribute('load'), false);
+  assert.equal(imp.loadMode, 'eager');
+  assert.equal(typeof imp.load, 'function', 'load() is still the method');
+});
+
+test('changing src after loading has started fires an error event and changes nothing', async () => {
+  const { document, fetch } = page('', { files: { 'a.html': '<html-export name="a-b"><template>a</template></html-export>', 'b.html': '<html-export name="b-b"><template>b</template></html-export>' } });
+  const imp = document.createElement('html-import');
+  imp.src = './a.html';
+  imp.as = 'p';
+  document.body.append(imp);
+  await tick();
+  const heard = once(imp, 'error');
+  imp.src = './b.html';
+  assert.match((await heard).detail.error.message, /<html-import src> was changed from "\.\/a\.html" to "\.\/b\.html" after loading started: an import's src is read once/);
+  assert.deepEqual(fetch.log, [`${ORIGIN}a.html`]);
+  assert.equal(imp.state, 'loaded');
+});

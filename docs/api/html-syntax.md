@@ -166,7 +166,9 @@ data exports are not elements and are not registered by `as` (bind them with `<h
 - Empty `as`, `type` or `src` values count as absent.
 - In a page, `delimiter`, `conflict`, `load` and `errors` are resolved once, when the import starts (on
   connection, or on first access of `.ready` / `.module` / `.load()`); `src` and `type` are read when loading
-  begins, and `as` when the module is bound. Changing attributes after that has no effect.
+  begins, and `as` when the module is bound. Changing attributes after that has no effect, except that changing `src`
+  after loading has started fires an `error` event (the module is not reloaded; create a new `<html-import>`). The
+  element also has properties for these attributes: see [Elements](elements.md#htmlimport-html-import).
 
 ### What gets bound
 

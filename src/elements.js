@@ -195,6 +195,10 @@ export function defineHTMLModuleElements({ modules, window: win = globalThis, re
     #resolve = null;
     #reject = null;
     #phase = 'idle'; // idle | waiting | loading | loaded | error
+    #started = false; // configured, and loading begun (or failed or, if lazy, watching)
+    #scheduled = false; // a start is queued for after the current script
+    #missingSrc = false; // failed only because it had no src; setting one starts it again
+    #startedSignal = null;
     #config = null;
     #watcher = null;
     #state = null; // set once the module is loaded and the document parsed
@@ -203,16 +207,21 @@ export function defineHTMLModuleElements({ modules, window: win = globalThis, re
     #bindings = {};
     #tags = {};
 
+    static get observedAttributes() {
+      return ['src'];
+    }
+
     /** Promise of the module namespace (loads an eager import if needed; waits for a lazy one). */
     get module() {
-      this.#start();
-      if (this.#phase === 'loading' || this.#phase === 'loaded') return this.#loadModule();
-      return this.#ready.then((detail) => detail.module);
+      this.#schedule();
+      return this.#startedSignal.promise.then(() => (
+        this.#phase === 'loading' || this.#phase === 'loaded' ? this.#loadModule() : this.#ready.then((detail) => detail.module)
+      ));
     }
 
     /** Promise that settles once the module is bound: { module, elements, bindings, tags }. */
     get ready() {
-      this.#start();
+      this.#schedule();
       return this.#ready;
     }
 
@@ -220,6 +229,69 @@ export function defineHTMLModuleElements({ modules, window: win = globalThis, re
     load() {
       this.#start();
       return this.#begin();
+    }
+
+    // Reflected attributes. The options read the value in effect (as `settings` does) and write the attribute;
+    // `loadMode` is the `load` attribute (`load` itself is the method above).
+    get src() {
+      return this.getAttribute('src') ?? '';
+    }
+
+    set src(value) {
+      this.setAttribute('src', value);
+    }
+
+    get as() {
+      return this.getAttribute('as') ?? '';
+    }
+
+    set as(value) {
+      this.setAttribute('as', value);
+    }
+
+    get type() {
+      return this.getAttribute('type') ?? '';
+    }
+
+    set type(value) {
+      this.setAttribute('type', value);
+    }
+
+    get integrity() {
+      return this.getAttribute('integrity') ?? '';
+    }
+
+    set integrity(value) {
+      this.setAttribute('integrity', value);
+    }
+
+    get conflict() {
+      return this.settings.conflict;
+    }
+
+    set conflict(value) {
+      this.#write('conflict', value);
+    }
+
+    get loadMode() {
+      return this.settings.load;
+    }
+
+    set loadMode(value) {
+      this.#write('load', value);
+    }
+
+    get errors() {
+      return this.settings.errors;
+    }
+
+    set errors(value) {
+      this.#write('errors', value);
+    }
+
+    #write(name, value) {
+      if (value == null) this.removeAttribute(name);
+      else this.setAttribute(name, value);
     }
 
     /** "idle" | "waiting" (lazy, watching for its tags) | "loading" | "loaded" | "error" */
@@ -259,8 +331,60 @@ export function defineHTMLModuleElements({ modules, window: win = globalThis, re
       return this.settings.delimiter;
     }
 
+    set delimiter(value) {
+      this.#write('delimiter', value);
+    }
+
     connectedCallback() {
-      this.#start();
+      this.#schedule();
+    }
+
+    attributeChangedCallback(name, before, after) {
+      if (name !== 'src' || before === after) return;
+      if (this.#missingSrc && after) {
+        // It failed only for want of a src: start over now that it has one.
+        this.#missingSrc = false;
+        this.#started = false;
+        this.#ready = null;
+        this.#config = null;
+        this.#module = null;
+        this.#phase = 'idle';
+        this.#schedule();
+      } else if (!this.#started) {
+        if (this.isConnected) this.#schedule();
+      } else if (this.#phase !== 'waiting') {
+        const error = new Error(`<html-import src> was changed from "${before ?? ''}" to "${after ?? ''}" after loading started: an import's src is read once and the module is not reloaded; create a new <html-import> to import another module`);
+        fail(this, error, this.#config?.errors ?? errorsMode(this, this.ownerDocument));
+      }
+    }
+
+    /** Start after the current script, so attributes and children set right after insertion are seen. */
+    #schedule() {
+      this.#ensureReady();
+      if (this.#scheduled || (this.#started && this.#phase !== 'idle')) return; // (idle after starting: a lazy import to resume)
+      this.#scheduled = true;
+      queueMicrotask(() => {
+        this.#scheduled = false;
+        this.#start();
+      });
+    }
+
+    #ensureReady() {
+      if (this.#ready) return;
+      this.#ready = new Promise((resolve, reject) => {
+        this.#resolve = resolve;
+        this.#reject = reject;
+      });
+      this.#ready.catch((error) => {
+        if (reported.has(error)) return; // already announced by its <html-binding>
+        this.dispatchEvent(new win.CustomEvent('error', { bubbles: true, composed: true, detail: { error } }));
+        if ((this.#config?.errors ?? errorsMode(this, this.ownerDocument)) === 'throw') reportLoudly(error, win);
+      });
+      if (!this.#startedSignal || this.#startedSignal.done) {
+        let done;
+        const promise = new Promise((resolve) => (done = resolve));
+        this.#startedSignal = { promise, done: false, resolve: () => { this.#startedSignal.done = true; done(); } };
+      }
     }
 
     disconnectedCallback() {
@@ -293,22 +417,22 @@ export function defineHTMLModuleElements({ modules, window: win = globalThis, re
     }
 
     #start() {
-      if (!this.#ready) {
-        this.#ready = new Promise((resolve, reject) => {
-          this.#resolve = resolve;
-          this.#reject = reject;
-        });
-        this.#ready.catch((error) => {
-          if (reported.has(error)) return; // already announced by its <html-binding>
-          this.dispatchEvent(new win.CustomEvent('error', { bubbles: true, composed: true, detail: { error } }));
-          if ((this.#config?.errors ?? errorsMode(this, this.ownerDocument)) === 'throw') reportLoudly(error, win);
-        });
+      this.#ensureReady();
+      if (!this.#started) {
+        this.#started = true;
+        this.#startedSignal.resolve();
         let config;
         try {
           config = this.#configure();
         } catch (error) {
           this.#phase = 'error';
           this.#reject(error);
+          return;
+        }
+        if (!this.getAttribute('src')) {
+          this.#phase = 'error';
+          this.#missingSrc = true;
+          this.#reject(new SyntaxError('<html-import> requires a "src" attribute'));
           return;
         }
         if (config.load !== 'lazy') {

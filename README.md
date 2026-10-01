@@ -293,6 +293,7 @@ An import with no `as` and no bindings only loads the module, for its side effec
 | `el.state` | `idle`, `waiting`, `loading`, `loaded` or `error` |
 | `el.elements` / `el.bindings` / `el.tags` | registered tags → classes; bound export names → values; tags → `{ tag, namespace, export, reused? }` |
 | `el.settings` / `el.delimiter` | the options in use, after precedence |
+| `el.src` / `as` / `type` / `integrity`, `el.delimiter` / `conflict` / `loadMode` / `errors` | properties for the attributes (`loadMode` is `load`, whose name the method has); a script can `createElement`, `append`, then set `src`: it starts after the script. Changing `src` after loading started fires an `error` event |
 | `load` / `error` events | on the import; `error` has `detail.error` and bubbles |
 
 Full detail: [Elements (DOM API)](docs/api/elements.md).

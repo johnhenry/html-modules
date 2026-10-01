@@ -20,8 +20,8 @@ for (const page of [{ id: 'index', href: 'index.html' }, ...pages]) {
     await p.waitForTimeout(300);
     const failed = await p.$$eval('.checks .status.fail', (els) => els.map((e) => e.parentElement?.textContent?.trim()));
     expect(failed, 'failed checks').toEqual([]);
-    const passed = await p.$$eval('.checks .status.pass', (els) => els.length);
-    if (reportsChecks(page.href)) expect(passed, 'the page renders checks').toBeGreaterThan(0);
+    const reported = await p.$$eval('.checks .status.pass, .checks .status.unsupported', (els) => els.length);
+    if (reportsChecks(page.href)) expect(reported, 'the page renders checks').toBeGreaterThan(0);
     expect(problems).toEqual([]);
   });
 }

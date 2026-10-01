@@ -1,0 +1,9 @@
+<html-export name="badge" props="label">
+  <style>
+    :host { display: inline-block; width: 40px; height: 20px; background: url(./pixel.svg) no-repeat; color: rgb(10, 20, 30); }
+    .x { background-image: url("../up.svg"); }
+    .abs { background-image: url(/test/browser/fixtures/root.svg); }
+    .data { background-image: url(data:image/svg+xml,%3Csvg%2F%3E); }
+  </style>
+  <template><span class="x">{{label}}</span></template>
+</html-export>

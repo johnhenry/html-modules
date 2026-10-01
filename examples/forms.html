@@ -44,6 +44,7 @@
           <ff--text-field id="who" name="who" value="Ada" required>Name</ff--text-field>
           <ff--secret-field id="pin" name="pin" value="1234"></ff--secret-field>
           <ff--star-input id="stars" name="rating" required></ff--star-input>
+          <plain-control id="plain" name="plain"></plain-control>
         </div>
         <fieldset id="locked" disabled><legend>Disabled fieldset</legend><ff--text-field id="locked-field" name="locked" value="nope">Locked</ff--text-field></fieldset>
         <div class="row" style="margin-top:.75rem"><button type="submit">Submit</button> <button type="reset">Reset</button></div>
@@ -90,6 +91,15 @@
       formResetCallback() { super.formResetCallback(); this.paint(); }
     }
     customElements.define('ff--star-input', Stars);
+    // A control experiment: a hand-written form-associated element, no html-modules. Whether the browser restores
+    // form state on history navigation is the browser's business; this tells the checks below whether it does.
+    customElements.define('plain-control', class extends HTMLElement {
+      static formAssociated = true;
+      #internals = this.attachInternals();
+      get value() { return this._value ?? ''; }
+      set value(v) { this._value = String(v); this.#internals.setFormValue(this._value, this._value); }
+      formStateRestoreCallback(state) { this.value = state; }
+    });
     await customElements.whenDefined('ff--text-field');
 
     const form = document.getElementById('form');
@@ -109,10 +119,14 @@
 
     // Arriving by history navigation, the browser restores each control's saved state (formStateRestoreCallback).
     // Do not mutate the restored form; show what was restored instead.
-    const restored = performance.getEntriesByType('navigation')[0]?.type === 'back_forward';
-    if (restored) {
-      check('the browser restored the form state on history navigation (<code>formStateRestoreCallback</code>): the name is what was typed, not the default', who.value !== 'Ada');
-      check('… and the stars', stars.value !== '');
+    const arrived = performance.getEntriesByType('navigation')[0]?.type === 'back_forward';
+    if (arrived) {
+      const plain = document.getElementById('plain');
+      const browserRestores = plain.value !== ''; // the control experiment: a plain form-associated element
+      const state = (ok) => (browserRestores ? ok : 'unsupported');
+      document.documentElement.dataset.browserRestores = String(browserRestores);
+      check('the browser restored the form state on history navigation (<code>formStateRestoreCallback</code>): the name is what was typed, not the default', state(who.value !== 'Ada'));
+      check('… and the stars', state(stars.value !== ''));
     } else {
       check('the element is form-associated: <code>static formAssociated</code> and <code>el.form</code> is its form', who.constructor.formAssociated === true && who.form === form);
       check('its name and value reach FormData (value attribute is the initial value)', data().who === 'Ada');

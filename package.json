@@ -50,7 +50,8 @@
     "example:06": "node examples/06-lazy-import-fetches-on-first-use.mjs",
     "example:07": "node examples/07-hot-reload-swaps-components-under-live-elements.mjs",
     "examples:compile": "node scripts/compile-examples.js",
-    "test:browser": "playwright test"
+    "test:browser": "playwright test",
+    "bench": "node scripts/bench.js"
   },
   "keywords": [
     "html-modules",

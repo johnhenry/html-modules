@@ -43,15 +43,23 @@ test('reset restores defaults, including a typed value', async ({ page }) => {
   expect(await page.locator('#who input').inputValue()).toBe('Ada');
 });
 
-test('form state is restored on history navigation (formStateRestoreCallback)', async ({ page }, info) => {
+test('form state is restored on history navigation (formStateRestoreCallback), wherever the browser restores it at all', async ({ page }, info) => {
   await page.locator('#who input').fill('Restored');
   await page.locator('#stars').evaluate((el) => el.shadowRoot.querySelector('[data-n="3"]').click());
+  await page.locator('#plain').evaluate((el) => { el.value = 'plain-kept'; }); // the control experiment: no html-modules
   await page.goto('/examples/index.html');
   await page.goBack();
   await page.waitForSelector('.checks .status');
   await page.waitForTimeout(200);
+  const browserRestores = (await page.locator('#plain').evaluate((el) => el.value)) === 'plain-kept';
   const d = await formData(page);
-  info.annotations.push({ type: 'state-restore', description: d.who === 'Restored' ? 'restored' : `not restored (${JSON.stringify(d)})` });
-  expect(d).toMatchObject({ who: 'Restored', rating: '3' });
-  expect(await page.$$eval('.checks .status.fail', (els) => els.length)).toBe(0);
+  info.annotations.push({ type: 'state-restore', description: browserRestores ? `restored ${JSON.stringify(d)}` : 'this engine did not restore even a plain form-associated custom element in an automated back navigation' });
+  if (browserRestores) {
+    expect(d).toMatchObject({ who: 'Restored', rating: '3', plain: 'plain-kept' });
+    expect(new Set(await page.$$eval('.checks .status', (els) => els.map((e) => e.textContent)))).toEqual(new Set(['pass']));
+  } else {
+    // Nothing for html-modules to restore: the page reports its restore checks as unsupported, not failed.
+    expect(await page.$$eval('.checks .status.fail', (els) => els.length)).toBe(0);
+    expect(await page.$$eval('.checks .status.unsupported', (els) => els.length)).toBeGreaterThan(0);
+  }
 });

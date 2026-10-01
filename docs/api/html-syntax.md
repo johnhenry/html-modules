@@ -283,7 +283,8 @@ module's own imports a registry of their own:
   same module without `registry="scoped"` stays in the registry the component itself is registered in.
 - **Only inside modules.** A page's tags must be defined where the document upgrades them (the global registry), so
   `registry` on a page's `<html-import>` / `<html-import-settings>`, or in `HTMLModules.import()`, is a `SyntaxError`.
-- **Where it is unsupported** (Firefox at the time of writing, and older Chromium and Safari), the page can ask:
+- **Where it is unsupported** (checked in CI: Firefox 155 and the Linux WebKit build (26.6) Playwright ships do not have
+  it; Chromium 153 and WebKit 26.6 on macOS do), the page can ask:
   `supportsScopedRegistries(window)` (it *tries* `new CustomElementRegistry()` and `attachShadow({ customElementRegistry })`
   rather than trusting the constructor). A scoped import then **falls back to the registry the component is registered in**
   and logs one `console.warn` per window naming the component; two versions with the same inner tag then conflict as they

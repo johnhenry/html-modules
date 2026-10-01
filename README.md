@@ -520,7 +520,7 @@ Full detail: [Lazy loading](docs/api/javascript.md#lazy-loading).
 ## Scoped registries
 
 Where the browser has scoped custom element registries (`new CustomElementRegistry()` and
-`attachShadow({ customElementRegistry })`: Chromium and Safari today), a module's own imports can register into a
+`attachShadow({ customElementRegistry })`), a module's own imports can register into a
 registry of their own instead of the global one, so two versions of a library that both use `<icon--star>` inside their
 components coexist on one page:
 
@@ -532,8 +532,9 @@ components coexist on one page:
 
 `registry="scoped"` works on a module's `<html-import>` or `<html-import-settings>` (never on a page: a page's tags live
 in the document's registry). Where it is unsupported, `supportsScopedRegistries(window)` says so, and a scoped import
-falls back to the global registry with one console warning. Firefox did not support scoped registries when this was
-written, so its page is reported as "unsupported", not failed. Details: [HTML syntax](docs/api/html-syntax.md#scoped-registries);
+falls back to the global registry with one console warning. The cross-browser CI found Chromium 153 and macOS WebKit 26.6
+supporting scoped registries and Firefox 155 and the Linux WebKit build (26.6) not, so on those the page reports
+"unsupported" instead of failing. Details: [HTML syntax](docs/api/html-syntax.md#scoped-registries);
 live: [`examples/scoped.html`](examples/scoped.html).
 
 ## JavaScript API

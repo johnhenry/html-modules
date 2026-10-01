@@ -32,6 +32,6 @@ test('with no allowed policy for the library, the failure is the browser\'s Type
   await page.goto(`/test/browser/fixtures/probe-tt.html?csp=${TT('some-other-policy')}`);
   await page.waitForFunction(() => window.__done === true);
   const result = await page.evaluate(() => window.__result);
-  if (await hasTT(page)) expect(result).toMatch(/TrustedHTML|Trusted Type|trusted types/i);
+  if (await hasTT(page)) expect(result).toMatch(/TrustedHTML|Trusted Type|trusted types|Sink type mismatch/i);
   else expect(result).toBe('ok');
 });

@@ -30,8 +30,10 @@ Fixes found by an audit of the first build. Nothing is published yet, so these a
 
 ### Behavior changes (breaking, before any release)
 
-- **Constructed stylesheets get the module URL as `baseURL`**, so `url()` in a module's CSS resolves against the
-  module; `@import` in a `<style>` is a `SyntaxError` in both readers (`replaceSync()` dropped it silently). Relative
+- **Relative `url()`s in a module's CSS resolve against the module.** The first attempt (`f850a2c`) passed the
+  module URL as `CSSStyleSheet`'s `baseURL`, which browsers ignore (checked in Chrome 152); the CSS text is now
+  rewritten to absolute URLs before it reaches the page, in constructed sheets, the `<style>` fallback and
+  `renderDeclarative()`, with `sheet.resolvedCss` exposing the result. `da56fb2`. Also: `@import` in a `<style>` is a `SyntaxError` in both readers (`replaceSync()` dropped it silently). Relative
   URLs in a *template* still resolve against the page, now documented. `<html-import-settings base>`'s fallback also no
   longer passes through an `about:blank` `baseURI`. `f850a2c`.
 - **A lazy import with no tag to wait for is an error**, in a page, in `HTMLModules.import()` and inside modules,

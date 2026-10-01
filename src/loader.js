@@ -35,7 +35,7 @@ const normalizeBase64 = (b64) => b64.replace(/-/g, '+').replace(/_/g, '/').repla
  * Fails closed: without `crypto.subtle` the load is refused rather than trusted.
  * @returns {Promise<void>} rejects with an Error naming `url` when the digest does not match
  */
-export async function verifyIntegrity(bytes, integrity, url, win = globalThis) {
+export async function verifyIntegrity(bytes, integrity, url, win = globalThis, source = 'integrity=') {
   const tokens = parseIntegrity(integrity, ` for ${url}`);
   const subtle = win?.crypto?.subtle ?? globalThis.crypto?.subtle;
   if (!subtle) throw new TypeError(`Cannot verify the integrity of ${url}: this environment has no crypto.subtle (SubtleCrypto needs a secure context: https or localhost)`);
@@ -44,8 +44,67 @@ export async function verifyIntegrity(bytes, integrity, url, win = globalThis) {
   const algorithm = candidates[0].algorithm;
   const digest = toBase64(new Uint8Array(await subtle.digest(SUBTLE_NAME[algorithm], bytes)));
   if (!candidates.some((t) => normalizeBase64(t.hash) === normalizeBase64(digest))) {
-    throw new Error(`Integrity check failed for HTML module ${url}: its ${algorithm} digest is ${algorithm}-${digest}, which matches none of integrity="${integrity}"`);
+    throw new Error(`Integrity check failed for HTML module ${url}: its ${algorithm} digest is ${algorithm}-${digest}, which matches none of ${source === 'integrity=' ? `integrity="${integrity}"` : `${source} "${integrity}"`}`);
   }
+}
+
+const tokenSet = (value, where) => new Set(parseIntegrity(value, where).map((t) => `${t.algorithm}-${normalizeBase64(t.hash)}`));
+
+/**
+ * The `integrity` entries of the page's inline `<script type="importmap">` elements, as absolute URL → metadata (the
+ * first entry for a URL wins, as when the browser merges import maps). Keys are URL-like specifiers resolved against
+ * `base`. A map that is not valid JSON is skipped (the browser ignores it too).
+ * @returns {Map<string, string>}
+ */
+export function pageImportMapIntegrity(win = globalThis, base) {
+  const out = new Map();
+  const doc = win?.document;
+  if (typeof doc?.querySelectorAll !== 'function') return out;
+  for (const script of doc.querySelectorAll('script[type="importmap"]')) {
+    let map;
+    try {
+      map = JSON.parse(script.textContent);
+    } catch {
+      continue;
+    }
+    if (!map?.integrity || typeof map.integrity !== 'object') continue;
+    for (const [key, value] of Object.entries(map.integrity)) {
+      let url;
+      try {
+        url = withoutHash(new URL(key, base ?? doc.baseURI).href);
+      } catch {
+        continue;
+      }
+      if (!out.has(url) && typeof value === 'string') out.set(url, value);
+    }
+  }
+  return out;
+}
+
+const withoutHash = (href) => href.replace(/#.*$/s, '');
+
+/**
+ * Normalize an integrity manifest (`{ [url]: "sha384-…" }`, the shape of an import map's `integrity` object) into a
+ * Map of absolute URL → metadata. Keys resolve against `base`; every value must be valid SRI metadata.
+ * @returns {Map<string, string>}
+ */
+function readManifest(manifest, base) {
+  if (manifest === undefined) return new Map();
+  if (manifest === null || typeof manifest !== 'object' || Array.isArray(manifest) || manifest instanceof Map) {
+    throw new TypeError('Invalid integrity manifest in createLoader(): pass an object of URL → Subresource Integrity metadata, as in an import map\'s "integrity" ({ "https://example.com/ui.html": "sha384-<base64 digest>" })');
+  }
+  const out = new Map();
+  for (const [key, value] of Object.entries(manifest)) {
+    let url;
+    try {
+      url = withoutHash(new URL(key, base).href);
+    } catch {
+      throw new TypeError(`Invalid integrity manifest in createLoader(): the key ${JSON.stringify(key)} is not a URL${base ? '' : ' (and there is no baseURL to resolve it against)'}`);
+    }
+    parseIntegrity(value, ` in the integrity manifest entry for ${key}`);
+    out.set(url, value.trim().split(/\s+/).join(' '));
+  }
+  return out;
 }
 
 const sanitizerIds = new WeakMap(); // sanitizer function → a number that tells cache entries apart
@@ -247,6 +306,8 @@ export function parseModuleSource(html, win = globalThis) {
  * @param {'cors'|'same-origin'|'no-cors'} [options.mode]          fetch `mode` for HTML modules (default: the platform's)
  * @param {{ createHTML(html: string): unknown } | false} [options.trustedTypes]  Trusted Types policy for the HTML parsed and stamped in `window` (default: a policy named "html-modules" where `window.trustedTypes` exists; `false`: never)
  * @param {string} [options.nonce]   CSP nonce for the `<style>` elements used where constructable stylesheets are unavailable
+ * @param {Record<string, string>} [options.integrity]   an integrity manifest: module URL → Subresource Integrity metadata (the shape of an import map's `integrity`), consulted for every fetch
+ * @param {boolean} [options.strict]   refuse any HTML fetch that has no integrity metadata (neither a manifest entry nor an `integrity` attribute)
  * @param {import('./types.js').Sanitizer | false} [options.sanitize]   sanitizes every HTML component template this loader loads (the default for each load; `false`: none): see `Sanitizer`
  * @param {(html: string, url: string) => ParentNode} [options.parseHTML]  default: parses into a detached element (see `parseModuleSource`)
  * @param {(url: string) => Promise<object>} [options.importModule]      default: native import()
@@ -263,6 +324,8 @@ export function createLoader({
   trustedTypes,
   nonce,
   sanitize,
+  integrity: manifestOption,
+  strict = false,
   parseHTML,
   importModule = (url) => import(url),
   window: win = globalThis,
@@ -270,6 +333,9 @@ export function createLoader({
 } = {}) {
   checkFetchOptions({ credentials, mode }, ' in createLoader()');
   checkSanitize(sanitize, ' in createLoader()');
+  if (typeof strict !== 'boolean') throw new TypeError(`Invalid strict in createLoader(): ${JSON.stringify(strict)}; use true or false`);
+  /** The integrity manifest: absolute module URL → SRI metadata. */
+  const pins = readManifest(manifestOption, baseURL);
   let defaultSanitize = sanitize || undefined;
   /** The sanitizer a load uses: its own option (false: none), else the loader's. */
   const sanitizerFor = (option) => (option === undefined ? defaultSanitize : option || undefined);
@@ -326,16 +392,18 @@ export function createLoader({
     }
   }
 
-  async function loadHTML(url, { integrity, credentials: c = credentials, mode: m = mode, cache: httpCache, sanitize: sanitizer } = {}) {
+  async function loadHTML(url, { integrity, pinned, credentials: c = credentials, mode: m = mode, cache: httpCache, sanitize: sanitizer } = {}) {
     onEvent({ type: 'fetch', url });
     const init = { ...(c !== undefined && { credentials: c }), ...(m !== undefined && { mode: m }), ...(httpCache !== undefined && { cache: httpCache }) };
     const res = await (Object.keys(init).length ? fetchImpl(url, init) : fetchImpl(url));
     if (!res.ok) throw new Error(`Failed to fetch HTML module ${url}: ${res.status}`);
     let source;
-    if (integrity) {
+    if (integrity || pinned) {
       if (typeof res.arrayBuffer !== 'function') throw new TypeError(`Cannot verify the integrity of ${url}: the response has no arrayBuffer() (the fetch option must return a Response)`);
       const bytes = await res.arrayBuffer();
-      await verifyIntegrity(bytes, integrity, url, win);
+      // Both are checked when both exist: an attribute cannot loosen what the manifest pins, nor the manifest what it says.
+      if (pinned) await verifyIntegrity(bytes, pinned, url, win, 'the integrity manifest entry');
+      if (integrity) await verifyIntegrity(bytes, integrity, url, win);
       source = new TextDecoder().decode(bytes);
     } else source = await res.text();
     let record = readHTMLModule(parse(source, url), url);
@@ -349,6 +417,29 @@ export function createLoader({
     return linkHTMLModule(record, modules, { lazy: (src, type, sri) => () => loadDependency(url, src, type, referrer, sri, sanitizer) });
   }
 
+  /**
+   * A JavaScript module cannot be fetched and checked here: `import()` is the browser's. What can be checked is that the
+   * page's import map pins the same bytes, because the browser enforces an import map's `integrity` for `import()`.
+   */
+  function checkImportMapPin(url, wanted, source) {
+    const entry = pageImportMapIntegrity(win, baseURL).get(withoutHash(url));
+    const fix = `Add the module to the page's import map before any module script runs: <script type="importmap">{ "integrity": { "${url}": "${wanted}" } }</script>. @johnhenry/mport generates these entries: router.build(specifiers, { graph: true }) puts every file's hash in the map's "integrity"`;
+    if (entry === undefined) {
+      throw new Error(`Cannot verify the JavaScript module ${url} (${source}="${wanted}"): the page's import map has no "integrity" entry for it, and import() is the browser's, not html-modules'. ${fix}`);
+    }
+    let same;
+    try {
+      const have = tokenSet(entry, ` in the import map's integrity entry for ${url}`);
+      const want = tokenSet(wanted, ` for ${url}`);
+      same = have.size === want.size && [...want].every((t) => have.has(t));
+    } catch (error) {
+      throw new Error(`Cannot verify the JavaScript module ${url}: the page's import map has an unusable "integrity" entry for it (${error.message})`, { cause: error });
+    }
+    if (!same) {
+      throw new Error(`Cannot verify the JavaScript module ${url}: the page's import map pins it as "${entry}", which is not ${source}="${wanted}". The two must name the same digests; ${fix}`);
+    }
+  }
+
   function start(url, type, options = {}) {
     const kind = type ?? (HTML_EXT.test(url) ? 'html' : 'js');
     const { integrity } = options;
@@ -356,15 +447,22 @@ export function createLoader({
     if (kind === 'js' && options.inherited) {
       throw new Error(`Refusing to import the JavaScript module ${url} from a sanitized HTML module: import() runs it with the page's authority, and a sanitizer only vets templates. Remove that <html-import>, or import the module from the page`);
     }
-    if (integrity !== undefined) {
-      parseIntegrity(integrity, ` for ${url}`);
-      if (kind !== 'html') throw new TypeError(`integrity applies to HTML modules only: ${url} is loaded with import(), which cannot verify it (to pin a JavaScript module, use the "integrity" field of an import map)`);
+    if (integrity !== undefined) parseIntegrity(integrity, ` for ${url}`);
+    const pinned = pins.get(withoutHash(url));
+    if (kind === 'html' && strict && !integrity && !pinned) {
+      throw new Error(`Refusing to fetch the HTML module ${url}: strict mode is on and it has no integrity metadata (add it to the integrity manifest, or give the import an integrity attribute)`);
     }
     // Keyed by kind and URL (the same URL loaded as HTML and as JavaScript are two modules), and a load with
     // integrity is cached apart from one without: an unverified copy must not satisfy it.
     const key = cacheKey(kind, url, integrity, sanitizer);
     if (!cache.has(key)) {
-      const promise = kind === 'html' ? loadHTML(url, { ...options, sanitize: sanitizer }) : Promise.resolve().then(() => importModule(url));
+      const promise = kind === 'html'
+        ? loadHTML(url, { ...options, pinned, sanitize: sanitizer })
+        : Promise.resolve().then(() => {
+          if (integrity) checkImportMapPin(url, integrity, 'integrity');
+          if (pinned) checkImportMapPin(url, pinned, 'the integrity manifest entry');
+          return importModule(url);
+        });
       cache.set(key, promise);
       promise.then(
         () => onEvent({ type: 'load', url, kind }),
@@ -445,6 +543,12 @@ export function createLoader({
 
   return {
     load, unload, reload, cached, resolve, cache, baseURL,
+    /** The integrity manifest in effect: absolute URL → SRI metadata (a copy). */
+    get integrity() {
+      return Object.fromEntries(pins);
+    },
+    /** True when an HTML fetch without integrity metadata is refused. */
+    strict,
     /** The sanitizer applied to component templates by default (undefined: none). Loads already cached are unchanged. */
     get sanitize() {
       return defaultSanitize;

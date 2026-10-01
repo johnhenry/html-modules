@@ -70,6 +70,8 @@ createHTMLModules(options?: {
 | `fetch` | `globalThis.fetch` | Fetches HTML modules, called as `fetch(url)` or, when `credentials` / `mode` are set, `fetch(url, { credentials, mode })`. Only `ok`, `status` and `text()` of the response are used, plus `arrayBuffer()` when an `integrity` is checked. |
 | `credentials` | the platform's | The `credentials` passed to `fetch()` for HTML modules (JavaScript modules go through `import()`, which has no such option). Overridable per `load()` / `import()`. See [Security model](../../README.md#security-model). |
 | `mode` | the platform's | The `mode` passed to `fetch()` for HTML modules. `navigate` is not allowed, and `no-cors` gives an opaque response a module cannot be read from, so it is only useful with a custom `fetch`. |
+| `integrity` | none | An **integrity manifest**: `{ [url]: "sha384-…" }`, the shape of an import map's `integrity`. Keys resolve against `baseURL` (a `#fragment` is ignored); every value must be valid SRI metadata (`SyntaxError` otherwise; a non-object is a `TypeError`). Each HTML module fetched, at any depth, is checked against its entry; an entry for a `.js` URL requires the page's import map to carry the same digests. Read back (absolute keys) as `instance.loader.integrity`. See [Pinning a whole graph](../../README.md#pinning-a-whole-graph-the-integrity-manifest). |
+| `strict` | `false` | `true` refuses any HTML fetch that has neither a manifest entry nor an `integrity` attribute, before the request (`Error: Refusing to fetch the HTML module <url>: strict mode is on and it has no integrity metadata`). JavaScript imports are not affected. `instance.loader.strict` reads it. |
 | `trustedTypes` | `"html-modules"` policy, if `window.trustedTypes` exists | A Trusted Types policy object (`{ createHTML(html) }`) used for the HTML the library parses and stamps in this window; `false` never uses Trusted Types. See [Trusted Types and CSP](#trusted-types-and-csp). |
 | `nonce` | none | The CSP nonce set on the `<style>` elements used where constructable stylesheets are unavailable. |
 | `parseHTML` | a detached `<body>` made by an empty `DOMParser` document (a whole `DOMParser` document where the `DOMParser` is not a browser's) | Parses fetched HTML into a `Document` or any other node whose descendants are the module's elements. Without either, loading an HTML module throws `` TypeError: No DOMParser available; pass `parseHTML` to createLoader() ``. |
@@ -107,8 +109,13 @@ any module `SyntaxError`, a dependency failure, or a cycle.
 `arrayBuffer()` and checked with `crypto.subtle.digest`. As for `<script integrity>`, the strongest algorithm listed
 decides and any digest of it may match. A mismatch rejects with `Error: Integrity check failed for HTML module <url>:
 its <alg> digest is <alg>-<digest>, which matches none of integrity="<metadata>"`; malformed metadata is a
-`SyntaxError`; a JavaScript module (`import()` cannot verify) is a `TypeError`; no `crypto.subtle` (an insecure
-context) is a `TypeError`, because the check fails closed. A load with `integrity` is cached apart from one without
+`SyntaxError`; no `crypto.subtle` (an insecure context) is a `TypeError`, because the check fails closed. For a
+JavaScript module (which `import()` loads, so html-modules cannot hash it) `integrity` is checked against the page's
+import map instead: the inline `<script type="importmap">` `integrity` entry for the resolved URL must carry the same
+digests (order and spacing do not matter), and the browser enforces it for `import()`. A missing entry is `Error: Cannot
+verify the JavaScript module <url> (integrity="<metadata>"): the page's import map has no "integrity" entry for it …`
+(the message includes the entry to add), a different one `… the page's import map pins it as "<entry>", which is not
+integrity="<metadata>" …`, and either rejects before `import()` runs. See [Pinning JavaScript imports](../../README.md#pinning-javascript-imports). A load with `integrity` is cached apart from one without
 it, so an unverified copy never satisfies it (and a failed check is evicted like any failed load). `credentials` and
 `mode` apply to this module's fetch only; the module's own dependencies use the instance defaults and their own
 `integrity` attribute.

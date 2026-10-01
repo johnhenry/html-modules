@@ -162,10 +162,10 @@ test('integrity: an unverified cached copy does not satisfy a load that asks for
   assert.equal(fetch.log.length, 2, 'fetched again to verify');
 });
 
-test('integrity: malformed metadata is a SyntaxError, and a JavaScript module cannot be verified', async () => {
+test('integrity: malformed metadata is a SyntaxError, and a JavaScript module needs a matching import map entry', async () => {
   const { modules } = setup({ files: { 'ok.html': '<html-export name="ok"><template>ok</template></html-export>' } });
   await assert.rejects(modules.load('./ok.html', { integrity: 'md5-abc' }), (e) => e instanceof SyntaxError && /Invalid integrity "md5-abc"/.test(e.message));
-  await assert.rejects(modules.load('./x.js', { integrity: SRI('sha256', 'x') }), /integrity applies to HTML modules only/);
+  await assert.rejects(modules.load('./x.js', { integrity: SRI('sha256', 'x') }), /the page's import map has no "integrity" entry for it/);
 });
 
 test('integrity: <html-import integrity> and a module import record carry it to the loader', async () => {

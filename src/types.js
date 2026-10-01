@@ -93,6 +93,8 @@
  * @property {(specifier: string, referrer?: string) => string} resolve
  * @property {Map<string, Promise<ModuleNamespace>>} cache
  * @property {string | undefined} baseURL
+ * @property {Record<string, string>} integrity  the integrity manifest in effect: absolute module URL → Subresource Integrity metadata (a copy)
+ * @property {boolean} strict                    true when an HTML fetch without integrity metadata is refused
  */
 
 /**
@@ -105,6 +107,8 @@
  * @property {'cors' | 'same-origin' | 'no-cors'} [mode]         fetch `mode` for HTML modules
  * @property {{ createHTML(html: string): unknown } | false} [trustedTypes]  Trusted Types policy for the HTML parsed and stamped (default: a policy named "html-modules" where `window.trustedTypes` exists; `false`: never)
  * @property {string} [nonce]                  CSP nonce for the `<style>` elements used where constructable stylesheets are unavailable
+ * @property {Record<string, string>} [integrity]  an integrity manifest: module URL → Subresource Integrity metadata, the shape of an import map's `integrity` (keys resolve against `baseURL`); every HTML module fetched must match its entry, and a JavaScript entry must also be pinned by the page's import map
+ * @property {boolean} [strict]                refuse any HTML fetch without integrity metadata (a manifest entry or an `integrity` attribute); default false
  * @property {Sanitizer | false} [sanitize]    sanitize every component template of the HTML modules this instance loads (see `Sanitizer`); overridable per import
  * @property {(html: string, url: string) => ParentNode} [parseHTML]  default: parses into a detached element (no CSP-checked document)
  * @property {(url: string) => Promise<object>} [importModule]      default: native `import()`

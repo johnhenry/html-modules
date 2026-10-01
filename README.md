@@ -970,8 +970,9 @@ done with your page's authority.
 - **Fetched HTML can be pinned.** `integrity` (an `<html-import integrity>` attribute, or the `integrity` option of
   `HTMLModules.load()` / `import()`) is Subresource Integrity metadata, checked with `crypto.subtle.digest` against the
   bytes actually received: the strongest algorithm listed decides, and a mismatch rejects with `Integrity check
-  failed for HTML module <url>` and is not cached. It fails closed: without `crypto.subtle`, or for a JavaScript
-  module (which `import()` cannot verify), the load is refused.
+  failed for HTML module <url>` and is not cached. It fails closed: without `crypto.subtle` the load is refused. A
+  whole graph can be pinned in one place with an [integrity manifest](#pinning-a-whole-graph-the-integrity-manifest),
+  and a JavaScript import is pinned through [the page's import map](#pinning-javascript-imports).
 - **Requests carry what you configure.** `credentials` and `mode` (`createHTMLModules()` options, overridable per
   `load()`) are passed to `fetch()` for HTML modules; by default html-modules adds nothing to the platform's
   defaults.
@@ -1002,17 +1003,85 @@ done with your page's authority.
   root is not sanitized. A sanitizer is only as good as its function: html-modules does not check what it returns beyond
   its type.
 - **Importing JavaScript runs code.** `<html-import src="./x.js">` is a native `import()`: the module's top level
-  runs with full page authority, and html-modules cannot verify it (use an import map `integrity` field, or a CSP
-  `script-src` allowlist). Tracked in [html-modules#1](https://github.com/johnhenry/html-modules/issues/1).
-- **`integrity` covers only what you give it.** Each import is pinned individually; a re-export or dependency
-  without its own `integrity` is fetched unverified, and a module that is verified can still import a
-  JavaScript module that is not. Compiled output is ordinary JavaScript: pin it as you pin any script. Pinning a
-  whole module graph in one place is tracked in [html-modules#2](https://github.com/johnhenry/html-modules/issues/2).
+  runs with full page authority, and html-modules cannot fetch it to hash it. The supported path is the page's import
+  map `integrity`, which the browser enforces for `import()`; an `integrity` attribute on the import is checked
+  against it ([Pinning JavaScript imports](#pinning-javascript-imports)). Without one, use a CSP `script-src` allowlist.
+- **`integrity` covers only what you give it.** An attribute pins one fetch; a re-export or dependency without its own
+  `integrity`, or an entry in the manifest, is fetched unverified unless you turn on `strict`. The manifest is yours to
+  keep current, and compiled output is ordinary JavaScript: pin it as you pin any script.
 - **CORS, cookies and CSP are the platform's.** `credentials: 'include'` sends cookies to whatever origin the
   module is on; html-modules does not add or relax any CORS check, and `connect-src` / `script-src` decide what may
   be fetched or imported.
 - **Rendering untrusted data into a template is yours.** Templates are static markup; html-modules does not
   sanitize what your own scripts later put into a component's shadow DOM.
+
+### Pinning a whole graph: the integrity manifest
+
+`integrity` on an import pins one fetch. To pin a graph (a module, what it imports, what it re-exports) in one place,
+give `createHTMLModules()` an **integrity manifest**: an object of absolute URL to Subresource Integrity metadata, the
+same shape as the `integrity` object of an import map.
+
+```js
+import { createHTMLModules, defineHTMLModuleElements } from '@johnhenry/html-modules';
+
+const modules = createHTMLModules({
+  integrity: {
+    'https://cdn.example/ui/kit.html': 'sha384-…',
+    'https://cdn.example/ui/button.html': 'sha384-…',   // imported by kit.html, with no attribute of its own
+  },
+  strict: true,                                          // refuse any HTML fetch that has no integrity metadata
+});
+defineHTMLModuleElements({ modules });
+```
+
+- **Every HTML fetch is looked up.** The root, each `<html-import>` and each `<html-export src>` of a pinned module are
+  verified against their entry, wherever they sit in the graph, with the same check as the attribute (`Integrity check
+  failed for HTML module <url>: … matches none of the integrity manifest entry "<metadata>"`). A per-import `integrity`
+  attribute keeps working; when an attribute and an entry both exist, both must match.
+- **`strict: true` fails closed.** An HTML module with neither an entry nor an attribute is refused *before* any request
+  (`Refusing to fetch the HTML module <url>: strict mode is on and it has no integrity metadata`). Without `strict` the
+  manifest is not an allowlist: an unlisted module is fetched as before.
+- **Generate it, do not write it.** [`@johnhenry/mport`](https://github.com/johnhenry/mport) walks an HTML-module graph and
+  hashes every file: `router.build([], { html: ['https://cdn.example/ui/kit.html'] })` puts them in
+  `importMap.integrity` and the lockfile's `files`, and `integrityManifest()` returns just that object (see mport's
+  `docs/api.md`, "HTML module graphs"). The same object can go into the page's import map `integrity`, which the browser
+  applies to JavaScript, so one manifest drives both.
+- **JavaScript entries.** A manifest entry for a `.js` URL is treated like an `integrity` attribute on that import: the
+  page's import map must carry the same digests ([below](#pinning-javascript-imports)).
+- **What it does not do.** The default instance of `/browser` is not configured this way: create your own with
+  `createHTMLModules()` and `defineHTMLModuleElements()`. The manifest is hashed bytes, not a signature: whoever can
+  change the page can change the manifest. `hotReload()` of a pinned module is refused (the bytes changed on purpose), and
+  compiled output has no load step to check.
+
+### Pinning JavaScript imports
+
+`<html-import src="./x.js">` is a native `import()`, and only the browser can verify what it fetches, through the
+`integrity` object of the page's [import map](https://developer.mozilla.org/docs/Web/HTML/Element/script/type/importmap#integrity).
+That is the supported path, and html-modules makes it checkable:
+
+```html
+<script type="importmap">{ "integrity": { "https://cdn.example/ui/widget.js": "sha384-…" } }</script>
+<html-import src="https://cdn.example/ui/widget.js" as="widget" integrity="sha384-…"></html-import>
+```
+
+When an import of a JavaScript module has `integrity` (an attribute, an option of `load()` / `import()`, or a
+[manifest](#pinning-a-whole-graph-the-integrity-manifest) entry), html-modules looks for the page's inline
+`<script type="importmap">` `integrity` entry for the resolved URL: a matching entry (the same digests, in any order)
+lets `import()` proceed, and the browser then refuses bytes that do not match it. A missing or different entry is an
+error that shows the entry to add, so a pin can never be silently ignored:
+
+```text
+Cannot verify the JavaScript module https://cdn.example/ui/widget.js (integrity="sha384-…"): the page's import map has no
+"integrity" entry for it, and import() is the browser's, not html-modules'. Add the module to the page's import map before
+any module script runs: <script type="importmap">{ "integrity": { "https://cdn.example/ui/widget.js": "sha384-…" } }</script>. …
+```
+
+mport writes these entries (`build(specifiers, { graph: true })` hashes every file of a package's import graph into the
+map). Limits: the import map must be in the page before the first module script (an engine may ignore a later one, and
+Firefox does not apply an import map that arrives after a module has loaded); html-modules reads only inline
+`<script type="importmap">` elements; an engine that does not implement import-map `integrity` runs the module
+unverified (html-modules checked that the entry exists, not that the engine enforces it); and a module re-mapped by
+`imports` is enforced by the browser under its final URL, not the one that was checked.
 
 ### Sanitizing templates from less-trusted modules
 
@@ -1083,6 +1152,7 @@ depends on neither of these packages, and neither depends on it.
     re-renders when it changes (`content` is safe-fragment's lowest-precedence source and logs a console note; it is the one a
     `{{binding}}` can feed). Call `registerSafeFragment()` on the page. In a *sanitized* module the element is not one of the
     profile's custom elements and is unwrapped, so use it in modules you trust.
+- **[`@johnhenry/workbench`](https://github.com/johnhenry/workbench)**: the integration app that runs the family together ([live](https://johnhenry.github.io/workbench/), [docs](https://opensource.johnhenry.me/workbench/)).
 - **[`@johnhenry/window-algebra`](https://github.com/johnhenry/window-algebra)**: window-algebra's views host *surfaces*, `{ mount(target), unmount() }`, and its
   `htmlSurface(element)` simply appends an element. An html-modules component is a native custom element, so
   `htmlSurface(document.createElement('ui--card'))` is a window whose content upgrades when its import registers the

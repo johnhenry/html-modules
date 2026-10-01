@@ -4,7 +4,14 @@
  * Fails closed: without `crypto.subtle` the load is refused rather than trusted.
  * @returns {Promise<void>} rejects with an Error naming `url` when the digest does not match
  */
-export declare function verifyIntegrity(bytes: any, integrity: any, url: any, win?: typeof globalThis): Promise<void>;
+export declare function verifyIntegrity(bytes: any, integrity: any, url: any, win?: typeof globalThis, source?: string): Promise<void>;
+/**
+ * The `integrity` entries of the page's inline `<script type="importmap">` elements, as absolute URL → metadata (the
+ * first entry for a URL wins, as when the browser merges import maps). Keys are URL-like specifiers resolved against
+ * `base`. A map that is not valid JSON is skipped (the browser ignores it too).
+ * @returns {Map<string, string>}
+ */
+export declare function pageImportMapIntegrity(win: typeof globalThis, base: any): Map<string, string>;
 /**
  * Build a module namespace from a record and its loaded dependencies. The
  * shape matches a compiled module: camelCase named exports, `default`, and a
@@ -53,6 +60,8 @@ export declare function parseModuleSource(html: string, win?: any): ParentNode;
  * @param {'cors'|'same-origin'|'no-cors'} [options.mode]          fetch `mode` for HTML modules (default: the platform's)
  * @param {{ createHTML(html: string): unknown } | false} [options.trustedTypes]  Trusted Types policy for the HTML parsed and stamped in `window` (default: a policy named "html-modules" where `window.trustedTypes` exists; `false`: never)
  * @param {string} [options.nonce]   CSP nonce for the `<style>` elements used where constructable stylesheets are unavailable
+ * @param {Record<string, string>} [options.integrity]   an integrity manifest: module URL → Subresource Integrity metadata (the shape of an import map's `integrity`), consulted for every fetch
+ * @param {boolean} [options.strict]   refuse any HTML fetch that has no integrity metadata (neither a manifest entry nor an `integrity` attribute)
  * @param {import('./types.js').Sanitizer | false} [options.sanitize]   sanitizes every HTML component template this loader loads (the default for each load; `false`: none): see `Sanitizer`
  * @param {(html: string, url: string) => ParentNode} [options.parseHTML]  default: parses into a detached element (see `parseModuleSource`)
  * @param {(url: string) => Promise<object>} [options.importModule]      default: native import()
@@ -60,7 +69,7 @@ export declare function parseModuleSource(html: string, win?: any): ParentNode;
  * @param {(event: { type: 'fetch'|'load'|'error'|'sanitize', url: string, kind?: string, error?: unknown, name?: string|null, details?: unknown }) => void} [options.onEvent]
  * @returns {import('./types.js').Loader}
  */
-export declare function createLoader({ baseURL, hostResolve, fetch: fetchImpl, credentials, mode, trustedTypes, nonce, sanitize, parseHTML, importModule, window: win, onEvent, }?: {
+export declare function createLoader({ baseURL, hostResolve, fetch: fetchImpl, credentials, mode, trustedTypes, nonce, sanitize, integrity: manifestOption, strict, parseHTML, importModule, window: win, onEvent, }?: {
     baseURL?: string;
     hostResolve?: (specifier: string) => string | URL | null | undefined;
     fetch?: typeof fetch;
@@ -70,6 +79,8 @@ export declare function createLoader({ baseURL, hostResolve, fetch: fetchImpl, c
         createHTML(html: string): unknown;
     } | false;
     nonce?: string;
+    integrity?: Record<string, string>;
+    strict?: boolean;
     sanitize?: import('./types.js').Sanitizer | false;
     parseHTML?: (html: string, url: string) => ParentNode;
     importModule?: (url: string) => Promise<object>;

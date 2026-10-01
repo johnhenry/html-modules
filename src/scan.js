@@ -8,6 +8,7 @@
  * being outside the document.
  */
 import { recordFromRaw } from './record.js';
+import { decodeCharacterReferences } from './charref.js';
 
 const VOID = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr', 'keygen']);
 // Elements whose content the tokenizer reads as text, not markup (the tree builder switches it into
@@ -15,15 +16,6 @@ const VOID = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input'
 const RAW_TEXT = new Set(['script', 'style', 'textarea', 'title', 'xmp', 'iframe', 'noembed', 'noframes', 'plaintext']);
 const COLLECT = new Set(['html-export', 'html-import']);
 const SETTINGS = { 'html-import-settings': 'importSettings', 'html-module-settings': 'moduleSettings' };
-const ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
-
-const decode = (s) => s.replace(/&(#x[0-9a-f]+|#[0-9]+|[a-z]+);/gi, (m, e) => {
-  if (e[0] === '#') {
-    const code = e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
-    return Number.isFinite(code) ? String.fromCodePoint(code) : m;
-  }
-  return ENTITIES[e.toLowerCase()] ?? m;
-});
 
 // Tree construction, just enough of it to know which elements are children of an <html-export>.
 // The "special" elements: an end tag for anything else does not close past one of these.
@@ -90,7 +82,7 @@ function readAttributes(src, i) {
         i = k;
       }
     }
-    if (name && !Object.hasOwn(attrs, name)) attrs[name] = decode(nul(value));
+    if (name && !Object.hasOwn(attrs, name)) attrs[name] = decodeCharacterReferences(nul(value), { attribute: true });
   }
   return { attrs, end: n, eof: true };
 }

@@ -751,7 +751,7 @@ error) and targeted specs: constructable stylesheets and `url()` resolution agai
 (open and closed), Trusted Types under an enforced `require-trusted-types-for` CSP (`scripts/test-server.js` adds CSP
 headers on request), data binding, form association, hot reload against a real `html-module dev` server and a real Vite
 dev server, and scoped registries. A feature an engine lacks is reported by the page as **unsupported**, never as a
-failure. The CI `browsers` job runs all three engines; what it found (159 specs, Chromium 153, Firefox 155,
+failure. The CI `browsers` job runs all three engines; what it found (201 specs, Chromium 153, Firefox 155,
 WebKit 26.6 on Linux):
 
 | Feature | Chromium | Firefox | WebKit |

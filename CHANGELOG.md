@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased
+
+Fixes found by an audit of the first build. Nothing is published yet, so these are folded into `0.0.0` when it ships.
+
+### Fixes
+
+- **The scanner follows the HTML tokenizer.** The compiler's text scanner now handles comment endings (`--!>`, `<!-->`),
+  bogus comments, `<plaintext>`, script data escapes, EOF inside tags and templates, CRLF and NUL preprocessing,
+  `<frameset>`, and end-tag scoping, so it records what a browser's parser would. A spec-parser edge-case table and a
+  seeded fuzz test compare it with parse5. `78434b0`.
+- **Character references are decoded per spec** (`src/charref.js`): the full named table with the legacy
+  no-semicolon rules, numeric replacements and the C1 table; `&#x110000;` no longer throws a `RangeError`. `5121e21`.
+- **Data exports compile as `JSON.parse(...)`**, so a `"__proto__"` key is an own key in compiled output, as it is
+  when loaded at runtime. `76374b7`.
+- **A failed lazy import inside a module is armed again** and retried on the next use of its tags (the loader had
+  already evicted the failed load). `ee35618`.
+- **Binding is all or nothing on tag conflicts.** A namespace or `<html-binding>` bind checks every tag before it
+  registers any, so a conflict on the last tag no longer leaves the module half bound. `95d387a`.
+
+### Tests
+
+- parse5 is now the oracle for the DOM-reader/scanner agreement tests (`test/spec-dom.js`): linkedom's parser shares
+  the scanner's blind spots, so comparing against it proved nothing. `e02dfa6`.
+
 ## 0.0.0 — first release, as `@johnhenry/html-modules` (2026-09-28)
 
 The first published version under any name. The package was developed locally as `web-module-graph` (from

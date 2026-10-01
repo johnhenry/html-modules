@@ -579,8 +579,10 @@ export { $x_card as card, $components as components };
   relative. Star re-exports become `export * from`.
 - **Settings.** `<html-module-settings>` defaults are baked into each definition; `<html-import-settings>` options
   are carried into `$imports`, which the runtime binds with. `load="lazy"` does not make compiled code lazy.
-- The compiler reads source with a small dependency-free scanner that produces the same module record as the
-  browser's DOM reader (tested against every example). Pass `parse` to use a DOM parser instead.
+- The compiler reads source with a small dependency-free scanner that follows the HTML tokenizer (comments, raw-text
+  elements, script escapes, character references, end-tag scoping) and produces the same module record as the
+  browser's DOM reader. It is tested against every example and, with a seeded fuzz, against parse5. Pass `parse` to
+  use a DOM parser instead.
 - Runtime-loaded and compiled modules render identically; the test suite and the compiler example check this.
 
 Every option, the CLI flags and exit codes, and a full generated module: [Compiler and CLI](docs/api/compiler.md).

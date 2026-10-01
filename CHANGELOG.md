@@ -19,6 +19,42 @@ Fixes found by an audit of the first build. Nothing is published yet, so these a
 - **Binding is all or nothing on tag conflicts.** A namespace or `<html-binding>` bind checks every tag before it
   registers any, so a conflict on the last tag no longer leaves the module half bound. `95d387a`.
 
+### Security
+
+- **`## Security model` in the README**, and the options behind it: `integrity` (Subresource Integrity, verified with
+  SubtleCrypto against the fetched bytes; on `<html-import>`, a module's own imports, `load()` and `import()`; HTML
+  modules only, and fail-closed), and fetch `credentials` / `mode` on `createHTMLModules()` and `load()`. `653529c`.
+- **Trusted Types and CSP.** `template.innerHTML` and `DOMParser.parseFromString` go through a `trustedTypes` policy
+  option, or a policy named `html-modules` where `window.trustedTypes` exists; a `nonce` option covers the `<style>`
+  fallback; `configureRuntime()` is the same for compiled-only pages. `a0fd1b3`.
+
+### Behavior changes (breaking, before any release)
+
+- **Constructed stylesheets get the module URL as `baseURL`**, so `url()` in a module's CSS resolves against the
+  module; `@import` in a `<style>` is a `SyntaxError` in both readers (`replaceSync()` dropped it silently). Relative
+  URLs in a *template* still resolve against the page, now documented. `<html-import-settings base>`'s fallback also no
+  longer passes through an `about:blank` `baseURI`. `f850a2c`.
+- **A lazy import with no tag to wait for is an error**, in a page, in `HTMLModules.import()` and inside modules,
+  instead of waiting forever with zero fetches. `a137d9d`.
+- **`<html-import>` has properties and starts after the script.** `src`, `as`, `type`, `integrity`, `delimiter`,
+  `conflict`, `loadMode` (the `load` attribute; `load` is the method) and `errors`; `createElement`, `append`, then
+  `setAttribute('src')` now loads, and changing `src` after loading started fires an `error` event. `f0d58e3`.
+- **A misplaced `<html-binding>` is an error.** A self-closed `<html-binding />` nests the next binding, which was
+  dropped silently; `<html-binding>` outside a direct `<html-import>` parent, and any other element child of an
+  `<html-import>`, is a `SyntaxError` in both readers and an `error` event in a page; the nested-element messages
+  mention `/>`. The scanner also models `</p>`, `</br>` and the start tags that close `<p>`. `5f5ea3c`.
+- **Declarative shadow DOM.** A server-rendered open root now gets the component's styles, a closed one is found
+  through `attachInternals().shadowRoot`, a mode mismatch has a clear error, and `renderDeclarative(def, innerHTML)`
+  produces the markup for server-side rendering. `fba69d2`.
+- **The loader cache is keyed `<kind>:<url>`** (it was the bare URL), so one URL can be loaded as HTML and as
+  JavaScript. `fe0ba38`.
+
+### Counterparts
+
+- `unadoptStylesheet()`, and a removed `adopt` binding un-adopts its stylesheet; `HTMLModules.unload(src)` evicts a
+  cache entry; `type` and `integrity` on `<html-export src>` re-exports. `fe0ba38`.
+- Example page `examples/scripting.html` checks all of the above in a browser (`7aeab92`).
+
 ### Tests
 
 - parse5 is now the oracle for the DOM-reader/scanner agreement tests (`test/spec-dom.js`): linkedom's parser shares

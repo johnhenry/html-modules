@@ -39,7 +39,7 @@ JS-authored component protocol.
 | §13 Identity vs registration name | Partly (`element=` chose the tag, but a template had no identity of its own) | **Add**: a definition carries its module-local `name`; the importer chooses the tag. The same definition can be bound as `ui--custom-card` and `admin--custom-card`. |
 | §14 One constructor cannot be registered twice; use generated subclasses | Held (`renamedSubclass`) | **Keep**, moved into `definition.define()`: every registration is a fresh subclass of the definition's base element. |
 | §15 Runtime loading: resolve, fetch, DOMParser, discover exports, create definitions, bind, register | Held, apart from definitions and namespaces | **Change** the pipeline to produce definitions. |
-| §16 Module cache: `Map<ResolvedURL, Promise<HTMLModule>>` | Held | **Keep** (failed loads are evicted so they can be retried). |
+| §16 Module cache: `Map<ResolvedURL, Promise<HTMLModule>>` | Held | **Keep** (failed loads are evicted so they can be retried), keyed by kind and URL (`html:<url>`), with `HTMLModules.unload(src)` to evict on purpose. |
 | §17 Asynchronous upgrade: elements may appear before their import finishes; native upgrade, no MutationObserver | Implicitly held | **Keep and test** explicitly, including `customElements.whenDefined` and `:not(:defined)`. |
 | §18 HTML Component Definition `{ name, template, shadow, styles }` shared by runtime and compiler | Absent | **Add** `defineHTMLComponent()` in `src/runtime.js`, the only place component semantics live. |
 | §19 Shared runtime architecture: browser loader and compiler both feed the same runtime | Absent | **Add**: both paths produce the same JSON-able module record (`readHTMLModule` from a DOM, `scanHTMLModule` from source text) and the same `defineHTMLComponent()` calls. |
@@ -172,6 +172,22 @@ default-only component is not in the `components` manifest and is not registered
 with `<html-binding export="default" element="…">`), and components, stylesheets (`adopt`) and data can all be
 bound as the default. The compiler emits `export default …`.
 
+## Extension beyond the PRD: hardening and lifecycle
+
+Added after an audit of the first build; none of it changes the PRD's model, and each item has its page in the API
+reference.
+
+| Addition | Why |
+| --- | --- |
+| `integrity` (SRI, SubtleCrypto), `credentials`, `mode`; the README's `## Security model` | A module URL is as trusted as a `<script src>`: pinning and fetch options are the available levers. JavaScript modules cannot be verified by `import()` and are refused rather than trusted. |
+| `trustedTypes` policy, `nonce`, `configureRuntime()` | `template.innerHTML` and `DOMParser.parseFromString` throw under `require-trusted-types-for 'script'`; the `<style>` fallback needs a nonce under a strict `style-src`. |
+| Module `baseURL` for constructed stylesheets; `@import` is a `SyntaxError` | `url()` in a module's CSS belongs to the module; `replaceSync()` silently drops `@import`. |
+| A lazy import with nothing to wait for is an error | It could never load. (Before, `el.load()` was the only way; `HTMLModules.load()` does that now.) |
+| `<html-import>` properties, deferred start, `src` change error | A scripted `createElement` / `append` / `setAttribute('src')` used to end in an error with no fetch. `load` is the method, so the attribute's property is `loadMode`. |
+| A misplaced `<html-binding>` is an error | A self-closed `<html-binding />` nested the next binding, which was dropped silently. |
+| `renderDeclarative()`, and keeping a server-rendered root | Declarative shadow DOM is how a server renders a component; the runtime kept the root but skipped its styles, and could not see a closed one. |
+| `unadoptStylesheet()`, `HTMLModules.unload()`, `type` / `integrity` on `<html-export src>` | Counterparts: what can be adopted can be un-adopted, what can be loaded can be evicted, and a re-export can be typed like an import. Custom elements remain impossible to undefine. |
+
 ## Deferred
 
 | Item | Why |
@@ -180,4 +196,5 @@ bound as the default. The compiler emits `export default …`.
 | **Further export metadata** (§9.3: registration behaviour, version, hydration hints, lifecycle modules) | §9.3 forbids adding metadata before it has concrete semantics. |
 | **Compiler `--format bundle`** (conversation §7) | Mentioned as a possibility; a bundle needs a dependency walk over the file system and adds nothing to semantics. Dependencies compile file by file today (the CLI accepts several inputs). |
 | **Scoped custom-element registries** | Not in the PRD; native support is still arriving. The runtime takes a `registry` option so a scoped registry can be passed in later. |
+| **Rewriting relative URLs in templates** | A template is stamped into the page, so `<img src="./x.png">` resolves against the page, not the module. A correct rewrite is an HTML-aware pass over every URL-bearing attribute (`src`, `href`, `srcset`, `poster`, `<use href>`, inline `style`), and it would break URLs meant for the page. Documented instead; a module's `<style>` already resolves against the module (`baseURL`). |
 | **Hybrid script semantics** (a `<script>` inside an export that supplies the class) | The conversation explicitly leaves it out of V1. JS behaviour attaches by extending a definition's `.element` in a JS module instead. |

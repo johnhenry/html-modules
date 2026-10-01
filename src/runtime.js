@@ -297,21 +297,32 @@ export function defineElement(tag, value, options) {
   return registerTag(tag, value, options).element;
 }
 
-/** defineElement(), also saying whether an existing definition was reused. */
-function registerTag(tag, value, { registry, window: win = globalThis, conflict = 'error' } = {}) {
+/**
+ * Check that `value` can be registered as `tag`, changing nothing, and return what to commit. `pending` is
+ * the tags an enclosing batch has checked so far (tag → definition), so two entries of one batch that want
+ * the same tag are caught before either is registered.
+ */
+function checkTag(tag, value, { registry, window: win = globalThis, conflict = 'error' } = {}, pending) {
   registry ??= win.customElements ?? globalThis.customElements;
   assertElementName(tag);
   assertOption('conflict', conflict);
   const def = toComponent(value, { window: win, what: `<${tag}>` });
   if (!registrations.has(registry)) registrations.set(registry, new Map());
+  const existing = registry.get(tag);
+  const taken = Boolean(existing) || Boolean(pending?.has(tag));
+  const holder = existing ? registrations.get(registry).get(tag) : pending?.get(tag);
+  if (taken && holder !== def && conflict !== 'reuse') {
+    throw new Error(`Cannot bind <${tag}>: it is already defined${holder ? ` by ${describeDefinition(holder)}` : ''} (conflict="reuse" keeps the existing definition instead)`);
+  }
+  if (!taken) pending?.set(tag, def);
+  return { tag, def, registry, win };
+}
+
+/** Register what checkTag() accepted: `{ element, reused }`. */
+function commitTag({ tag, def, registry, win }) {
   const seen = registrations.get(registry);
   const existing = registry.get(tag);
-  if (existing) {
-    if (seen.get(tag) === def) return { element: existing, reused: false };
-    if (conflict === 'reuse') return { element: existing, reused: true };
-    const by = seen.get(tag);
-    throw new Error(`Cannot bind <${tag}>: it is already defined${by ? ` by ${describeDefinition(by)}` : ''} (conflict="reuse" keeps the existing definition instead)`);
-  }
+  if (existing) return { element: existing, reused: seen.get(tag) !== def };
   bindImports(def, registry, win);
   const Base = def.elementFor(win);
   const Registered = class extends Base {};
@@ -320,6 +331,9 @@ function registerTag(tag, value, { registry, window: win = globalThis, conflict 
   seen.set(tag, def);
   return { element: Registered, reused: false };
 }
+
+/** defineElement(), also saying whether an existing definition was reused. */
+const registerTag = (tag, value, options) => commitTag(checkTag(tag, value, options));
 
 const lazyDeps = new WeakMap(); // registry → Set of lazy import entries already being watched
 
@@ -432,17 +446,19 @@ export function namespaceComponents(name, ns) {
  * when `conflict: 'reuse'` kept a different, existing definition of the tag.
  * @returns {{ export: string, value: unknown, tag: string|null, namespace: string|null, element: Function|null, adopted: boolean, reused?: true }}
  */
-export function applyBinding(ns, binding, { as, delimiter = DELIMITER, from = 'module', registry, window: win = globalThis, root, conflict } = {}) {
+export function applyBinding(ns, binding, options = {}) {
+  return runBinding(planBinding(ns, binding, options));
+}
+
+/** Everything applyBinding() can reject, checked without changing anything. */
+function planBinding(ns, binding, { as, delimiter = DELIMITER, from = 'module', registry, window: win = globalThis, root, conflict } = {}, pending) {
   const name = binding.export;
   if (!name) throw new SyntaxError('<html-binding> requires an "export" attribute');
   const value = lookupExport(ns, name, from);
-  const result = { export: name, value, tag: null, namespace: null, element: null, adopted: false };
+  const plan = { name, value, adopt: false, root, win, tag: null, namespace: null, register: null };
   if (binding.adopt) {
     if (!isStylesheet(value)) throw new TypeError(`Cannot adopt '${name}' from '${from}': it is ${kindOf(value)}, not a stylesheet`);
-    if (root) {
-      adoptStylesheet(root, value, { window: win });
-      result.adopted = true;
-    }
+    plan.adopt = Boolean(root);
   }
   let tag = binding.element ?? null;
   if (tag) {
@@ -453,11 +469,25 @@ export function applyBinding(ns, binding, { as, delimiter = DELIMITER, from = 'm
   } else if (as && !binding.adopt && isElementLike(value, win)) {
     if (name === 'default') throw new SyntaxError(`Binding the default export of '${from}' needs element="…"`);
     tag = bindingName(as, name, delimiter);
-    result.namespace = as;
+    plan.namespace = as;
   }
   if (tag) {
-    result.tag = tag;
-    const { element, reused } = registerTag(tag, value, { registry, window: win, conflict });
+    plan.tag = tag;
+    plan.register = checkTag(tag, value, { registry, window: win, conflict }, pending);
+  }
+  return plan;
+}
+
+function runBinding(plan) {
+  const result = { export: plan.name, value: plan.value, tag: null, namespace: null, element: null, adopted: false };
+  if (plan.adopt) {
+    adoptStylesheet(plan.root, plan.value, { window: plan.win });
+    result.adopted = true;
+  }
+  if (plan.tag) {
+    result.tag = plan.tag;
+    result.namespace = plan.namespace;
+    const { element, reused } = commitTag(plan.register);
     result.element = element;
     if (reused) result.reused = true;
   }
@@ -493,10 +523,14 @@ export function registerComponents(ns, options = {}) {
 }
 
 function registerAll(ns, { as, delimiter, from = 'module', registry, window: win = globalThis, conflict } = {}) {
-  return planComponents(ns, { as, delimiter, from }).map(({ tag, namespace, export: name, value }) => ({
+  // Check every tag (and that every component can be registered) before registering any, so a conflict
+  // on the last one does not leave the namespace half-bound.
+  const pending = new Map();
+  const checked = planComponents(ns, { as, delimiter, from }).map(({ tag, namespace, export: name, value }) => ({
     tag, namespace, export: name,
-    ...registerTag(tag, toComponent(value, { window: win, what: `components['${name}'] of '${from}'` }), { registry, window: win, conflict }),
+    plan: checkTag(tag, toComponent(value, { window: win, what: `components['${name}'] of '${from}'` }), { registry, window: win, conflict }, pending),
   }));
+  return checked.map(({ tag, namespace, export: name, plan }) => ({ tag, namespace, export: name, ...commitTag(plan) }));
 }
 
 /**
@@ -522,8 +556,11 @@ export function bindModule(ns, { as, delimiter = DELIMITER, bindings = [], from 
     out.tags[tag] = { tag, namespace, export: name, ...(reused && { reused: true }) };
   };
   if (bindings.length) {
-    for (const b of bindings) {
-      const r = applyBinding(ns, b, { as, delimiter, from, registry, window: win, root, conflict });
+    // Every binding is checked before any is applied: one that cannot be bound leaves nothing bound.
+    const pending = new Map();
+    const plans = bindings.map((b) => planBinding(ns, b, { as, delimiter, from, registry, window: win, root, conflict }, pending));
+    for (const plan of plans) {
+      const r = runBinding(plan);
       out.values[r.export] = r.value;
       if (r.tag) record(r);
     }

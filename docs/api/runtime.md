@@ -186,11 +186,17 @@ bindModule(ns: object, options?: {
 
 Bind a module namespace (runtime-loaded HTML, compiled, or plain JS) the way `<html-import>` does:
 
-- with `bindings`: only those, each via [`applyBinding`](#applybinding), in order (the first failure throws;
-  earlier bindings stay applied);
+- with `bindings`: only those, each as [`applyBinding`](#applybinding) does it, in order, **every binding checked
+  before any is applied**: a missing export, an invalid tag, a non-component `element`, a tag that is already defined
+  (or that two bindings of the list both want) throws and leaves nothing registered or adopted;
 - otherwise, with `as`: every component of [`componentsOf(ns)`](#componentsofns-from) as
-  `<as><delimiter><export>`, **every tag checked before any is registered**;
+  `<as><delimiter><export>`, **every tag checked before any is registered** (invalid names and tags already defined
+  alike, so a conflict on the last tag does not leave `<ui--a>` and `<ui--b>` registered; `conflict: 'reuse'` keeps
+  the existing ones and registers the rest). The same holds for [`registerComponents`](#registercomponentsns-options);
 - otherwise: nothing (`{ elements: {}, values: {}, tags: {} }`).
+
+What the check cannot see in advance: a component's **own** module imports are bound when that component registers
+(they may load and register more tags), so a failure there can still leave earlier tags of the batch registered.
 
 `as`, `delimiter` and `conflict` are validated first (`SyntaxError`). `root` is where `adopt` bindings adopt; without
 it they are applied (validated) but not adopted. `tags` records what each tag was made from, so nothing needs to

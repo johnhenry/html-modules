@@ -211,3 +211,42 @@ test('definitions bind their module imports before registering, adopting importe
   assert.equal(el.shadowRoot.querySelector('style').textContent, '.t{}');
   assert.equal(win.document.head.querySelectorAll('style').length, 0, 'a module import adopts into the component, not the page');
 });
+
+// A bind is all or nothing: every tag is checked before any is registered.
+const parts = (names) => Object.fromEntries(names.map((n) => [n, defineHTMLComponent({ name: n, template: `<p>${n}</p>` })]));
+const clash = (win, tag) => win.customElements.define(tag, class extends win.HTMLElement {});
+
+test('a namespace bind that conflicts on any tag registers none of them', () => {
+  const win = makeWindow();
+  const ns = { components: manifest(parts(['a', 'b', 'c'])) };
+  clash(win, 'half--c'); // the last one: a half-bound page would have <half--a> and <half--b>
+  assert.throws(() => bindModule(ns, { as: 'half', window: win }), /Cannot bind <half--c>: it is already defined/);
+  assert.equal(win.customElements.get('half--a'), undefined);
+  assert.equal(win.customElements.get('half--b'), undefined);
+  assert.throws(() => registerComponents(ns, { as: 'half', window: win }), /already defined/);
+  assert.equal(win.customElements.get('half--a'), undefined);
+  // conflict: "reuse" keeps the existing one and binds the rest.
+  const bound = bindModule(ns, { as: 'half', window: win, conflict: 'reuse' });
+  assert.ok(win.customElements.get('half--a') && win.customElements.get('half--b'));
+  assert.equal(bound.tags['half--c'].reused, true);
+});
+
+test('bindings are all or nothing too: a bad or clashing one binds nothing, adopts nothing', () => {
+  const win = makeWindow();
+  const theme = defineHTMLStylesheet({ name: 'theme', css: 'p{color:red}' });
+  const ns = { components: manifest(parts(['a', 'b'])), theme };
+  clash(win, 'x-taken');
+  const root = win.document;
+  const attempts = [
+    [[{ export: 'theme', adopt: true }, { export: 'a', element: 'x-a' }, { export: 'b', element: 'x-taken' }], /Cannot bind <x-taken>/],
+    [[{ export: 'a', element: 'x-a' }, { export: 'nope' }], /does not provide an export named 'nope'/],
+    [[{ export: 'a', element: 'x-a' }, { export: 'b', element: 'x-a' }], /Cannot bind <x-a>: it is already defined by "a"/],
+    [[{ export: 'a', element: 'x-a' }, { export: 'theme', element: 'x-theme' }], /it is a stylesheet, not a component/],
+  ];
+  for (const [bindings, message] of attempts) {
+    assert.throws(() => bindModule(ns, { bindings, window: win, root }), message);
+    assert.equal(win.customElements.get('x-a'), undefined, JSON.stringify(bindings));
+    assert.equal(root.querySelectorAll('style').length, 0, 'nothing adopted');
+  }
+  assert.equal(Object.keys(bindModule(ns, { bindings: [{ export: 'a', element: 'x-a' }, { export: 'b', element: 'x-taken' }], window: win, conflict: 'reuse' }).elements).length, 2);
+});

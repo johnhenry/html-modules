@@ -22,6 +22,13 @@ const cases = [
   [`<html-export name="theme" shadow="closed"><style>p{}</style></html-export>`, /"shadow" only applies to an export with a <template>/],
   [`<html-export name="theme"><style>@import url("x.css");</style></html-export>`, /<html-export name="theme">: @import is not supported in a <style>: a constructed stylesheet ignores @import rules.* in m\.html/],
   [`<html-export name="cfg"><script type="application/json">{nope}</script></html-export>`, /<html-export name="cfg">: invalid JSON in m\.html/],
+  // Props (data binding)
+  [`<html-export name="card" props="">${T}</html-export>`, /<html-export name="card">: props="" declares no props; write props="title count:number open:boolean" in m\.html/],
+  [`<html-export name="card" props="Title">${T}</html-export>`, /"Title" in props is not "<name>" or "<name>:<type>"; a name is a lower-case attribute name/],
+  [`<html-export name="card" props="count:int">${T}</html-export>`, /props type "int" for "count" must be "string", "number", "boolean" or omitted in m\.html/],
+  [`<html-export name="card" props="a a">${T}</html-export>`, /prop "a" is declared twice in m\.html/],
+  [`<html-export name="card" props="onclick">${T}</html-export>`, /"onclick" cannot be a prop: bindings never write on\* attributes in m\.html/],
+  [`<html-export name="theme" props="a"><style>p{}</style></html-export>`, /"props" only applies to an export with a <template> in m\.html/],
   // Defaults
   [`<html-export default>${T}</html-export>`, /"default" needs a name to go with it; write name="default" for a default-only export/],
   [`<html-export name="default" default>${T}</html-export>`, /name="default" is already the default export; drop the "default" attribute/],

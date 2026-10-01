@@ -85,7 +85,7 @@ export function linkHTMLModule(record, modules, { lazy } = {}) {
     let value;
     switch (e.kind) {
       case 'component':
-        value = defineHTMLComponent({ name: e.name, template: e.template, shadow: e.shadow, delegatesFocus: e.delegatesFocus, styles: e.styles, imports, url });
+        value = defineHTMLComponent({ name: e.name, template: e.template, shadow: e.shadow, delegatesFocus: e.delegatesFocus, styles: e.styles, ...(e.props && { props: e.props }), imports, url });
         break;
       case 'stylesheet':
         value = defineHTMLStylesheet({ name: e.name, css: e.css, url });

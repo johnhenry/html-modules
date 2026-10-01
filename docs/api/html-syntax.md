@@ -8,6 +8,7 @@ children), and one in either (`<html-import-settings>`). A page and an HTML modu
 syntax; an import inside a module is private to that module.
 
 - [`<html-export>`](#html-export): exports of a module
+- [Data binding in templates](#data-binding-in-templates): `{{attribute}}` and `props`
 - [`<html-import>`](#html-import): imports into a page or a module
 - [`<html-binding>`](#html-binding): selective bindings of one import
 - [`<html-import-settings>`](#html-import-settings): import defaults for one document
@@ -69,6 +70,7 @@ scripts, a non-JSON script with no template, invalid JSON.
 | `default` | all but a star re-export | boolean, no value (`default` or `default="default"`) | Also make this named export the module's default: `name="card" default` is `export { card, card as default }`. Not allowed alone (use `name="default"`), with `name="default"` / an empty name, with `names`, or on a star re-export. |
 | `shadow` | component only | `open` (default), `closed` | The shadow root mode. Overrides `<html-module-settings shadow>`. An empty value means "not set". On a non-component export it is an error. |
 | `delegates-focus` | component only | [boolean](#boolean-attributes): present, `"true"`, `"false"` | `delegatesFocus` for `attachShadow()`. Overrides `<html-module-settings delegates-focus>`; `delegates-focus="false"` turns a module default off. On a non-component export it is an error. |
+| `props` | component only | whitespace or comma separated `name` or `name:type` (`string`, `number`, `boolean`) | Declares attributes that are also **properties**: reflected, typed and observed (see [Data binding](#data-binding-in-templates)). `props="title count:number open:boolean"`. On a non-component export it is an error. |
 | `src` | re-export | a module specifier | Makes this a re-export of another module (HTML or JS), resolved like an `<html-import src>` of this module (including its `<html-import-settings base>`). |
 | `import` | re-export with `name` | an export name of the source module, `default`, or `*` | The export to take from `src`, when it differs from `name`. `import="*"` takes the whole namespace (`export * as ns from`). |
 | `type` | re-export | `html`, `js` | As on `<html-import>`: load `src` as an HTML module or as JavaScript, whatever its extension (`<html-export src="./part.tpl" type="html">`). The compiler ignores it (compiled dependencies are static imports). On an export without `src` it is an error. |
@@ -135,6 +137,74 @@ Every ESM re-export form has an `<html-export src>` counterpart:
   registered by an `as=` import; bind it with `<html-binding export="default" element="…">`. `name="card" default`
   re-exports `card` both named and as the default. The one-default-per-module rule counts re-exports.
 - Circular re-exports (and imports) are rejected: `Circular HTML module dependency: a -> b -> a`.
+
+## Data binding in templates
+
+A component's template can read the attributes of its host element with `{{name}}`. This is the whole feature:
+
+```html
+<html-export name="user-card" props="name count:number open:boolean">
+  <template>
+    <h3>{{name}}</h3>
+    <a href="/users/{{name}}" title="{{ name }} ({{count}} posts)">profile</a>
+    <button disabled="{{off}}">Follow</button>
+  </template>
+</html-export>
+
+<pf--user-card name="Ada" count="3"></pf--user-card>
+```
+
+**Syntax.** `{{attribute-name}}`, optional spaces inside the braces. The name is a host **attribute**: letters,
+digits, `_` and `-` (`{{aria-label}}` is fine; `{{a.b}}`, `{{a + b}}`, `{{fn()}}` and `{{x | filter}}` are
+`SyntaxError`s: there are no expressions, filters or calls, and no JavaScript is evaluated: no `eval`, no
+`new Function`, no `innerHTML`, so it works under a strict CSP and Trusted Types). `\{{` is a literal `{{`. An
+unterminated `{{` is a `SyntaxError`.
+
+**Where it binds.**
+
+| Site | Behavior |
+| --- | --- |
+| a **text node** (`<h3>{{name}}</h3>`) | sets the node's data. The value is always text, never markup: `name="<img onerror=…>"` shows those characters. An absent attribute is empty text. |
+| an **attribute value** (`href="/users/{{name}}"`) | the attribute is set to the interpolated string. If the value is exactly one binding and the host attribute is absent, the target attribute is **removed** (so `disabled="{{off}}"` follows a boolean `off` attribute). |
+| `<script>` and `<style>` text, comments, nested `<template>` content | never bound. |
+
+**Escaping rules (always on).**
+
+- Text is written with the text node's `data`, never `innerHTML`.
+- In a URL attribute (`href`, `src`, `action`, `formaction`, `poster`, `cite`, `data`, `background`, `longdesc`,
+  `usemap`, `ping`, `codebase`, `xlink:href`) a value that is a `javascript:` or `vbscript:` URL, or a `data:` HTML,
+  XHTML or SVG document (matched after the whitespace, control and invisible characters a URL parser ignores are
+  removed), is **refused**: the attribute is removed, never set. This is checked on every update. A static
+  `href="javascript:…"` written by the module's author is their own markup and is not touched.
+- `on*` attributes, `style` and `srcdoc` are **never bound**: `<b onclick="{{x}}">` is a `SyntaxError` when the
+  component is registered (`<b onclick="{{x}}">: "onclick" is an event handler attribute; …`), and nothing is
+  registered. A `props` name starting with `on` is rejected too.
+
+**`props`.** `props="title count:number open:boolean"` on the export declares attributes that are also properties of
+the element, named in camelCase (`aria-label` → `ariaLabel`): a `string` reads the attribute (`""` when absent), a
+`number` is `Number(attribute)` (`0` when absent or not a number), a `boolean` is whether the attribute is present.
+Setting the property sets the attribute (`el.count = 3` → `count="3"`; a boolean toggles it). The **attribute is the
+single source of truth**, and every attribute a template mentions, declared or not, is in `observedAttributes`. A
+property assigned before the element upgraded is taken over by the accessor. `props` is for the template's inputs;
+objects and arrays are not supported (see Non-goals).
+
+**Updates.** The template is stamped once per element. A changed attribute patches only the text nodes and attributes
+that mention it (and not at all when the new string equals the last one written): the shadow root's elements are
+never re-created, so focus, selection and event listeners inside survive.
+
+**Where errors come from.** A malformed binding is found when the component is **registered** (the template is
+analysed once per definition and window, before anything is registered), not at record time: it needs the parsed
+template, and the DOM reader and scanner see template text differently (entities, quoting), so a text-level check in
+`record.js` would disagree between them. Declaring `props` is validated in `record.js`, identically for both
+readers. The record carries `props` (`[{ name, type }]`); compiled output passes them to `defineHTMLComponent()`, so a
+compiled module binds exactly as the runtime-loaded one.
+
+**Non-goals.** No expressions of any kind; no loops or conditionals (a list or an `if` needs a template per item,
+which is exactly what JavaScript is for: render lists in a JS component that extends the definition's `.element`);
+no two-way binding (a bound node never writes back to the host); no property-only (non-attribute) inputs; no bindings
+inside nested `<template>`s; no bindings in server-rendered shadow roots (`renderDeclarative()` rejects a template
+that has `{{`; an upgrading element re-stamps a declarative root when the definition has bindings, keeping its leading
+`<style>` elements); attribute values only reach the DOM as strings.
 
 ## `<html-import>`
 

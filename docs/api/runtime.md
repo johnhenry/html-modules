@@ -27,6 +27,7 @@ new HTMLComponent(spec?: {
   shadow?: 'open' | 'closed',           // = "open"
   delegatesFocus?: boolean,             // = false
   styles?: string[],                    // = []: CSS texts, adopted into every shadow root (one sheet per definition)
+  props?: Array<{ name: string, type?: 'string' | 'number' | 'boolean' }>,  // = []: attributes that are also properties (observed, reflected)
   imports?: Array<{                     // = []: modules this component uses, bound before it is registered
     module?: object, from: string, as?: string, bindings?: Array<{ export, element?, adopt? }>,
     delimiter?: string, conflict?: 'error' | 'reuse', errors?: 'event' | 'throw', load?: 'eager' | 'lazy',
@@ -46,6 +47,7 @@ defineHTMLComponent(spec | Class | HTMLComponent): HTMLComponent
 | --- | --- |
 | `name` | The identity (`string` or `null`). For an `element` class without a `name`, the class name kebab-cased (`FancyButton` → `fancy-button`). |
 | `template` | The template HTML, or `null` for a class-backed definition. |
+| `props` | The declared props, frozen, each `{ name, type }` (type defaults to `"string"`). Every one is an observed attribute and a reflected property of the registered class; every attribute the template binds with `{{…}}` is observed too. See [Data binding](html-syntax.md#data-binding-in-templates). Registering a definition whose template has an invalid binding (an `on*`, `style` or `srcdoc` target, an expression, an unterminated `{{`) throws a `SyntaxError` before anything is registered. |
 | `shadow`, `delegatesFocus`, `styles`, `imports` | As given (normalized; `styles` and `imports` frozen, each import and its `bindings` frozen). |
 | `url` | Present only when given. The runtime loader sets the module URL; compiled output sets `import.meta.url`. |
 | `isClass` | `true` for a JS-authored (`element`) definition. |

@@ -46,7 +46,7 @@
  *
  * @typedef {{ export: string, element?: string, adopt?: boolean }} BindingRecord
  * @typedef {{ src: string, as?: string, delimiter?: string, type?: string, integrity?: string, conflict?: 'error'|'reuse', load?: 'eager'|'lazy', errors?: 'event'|'throw', bindings: BindingRecord[] }} ImportRecord
- * @typedef {{ kind: 'component', name: string|null, default?: true, template: string, shadow: 'open'|'closed', delegatesFocus: boolean, styles: string[] }
+ * @typedef {{ kind: 'component', name: string|null, default?: true, template: string, shadow: 'open'|'closed', delegatesFocus: boolean, styles: string[], props?: Array<{ name: string, type: 'string'|'number'|'boolean' }> }
  *         | { kind: 'stylesheet', name: string|null, default?: true, css: string }
  *         | { kind: 'data', name: string|null, default?: true, value: unknown }
  *         | { kind: 'reexport', src: string, type?: string, integrity?: string, name?: string|null, default?: true, import?: string }} ExportRecord
@@ -58,7 +58,8 @@
  * A "raw element" is the neutral input both readers produce:
  * @typedef {{ tag: string, order?: number, attrs: Record<string, string>, children: Array<{ tag: string, attrs: Record<string, string>, html?: string, text?: string }> }} RawElement
  */
-import { assertExportName, assertNamespace } from './names.js';
+import { assertExportName, assertNamespace, camelCase } from './names.js';
+import { parseProps } from './template.js';
 import { hasLazyTargets } from './lazy.js';
 import {
   EXPORT_DEFAULTS, IMPORT_DEFAULTS, assertOption, booleanAttribute, readImportOptions, readImportSettings, readModuleSettings,
@@ -263,9 +264,10 @@ function exportRecord(raw, where, defaults = EXPORT_DEFAULTS) {
       ? booleanAttribute('delegates-focus', attrs['delegates-focus'], ` on ${describe(raw)}${where}`)
       : defaults.delegatesFocus ?? EXPORT_DEFAULTS.delegatesFocus;
     for (const css of styles) assertNoImport(raw, css, where);
-    return [{ kind: 'component', ...base, template: templates[0].html ?? '', shadow, delegatesFocus, styles }];
+    const props = has(attrs, 'props') ? parseProps(attrs.props, describe(raw), camelCase, where) : null;
+    return [{ kind: 'component', ...base, template: templates[0].html ?? '', shadow, delegatesFocus, styles, ...(props && { props }) }];
   }
-  for (const a of ['shadow', 'delegates-focus']) {
+  for (const a of ['shadow', 'delegates-focus', 'props']) {
     if (has(attrs, a)) throw new SyntaxError(`${describe(raw)}: "${a}" only applies to an export with a <template>${where}`);
   }
   if (scripts.length) {

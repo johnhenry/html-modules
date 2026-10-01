@@ -40,7 +40,8 @@ type BindingRecord = { export: string, element?: string, adopt?: true };
 
 type ExportRecord =
   | { kind: 'component', name: string | null, default?: true, template: string,
-      shadow: 'open' | 'closed', delegatesFocus: boolean, styles: string[] }
+      shadow: 'open' | 'closed', delegatesFocus: boolean, styles: string[],
+      props?: Array<{ name: string, type: 'string' | 'number' | 'boolean' }> }
   | { kind: 'stylesheet', name: string | null, default?: true, css: string }
   | { kind: 'data', name: string | null, default?: true, value: unknown }
   | { kind: 'reexport', src: string, type?: string, integrity?: string, name?: string | null, default?: true, import?: string };
@@ -55,6 +56,7 @@ type ExportRecord =
 - A re-export **without a `name` key** is a star re-export (`export * from`); `import: "*"` is a namespace re-export
   (`export * as <name> from`); otherwise `import` (when present) is the source export's name. A `names="…"` list is
   expanded into one record per entry, so records never carry `names`.
+- `props` is present only when the export wrote `props="…"`, in the order written, each with its `type` (default `"string"`). It is the binding metadata of a record: the `{{attribute}}` sites themselves are found in the parsed template when the component is registered (see [Data binding](html-syntax.md#data-binding-in-templates)), identically for runtime-loaded and compiled modules.
 - `shadow` and `delegatesFocus` are always present on components: the export's attribute, else the module's
   `moduleSettings`, else the built-in default. `moduleSettings` is also kept on the record for reference.
 - `template` is the `<template>`'s content HTML (verbatim from the scanner; serialized by the DOM reader, so

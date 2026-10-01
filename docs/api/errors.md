@@ -40,6 +40,27 @@ Nothing is silently ignored: a mistake is an exception, a rejection, or an `erro
 | `SyntaxError` | `<html-export name="<n>">: invalid JSON in <url>: <JSON.parse message>` |
 | `SyntaxError` | `<html-export name="<n>">: @import is not supported in a <style>: a constructed stylesheet ignores @import rules, so it would silently do nothing; link the stylesheet from the page, or inline its rules in <url>` (a component's `<style>` or a stylesheet export; `@import` in a comment or string is fine) |
 
+### `props` and data binding
+
+`props` is validated with the record (both readers, the compiler, thrown as `SyntaxError`); a malformed template
+binding is thrown when the component is **registered** (`define()`, an import's registration), before anything is.
+
+| Error | Message |
+| --- | --- |
+| `SyntaxError` | `<html-export name="<n>">: props="" declares no props; write props="title count:number open:boolean" in <url>` |
+| `SyntaxError` | `<html-export name="<n>">: "<item>" in props is not "<name>" or "<name>:<type>"; a name is a lower-case attribute name such as "count" or "aria-label" in <url>` |
+| `SyntaxError` | `<html-export name="<n>">: props type "<type>" for "<name>" must be "string", "number", "boolean" or omitted in <url>` |
+| `SyntaxError` | `<html-export name="<n>">: prop "<name>" is declared twice in <url>` |
+| `SyntaxError` | `<html-export name="<n>">: "<name>" cannot be a prop: bindings never write on* attributes` / `"<property>" is a member of the element itself in <url>` |
+| `SyntaxError` | `<html-export name="<n>">: "props" only applies to an export with a <template> in <url>` |
+| `SyntaxError` (at registration) | `"<name>" from <url>: <tag attr="…">: "onclick" is an event handler attribute; bindings never write on* attributes (listen for the event in script instead)` |
+| `SyntaxError` (at registration) | `…: "style" cannot be bound: it would inject CSS` / `"srcdoc" cannot be bound: it would inject HTML` |
+| `SyntaxError` (at registration) | `…: Invalid binding "{{ a + b }}": a binding is the name of a host attribute, {{attribute-name}}. There are no expressions, filters or calls; write \{{ for a literal "{{"` |
+| `SyntaxError` (at registration) | `…: Unterminated binding "{{name": a binding is {{attribute-name}}; write \{{ for a literal "{{"` |
+
+A bound URL attribute that would run script (`javascript:`, `vbscript:`, an HTML `data:` document) is not an error:
+the attribute is removed.
+
 ## Module source (defaults and re-exports)
 
 | Error | Message |

@@ -20,6 +20,7 @@ import {
 import { assertOption, reportLoudly } from './settings.js';
 import { componentRootCreated, lazyTargets, watchLazy } from './lazy.js';
 import { configureWindow, nonceFor, trustedHTML } from './policy.js';
+import { analyzeTemplate, resolveSites, updateSites } from './template.js';
 
 /**
  * Configure page-security options for a window: a Trusted Types policy for the HTML the runtime parses
@@ -53,13 +54,14 @@ export class HTMLComponent {
    * @param {'open'|'closed'} [spec.shadow]  shadow root mode (default "open")
    * @param {boolean} [spec.delegatesFocus]
    * @param {string[]} [spec.styles]         CSS text, adopted into every shadow root (one sheet per definition)
+   * @param {Array<{ name: string, type?: 'string'|'number'|'boolean' }>} [spec.props]  attributes reflected as properties and observed (`props="count:number"`)
    * @param {Array<{module: object, from: string, as?: string, delimiter?: string, conflict?: string, errors?: string, load?: string, lazy?: () => Promise<object>, bindings?: object[]}>} [spec.imports]
    *                                         modules this component uses, bound before it is registered
    *                                         (an entry with no `module` and a `lazy` loader is bound when one of its tags is first used)
    * @param {Function} [spec.element]        a JS-authored HTMLElement subclass instead of a template
    * @param {string} [spec.url]              where it came from, for messages
    */
-  constructor({ name = null, template, shadow = 'open', delegatesFocus = false, styles = [], imports = [], element, url } = {}) {
+  constructor({ name = null, template, shadow = 'open', delegatesFocus = false, styles = [], props = [], imports = [], element, url } = {}) {
     if (element !== undefined) {
       if (typeof element !== 'function') throw new TypeError('defineHTMLComponent: `element` must be a class extending HTMLElement');
       this.#element = element;
@@ -73,6 +75,7 @@ export class HTMLComponent {
     this.shadow = shadow;
     this.delegatesFocus = Boolean(delegatesFocus);
     this.styles = Object.freeze([...styles]);
+    this.props = Object.freeze(props.map((p) => Object.freeze({ name: p.name, type: p.type ?? 'string' })));
     this.imports = Object.freeze(imports.map((i) => Object.freeze({ ...i, bindings: Object.freeze([...(i.bindings ?? [])]) })));
     if (url) this.url = url;
     Object.defineProperty(this, COMPONENT, { value: true });
@@ -127,15 +130,44 @@ export const isHTMLComponent = (value) => value != null && value[COMPONENT] === 
 
 const pascal = (name) => (name ? camelCase(name).replace(/^./, (c) => c.toUpperCase()) : 'HTMLModuleElement');
 
+const states = new WeakMap(); // element → { live: bound sites }
+
+/** Define the reflected property for a declared prop on `proto`: the attribute is the single source of truth. */
+function defineProp(proto, { name, type }) {
+  Object.defineProperty(proto, camelCase(name), {
+    enumerable: true,
+    configurable: true,
+    get() {
+      if (type === 'boolean') return this.hasAttribute(name);
+      const value = this.getAttribute(name);
+      if (type === 'number') {
+        const n = Number(value);
+        return value === null || Number.isNaN(n) ? 0 : n;
+      }
+      return value ?? '';
+    },
+    set(value) {
+      if (type === 'boolean') this.toggleAttribute(name, Boolean(value));
+      else this.setAttribute(name, String(value));
+    },
+  });
+}
+
 function templateElementClass(def, win) {
   let template;
   const content = () => {
     template ??= Object.assign(win.document.createElement('template'), { innerHTML: trustedHTML(def.template, win) });
     return template.content;
   };
+  // Binding sites are found once per definition and window, here, so a malformed binding fails at registration.
+  const info = analyzeTemplate(content(), describeDefinition(def));
+  const observed = [...new Set([...def.props.map((p) => p.name), ...info.names])];
   const cls = class extends win.HTMLElement {
     static get component() {
       return def;
+    }
+    static get observedAttributes() {
+      return observed;
     }
     constructor() {
       super();
@@ -153,13 +185,47 @@ function templateElementClass(def, win) {
       if (root.mode && root.mode !== def.shadow) {
         throw new Error(`<${this.localName}> already has ${root.mode === 'open' ? 'an open' : 'a closed'} shadow root (server-rendered?), but ${describeDefinition(def)} is shadow="${def.shadow}": render it with shadowrootmode="${def.shadow}" (renderDeclarative() does), or set shadow="${root.mode}" on the export`);
       }
-      const rendered = root.childNodes.length > 0; // (before the fallback <style> lands in the root)
+      let rendered = root.childNodes.length > 0; // (before the fallback <style> lands in the root)
+      if (rendered && info.sites.length) {
+        // Server-rendered markup cannot carry bindings: keep its leading <style>s, stamp the template afresh.
+        let node = root.firstChild;
+        while (node && node.nodeType === 1 && node.localName === 'style') node = node.nextSibling;
+        while (node) {
+          const next = node.nextSibling;
+          node.remove();
+          node = next;
+        }
+        rendered = false;
+      }
+      // A property set before the element was upgraded shadows the accessor: take its value and give it back.
+      for (const { name } of def.props) {
+        const property = camelCase(name);
+        if (Object.prototype.hasOwnProperty.call(this, property)) {
+          const value = this[property];
+          delete this[property];
+          this[property] = value;
+        }
+      }
       applyComponentStyles(root, def, win);
-      if (!rendered) root.append((this.ownerDocument ?? win.document).importNode(content(), true));
+      if (!rendered) {
+        const fragment = (this.ownerDocument ?? win.document).importNode(content(), true);
+        const live = info.sites.length ? resolveSites(fragment, info) : null;
+        root.append(fragment);
+        if (live) {
+          states.set(this, { live });
+          updateSites(live, this);
+        }
+      }
       // Lazy imports watch component shadow roots too (see lazy.js).
       componentRootCreated(this, root, win);
     }
+
+    attributeChangedCallback(name, previous, value) {
+      const live = states.get(this)?.live;
+      if (live && previous !== value) updateSites(live, this, [name]);
+    }
   };
+  for (const prop of def.props) defineProp(cls.prototype, prop);
   Object.defineProperty(cls, 'name', { value: pascal(def.name) });
   return cls;
 }
@@ -206,6 +272,9 @@ function componentSheets(def) {
 export function renderDeclarative(def, innerHTML = '') {
   if (!isHTMLComponent(def)) throw new TypeError('renderDeclarative: pass a component definition (from defineHTMLComponent() or a loaded module)');
   if (def.isClass) throw new TypeError(`renderDeclarative: ${describeDefinition(def)} is a JavaScript-authored class, not a template; there is no template to render`);
+  if (def.template.includes('{{')) {
+    throw new TypeError(`renderDeclarative: ${describeDefinition(def)} has data bindings ({{…}}) in its template, which cannot be rendered on the server: the element re-stamps its template when it upgrades. Render the host's content yourself, or take the bindings out`);
+  }
   const css = sheetsOf(def).filter(isHTMLStylesheet).map((sheet) => `<style>${sheet.resolvedCss.replace(/<\/style/gi, '<\\/style')}</style>`);
   return `<template shadowrootmode="${def.shadow}"${def.delegatesFocus ? ' shadowrootdelegatesfocus' : ''}>${css.join('')}${def.template}</template>${innerHTML}`;
 }
@@ -425,6 +494,7 @@ function checkTag(tag, value, { registry, window: win = globalThis, conflict = '
   assertElementName(tag);
   assertOption('conflict', conflict);
   const def = toComponent(value, { window: win, what: `<${tag}>` });
+  if (!def.isClass) def.elementFor(win); // a malformed template fails here, before anything is registered
   if (!registrations.has(registry)) registrations.set(registry, new Map());
   const existing = registry.get(tag);
   const taken = Boolean(existing) || Boolean(pending?.has(tag));

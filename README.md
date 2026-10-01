@@ -50,6 +50,7 @@ dependencies.
 - [Namespaces and delimiters](#namespaces-and-delimiters)
 - [Selective imports: `<html-binding>`](#selective-imports-html-binding)
 - [Identity vs registration name](#identity-vs-registration-name)
+- [Data binding](#data-binding)
 - [Settings](#settings)
 - [Lazy loading](#lazy-loading)
 - [JavaScript API](#javascript-api)
@@ -376,6 +377,44 @@ customElements.define('fancy-card', class extends ui.card.element { /* behaviour
 Defining the same definition under the same tag again is a no-op; defining a *different* component under a taken
 tag throws (or, with `conflict: 'reuse'`, keeps the existing one).
 
+## Data binding
+
+Templates are static by default. `{{attribute}}` makes a template read its host element's attributes, and
+`props="…"` on the export makes attributes reflect as typed properties:
+
+```html
+<html-export name="user-card" props="name count:number open:boolean">
+  <template>
+    <h3>{{name}}</h3>
+    <a href="/users/{{name}}" title="{{ name }} ({{count}} posts)">profile</a>
+    <button disabled="{{off}}">Follow</button>
+  </template>
+</html-export>
+```
+
+```html
+<ui--user-card name="Ada" count="3"></ui--user-card>
+<script>
+  const card = document.querySelector('ui--user-card');
+  card.count = 4;                    // reflects to count="4"; only the nodes that mention `count` are patched
+  card.setAttribute('name', 'Grace');
+</script>
+```
+
+- **No `eval`, no expression language, no `innerHTML`.** A binding is only ever an attribute name, so it works under a
+  strict CSP and Trusted Types. `{{a + b}}` is a `SyntaxError`.
+- **Escaping.** Text bindings set a text node's `data`: markup in a value is shown, not parsed. A URL attribute
+  (`href`, `src`, `action`, …) refuses `javascript:` / `vbscript:` / HTML `data:` URLs (the attribute is removed).
+  `on*`, `style` and `srcdoc` are never bound (a `SyntaxError` when the component is registered).
+- **Efficient updates.** The template is stamped once; an attribute change patches only the bound nodes that mention
+  it, so the shadow root's elements are never re-created.
+- **Compiled output binds identically** (it passes `props` to the same runtime).
+- **Non-goals.** No loops or conditionals (use a JS component for those), no two-way binding, no object-valued
+  props, no bindings in `<template>` nested in a template, none in server-rendered roots. Details and the exact
+  rules: [HTML syntax](docs/api/html-syntax.md#data-binding-in-templates).
+
+See it live: [`examples/data.html`](examples/data.html).
+
 ## Settings
 
 Two optional elements set defaults for one document. They are an extension beyond the PRD (which fixes `--` and has
@@ -647,6 +686,7 @@ src/
   settings.js      the settings vocabulary, validation and precedence
   runtime.js       HTML Component Definitions → custom elements; binding (shared by runtime and compiled code)
   record.js        module records; readHTMLModule() from a DOM
+  template.js      data binding: {{attribute}} sites, props, URL escaping
   scan.js          scanHTMLModule() from source text
   loader.js        resolve, fetch, parse, cache, link dependencies
   lazy.js          lazy loading: what an import waits for, and the watcher

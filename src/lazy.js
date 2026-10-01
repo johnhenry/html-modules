@@ -102,7 +102,7 @@ function hubFor(win) {
       watchers.add(w);
       if (!observer) {
         observer = new win.MutationObserver((records) => {
-          for (const r of records) for (const n of r.addedNodes) if (n.nodeType === 1) visit(n);
+          for (const r of records) for (const n of r.addedNodes) if (n.nodeType === 1 && n.isConnected !== false) visit(n);
         });
         observe(win.document);
       }

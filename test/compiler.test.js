@@ -49,7 +49,7 @@ test('runtime and compiled definitions are equivalent (§18)', async () => {
       const [a, b] = [rt.components[key], cp.components[key]];
       if (!isHTMLComponent(a)) continue;
       const view = (d) => ({
-        name: d.name, template: d.template && normalizeHTML(d.template), shadow: d.shadow, delegatesFocus: d.delegatesFocus, styles: d.styles,
+        name: d.name, template: d.template && normalizeHTML(d.template), shadow: d.shadow, delegatesFocus: d.delegatesFocus, styles: d.styles, props: d.props,
         imports: d.imports.map((i) => ({ from: i.from, as: i.as, bindings: i.bindings })),
       });
       assert.deepEqual(view(b), view(a), `${name}: ${key}`);

@@ -188,6 +188,14 @@ reference.
 | `renderDeclarative()`, and keeping a server-rendered root | Declarative shadow DOM is how a server renders a component; the runtime kept the root but skipped its styles, and could not see a closed one. |
 | `unadoptStylesheet()`, `HTMLModules.unload()`, `type` / `integrity` on `<html-export src>` | Counterparts: what can be adopted can be un-adopted, what can be loaded can be evicted, and a re-export can be typed like an import. Custom elements remain impossible to undefine. |
 
+## Extension beyond the PRD: data binding
+
+The PRD's templates are static. `{{attribute}}` in a template's text and attribute values, and `props="name count:number"`
+on an export, are an extension designed to stay declarative: a binding is only an attribute name (no expressions,
+no `eval`), text is never parsed as markup, URL attributes refuse script URLs, `on*` / `style` / `srcdoc` are never
+bound, and an update patches only the bound nodes. No loops, conditionals or two-way binding, deliberately: they
+would need an expression language. See [HTML syntax](api/html-syntax.md#data-binding-in-templates).
+
 ## Deferred
 
 | Item | Why |

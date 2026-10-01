@@ -85,6 +85,13 @@ export const checklist = [
     ['sty.switch', 'switching adopted theme stylesheets'],
     ['sty.scoped', 'a module\'s own adopt applies inside its components only'],
   ] },
+  { group: 'Data binding', items: [
+    ['bind.text', '{{attribute}} in text nodes: set as text, never markup'],
+    ['bind.attr', '{{attribute}} in attribute values, with interpolation; URL attributes refuse javascript:'],
+    ['bind.props', 'props="name count:number open:boolean": reflected, typed, observed properties'],
+    ['bind.patch', 'a changed attribute patches its bound nodes; the shadow root is not re-stamped'],
+    ['bind.compiled', 'compiled modules bind identically to runtime-loaded ones'],
+  ] },
   { group: 'Compiler', items: [
     ['cmp.esm', 'html-module ui.html → ui.js exporting definitions and a manifest'],
     ['cmp.no-register', 'compiled modules do not register on import'],
@@ -159,6 +166,11 @@ export const pages = [
     id: 'styles', href: 'styles.html', title: 'Styles and theming',
     summary: 'Component styles, theming through custom properties and ::part, switching adopted theme stylesheets, and stylesheets a module adopts only for its own components.',
     covers: ['fmt.styles', 'fmt.stylesheet', 'fmt.slots', 'sty.custom-props', 'sty.parts', 'sty.switch', 'sty.scoped', 'imp.adopt', 'up.defined'],
+  },
+  {
+    id: 'data', href: 'data.html', title: 'Data binding',
+    summary: '{{attribute}} in a template\'s text and attribute values, props that reflect as typed properties, escaping (text only, javascript: URLs refused), in-place patching, and the compiled module rendering the same. No eval; strict CSP and Trusted Types safe.',
+    covers: ['bind.text', 'bind.attr', 'bind.props', 'bind.patch', 'bind.compiled', 'fmt.component', 'cmp.same'],
   },
   {
     id: 'errors', href: 'errors.html', title: 'Errors',

@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Data binding · html-modules</title>
+  <script>try { const t = localStorage.getItem('html-modules-examples-theme'); if (t) document.documentElement.dataset.theme = t; } catch {}</script>
+  <link rel="stylesheet" href="./shared/site.css">
+  <style>
+    pf--user-card:not(:defined), cp--user-card:not(:defined) { visibility: hidden; }
+    .controls { display: grid; grid-template-columns: max-content 1fr; gap: 0.4rem 0.75rem; align-items: center; margin-bottom: 0.75rem; }
+    .controls input[type=text] { font: inherit; padding: 0.25rem 0.4rem; min-width: 0; }
+  </style>
+  <script type="module" src="../src/browser.js"></script>
+</head>
+<body>
+  <header class="site-header">
+    <a class="home" href="./index.html">html-modules</a>
+    <span class="crumb">Data binding</span>
+    <span class="spacer"></span>
+    <button class="theme-toggle" type="button">Dark mode</button>
+  </header>
+  <main class="page">
+    <nav class="site-nav"></nav>
+    <h1>Data binding in templates</h1>
+    <p class="lede">
+      <code>{{attribute}}</code> in a template's text or attribute values reads the host element's attribute. Bound nodes are
+      patched in place when it changes. There is no <code>eval</code>, no expression language and no <code>innerHTML</code>:
+      it works under a strict CSP with Trusted Types. <code>props="name count:number"</code> on the export also makes
+      attributes reflect as typed properties.
+    </p>
+    <div class="covers" data-page="data"></div>
+
+    <html-import id="pf" src="./components/profile.html" as="pf"></html-import>
+
+    <section class="card">
+      <h2>Edit the attributes</h2>
+      <div class="controls">
+        <label for="name">name</label><input id="name" type="text" value="Ada Lovelace">
+        <label for="role">role</label><input id="role" type="text" value="Analyst">
+        <label for="count">count (property)</label><input id="count" type="number" value="3">
+        <label for="website">website</label><input id="website" type="text" value="https://example.com/">
+        <label for="off">off (boolean attribute)</label><input id="off" type="checkbox">
+      </div>
+      <pf--user-card id="card" name="Ada Lovelace" role="Analyst" count="3" website="https://example.com/"></pf--user-card>
+      <p class="small muted">Try <code>javascript:alert(1)</code> as the website: the attribute is removed, never set. A name like <code>&lt;img src=x onerror=alert(1)&gt;</code> is shown as text.</p>
+    </section>
+
+    <section class="card">
+      <h2>The module</h2>
+      <pre data-source="./components/profile.html"></pre>
+    </section>
+
+    <section class="card">
+      <h2>Checks</h2>
+      <p class="small">Compiled, the same module renders the same: <a href="./compiled/profile.js">compiled/profile.js</a> is registered below as <code>&lt;cp--user-card&gt;</code>.</p>
+      <div id="compiled-host"><cp--user-card id="compiled" name="Ada Lovelace" role="Analyst" count="3" website="https://example.com/"></cp--user-card></div>
+      <ul id="checks"></ul>
+    </section>
+
+    <div class="pager"><a href="./styles.html">← Styles</a><a href="./errors.html">Errors →</a></div>
+  </main>
+
+  <script type="module">
+    import { HTMLModules } from '../src/browser.js';
+    import { renderChecks } from './shared/site.js';
+    import { userCard } from './compiled/profile.js';
+
+    await document.getElementById('pf').ready;
+    userCard.define('cp--user-card');
+    await customElements.whenDefined('cp--user-card');
+    const card = document.getElementById('card');
+    const q = (el, s) => el.shadowRoot.querySelector(s);
+    const h3 = q(card, 'h3');
+    const h3Text = h3.firstChild;
+    const bind = { name: 'name', role: 'role', website: 'website' };
+    for (const [id, attr] of Object.entries(bind)) document.getElementById(id).addEventListener('input', (e) => card.setAttribute(attr, e.target.value));
+    document.getElementById('count').addEventListener('input', (e) => { card.count = e.target.value; });
+    document.getElementById('off').addEventListener('change', (e) => card.toggleAttribute('off', e.target.checked));
+
+    const results = [];
+    const check = (label, ok) => results.push([label, ok]);
+    check('text is bound: <code>&lt;h3&gt;{{name}}&lt;/h3&gt;</code> shows the attribute', h3.textContent === 'Ada Lovelace');
+    check('attribute values interpolate: <code>href="/users/{{name}}"</code>', q(card, '.profile').getAttribute('href') === '/users/Ada Lovelace');
+    check('props reflect: <code>count="3"</code> reads as the number 3', card.count === 3);
+
+    card.setAttribute('name', '<img src=x onerror="window.__xss = 1">');
+    check('a markup-looking value is text, not markup (no element created, nothing ran)', h3.textContent.startsWith('<img') && !h3.querySelector('img') && !window.__xss);
+    check('updates patch the same text node: the shadow root was not re-stamped', h3.firstChild === h3Text && q(card, 'h3') === h3);
+
+    card.setAttribute('website', 'javascript:alert(1)');
+    check('a <code>javascript:</code> URL is refused: the href attribute is removed', !q(card, '.website').hasAttribute('href'));
+    card.setAttribute('website', 'https://example.org/');
+    check('and a normal URL is bound again', q(card, '.website').getAttribute('href') === 'https://example.org/');
+
+    card.setAttribute('off', '');
+    check('<code>disabled="{{off}}"</code> follows a boolean attribute', q(card, 'button').hasAttribute('disabled'));
+    card.removeAttribute('off');
+    check('… and is removed with it', !q(card, 'button').hasAttribute('disabled'));
+
+    check('<code>\\{{name}}</code> prints the braces', q(card, '.literal').textContent.trim() === 'Write {{name}} to print the braces.');
+
+    // Set before the element is upgraded: the property is kept.
+    const early = document.createElement('pf--early');
+    early.count = 42;
+    check('a property set before upgrade is not lost', (() => {
+      const def = HTMLModules && userCard;
+      class Probe extends def.element {}
+      customElements.define('pf--early', Probe);
+      customElements.upgrade(early);
+      return early.count === 42 && early.getAttribute('count') === '42' && early.shadowRoot.querySelector('.posts').textContent === '42';
+    })());
+
+    const compiled = document.getElementById('compiled');
+    const reference = document.createElement('pf--user-card');
+    for (const a of ['name', 'role', 'count', 'website']) reference.setAttribute(a, compiled.getAttribute(a));
+    document.body.append(reference);
+    reference.hidden = true;
+    check('the compiled module renders exactly what the runtime-loaded one does', compiled.shadowRoot.innerHTML === reference.shadowRoot.innerHTML);
+    renderChecks(document.getElementById('checks'), results);
+    card.setAttribute('name', 'Ada Lovelace');
+    card.setAttribute('website', 'https://example.com/');
+  </script>
+  <script type="module" src="./shared/site.js"></script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>strict CSP fixture</title>
+  <link rel="stylesheet" href="./strict.css">
+  <script type="module" src="/src/browser.js"></script>
+  <script type="module" src="./strict.js"></script>
+</head>
+<body>
+  <html-import id="m" src="./strict-mod.html" as="m"></html-import>
+  <m--greet id="g" who="World" href="javascript:alert(1)" onclick="window.__clicked = 1"></m--greet>
+</body>
+</html>

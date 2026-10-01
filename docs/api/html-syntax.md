@@ -44,10 +44,14 @@ scripts, a non-JSON script with no template, invalid JSON.
 
 ### Relative URLs
 
-- **In a `<style>` (components and stylesheets):** `url(...)` resolves against the **module's URL**, because each
-  constructed stylesheet is created with `{ baseURL: <module url> }` (a compiled module uses `import.meta.url`).
-  Where constructable stylesheets are unavailable, the fallback `<style>` element is in the page, so `url(...)`
-  there resolves against the page.
+- **In a `<style>` (components and stylesheets):** `url(...)` resolves against the **module's URL** (a compiled
+  module uses `import.meta.url`, so keep compiled output next to its assets). Browsers resolve a constructed or
+  adopted sheet's relative URLs against the page and ignore `new CSSStyleSheet({ baseURL })` (checked in Chrome
+  152), so html-modules rewrites each relative `url(...)` to an absolute URL before the CSS reaches the page: in
+  constructed sheets, in the fallback `<style>`, and in `renderDeclarative()` output. Absolute URLs, `data:` URLs,
+  fragment-only references (`url(#filter)`) and `url()` are left alone; `/root-relative` URLs resolve against the
+  module's origin. `sheet.css` keeps the source text; `sheet.resolvedCss` is what is applied. URLs inside
+  `image-set("…")` strings are not rewritten.
 - **`@import` is not supported** in a `<style>`: `replaceSync()` silently drops `@import` rules, so it is a
   `SyntaxError` naming the export (identical in both readers) rather than a stylesheet that quietly does nothing. Link the
   stylesheet from the page, or inline its rules.

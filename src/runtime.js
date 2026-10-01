@@ -206,7 +206,7 @@ function componentSheets(def) {
 export function renderDeclarative(def, innerHTML = '') {
   if (!isHTMLComponent(def)) throw new TypeError('renderDeclarative: pass a component definition (from defineHTMLComponent() or a loaded module)');
   if (def.isClass) throw new TypeError(`renderDeclarative: ${describeDefinition(def)} is a JavaScript-authored class, not a template; there is no template to render`);
-  const css = sheetsOf(def).filter(isHTMLStylesheet).map((sheet) => `<style>${sheet.css.replace(/<\/style/gi, '<\\/style')}</style>`);
+  const css = sheetsOf(def).filter(isHTMLStylesheet).map((sheet) => `<style>${sheet.resolvedCss.replace(/<\/style/gi, '<\\/style')}</style>`);
   return `<template shadowrootmode="${def.shadow}"${def.delegatesFocus ? ' shadowrootdelegatesfocus' : ''}>${css.join('')}${def.template}</template>${innerHTML}`;
 }
 
@@ -224,20 +224,51 @@ function applyComponentStyles(root, def, win) {
 // ---------------------------------------------------------------------------
 // Stylesheet definitions
 
+// url(...) in CSS: double-quoted, single-quoted or bare (a bare URL has no spaces, quotes or ")").
+const CSS_URL = /url\(\s*(?:"([^"]*)"|'([^']*)'|([^\s'")]*))\s*\)/gi;
+
+/**
+ * Make the relative `url(...)`s in `css` absolute against `base` (a module's URL), so they resolve against the
+ * module wherever the sheet is adopted. Browsers resolve a constructed sheet's (and an adopted `<style>`'s)
+ * relative URLs against the page, and do not reliably honour `new CSSStyleSheet({ baseURL })`, so the text itself
+ * is rewritten. Absolute URLs (`https:`, `data:`, …), fragment-only references (`url(#filter)`) and empty URLs
+ * are left alone; `/root-relative` URLs resolve against the module's origin.
+ */
+function resolveCssUrls(css, base) {
+  let baseURL;
+  try {
+    baseURL = new URL(base);
+  } catch {
+    return css; // no absolute module URL: nothing to resolve against
+  }
+  return css.replace(CSS_URL, (match, dq, sq, bare) => {
+    const ref = dq ?? sq ?? bare ?? '';
+    if (ref === '' || ref.startsWith('#') || /^[a-z][a-z0-9+.-]*:/i.test(ref)) return match;
+    return `url(${JSON.stringify(new URL(ref, baseURL).href)})`;
+  });
+}
+
 /** A stylesheet export: CSS text that can be adopted into documents and shadow roots. */
 export class HTMLStylesheet {
   #sheets = new WeakMap(); // window → CSSStyleSheet
+  #resolved;
 
   constructor({ name = null, css = '', url } = {}) {
     this.name = name;
     this.css = String(css);
     if (url) this.url = url;
+    this.#resolved = url ? resolveCssUrls(this.css, url) : this.css;
     Object.defineProperty(this, STYLESHEET, { value: true });
     Object.freeze(this);
   }
 
   get [Symbol.toStringTag]() {
     return 'HTMLStylesheet';
+  }
+
+  /** `css` with its relative `url(...)`s made absolute against the module's `url`: what is actually applied. */
+  get resolvedCss() {
+    return this.#resolved;
   }
 
   /** A constructed CSSStyleSheet for `win` (one per window, shared), or null without constructable sheets. */
@@ -251,7 +282,7 @@ export class HTMLStylesheet {
         } catch {
           sheet = new win.CSSStyleSheet(); // a url that is not absolute cannot be a base URL
         }
-        sheet.replaceSync(this.css);
+        sheet.replaceSync(this.#resolved);
       } catch {
         sheet = null;
       }
@@ -296,7 +327,7 @@ export function adoptStylesheet(root, value, { window: win } = {}) {
   if (value.name) style.setAttribute('data-html-module', value.name);
   const nonce = nonceFor(win);
   if (nonce) style.setAttribute('nonce', nonce);
-  style.textContent = value.css;
+  style.textContent = value.resolvedCss;
   seen.set(value, style);
   const parent = root.head ?? root;
   parent.append(style);

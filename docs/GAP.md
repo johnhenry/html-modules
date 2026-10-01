@@ -181,7 +181,7 @@ reference.
 | --- | --- |
 | `integrity` (SRI, SubtleCrypto), `credentials`, `mode`; the README's `## Security model` | A module URL is as trusted as a `<script src>`: pinning and fetch options are the available levers. JavaScript modules cannot be verified by `import()` and are refused rather than trusted. |
 | `trustedTypes` policy, `nonce`, `configureRuntime()` | `template.innerHTML` and `DOMParser.parseFromString` throw under `require-trusted-types-for 'script'`; the `<style>` fallback needs a nonce under a strict `style-src`. |
-| Module `baseURL` for constructed stylesheets; `@import` is a `SyntaxError` | `url()` in a module's CSS belongs to the module; `replaceSync()` silently drops `@import`. |
+| Relative `url()`s in a module's CSS rewritten to absolute against the module; `@import` is a `SyntaxError` | `url()` in a module's CSS belongs to the module. Browsers ignore `CSSStyleSheet`'s `baseURL`, so the CSS text is rewritten. `replaceSync()` silently drops `@import`. |
 | A lazy import with nothing to wait for is an error | It could never load. (Before, `el.load()` was the only way; `HTMLModules.load()` does that now.) |
 | `<html-import>` properties, deferred start, `src` change error | A scripted `createElement` / `append` / `setAttribute('src')` used to end in an error with no fetch. `load` is the method, so the attribute's property is `loadMode`. |
 | A misplaced `<html-binding>` is an error | A self-closed `<html-binding />` nested the next binding, which was dropped silently. |

@@ -335,6 +335,40 @@ test('bindings are all or nothing too: a bad or clashing one binds nothing, adop
   assert.equal(Object.keys(bindModule(ns, { bindings: [{ export: 'a', element: 'x-a' }, { export: 'b', element: 'x-taken' }], window: win, conflict: 'reuse' }).elements).length, 2);
 });
 
+test('relative url()s resolve against the module: constructed sheets, the <style> fallback and renderDeclarative (browsers ignore CSSStyleSheet baseURL)', () => {
+  const css = [
+    'a{background:url(bg.png)}', 'b{background:url( "./img/b.png" )}', "c{background:url('../up.png')}",
+    'd{background:url(/root.png)}', 'e{background:url(https://x.test/abs.png)}', 'f{background:url(data:image/png;base64,AA==)}',
+    'g{filter:url(#f)}', 'h{background:url()}',
+  ].join('');
+  const sheet = defineHTMLStylesheet({ name: 'theme', css, url: 'http://cdn.test/lib/ui.html' });
+  assert.equal(sheet.css, css, 'css is the source text, unchanged');
+  assert.equal(sheet.resolvedCss, [
+    'a{background:url("http://cdn.test/lib/bg.png")}', 'b{background:url("http://cdn.test/lib/img/b.png")}',
+    'c{background:url("http://cdn.test/up.png")}', 'd{background:url("http://cdn.test/root.png")}',
+    'e{background:url(https://x.test/abs.png)}', 'f{background:url(data:image/png;base64,AA==)}',
+    'g{filter:url(#f)}', 'h{background:url()}',
+  ].join(''));
+  assert.equal(defineHTMLStylesheet({ css: 'p{background:url(x.png)}' }).resolvedCss, 'p{background:url(x.png)}', 'no module url: left alone');
+  assert.equal(defineHTMLStylesheet({ css: 'p{background:url(x.png)}', url: 'not absolute' }).resolvedCss, 'p{background:url(x.png)}');
+
+  // What reaches the browser: replaceSync() text, the <style> fallback, and server-rendered <style>s.
+  const win = makeWindow();
+  const replaced = [];
+  win.CSSStyleSheet = class {
+    constructor() { this.cssRules = []; }
+    replaceSync(text) { replaced.push(text); }
+  };
+  assert.ok(sheet.sheetFor(win));
+  assert.match(replaced[0], /url\("http:\/\/cdn\.test\/lib\/bg\.png"\)/);
+  const fallbackWin = makeWindow();
+  const root = fallbackWin.document;
+  adoptStylesheet(root, sheet, { window: fallbackWin });
+  assert.match(root.querySelector('style').textContent, /url\("http:\/\/cdn\.test\/lib\/bg\.png"\)/);
+  const def = defineHTMLComponent({ name: 'card', template: 'x', styles: [':host{background:url(a.png)}'], url: 'http://cdn.test/lib/ui.html' });
+  assert.match(renderDeclarative(def), /url\("http:\/\/cdn\.test\/lib\/a\.png"\)/);
+});
+
 test('constructed stylesheets get the module URL as their baseURL (url() resolves against the module, not the page)', () => {
   const win = makeWindow();
   const made = [];

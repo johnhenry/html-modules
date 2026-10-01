@@ -66,7 +66,7 @@ The instance is frozen.
    (server-rendered?), but "<name>" is shadow="<mode>": render it with shadowrootmode="<mode>" (renderDeclarative() does), …`.
 2. Otherwise it attaches a shadow root (`{ mode: shadow, delegatesFocus }`).
 3. Either way it adopts the component's stylesheets (its own `styles` as one shared constructed sheet per window,
-   created with the module's URL as `baseURL`, then any stylesheet its module's imports `adopt`), so a server-rendered
+   with relative `url()`s made absolute against the module's URL, then any stylesheet its module's imports `adopt`), so a server-rendered
    root is styled like a stamped one. If the root already has content (server-rendered) it is kept and the template is
    **not** stamped again; if it is empty, a clone of the template content (parsed once per window, on first use) is
    appended.
@@ -118,6 +118,7 @@ defineHTMLStylesheet(spec | HTMLStylesheet): HTMLStylesheet
 | `name` | The export name, or `null`. |
 | `css` | The CSS text (`String(css)`, default `""`). |
 | `url` | Present only when given. |
+| `resolvedCss` | `css` with each relative `url(...)` made absolute against `url` (unchanged without a `url`): the text actually applied by `sheetFor()`, the `<style>` fallback and `renderDeclarative()`. Browsers ignore `CSSStyleSheet`'s `baseURL`, so the text is rewritten instead. |
 | `sheetFor(window = globalThis)` | A constructed `CSSStyleSheet` for that window (built once and shared), or `null` where constructable stylesheets are unavailable. |
 | `adopt(root, { window? })` | [`adoptStylesheet(root, this, options)`](#adoptstylesheetroot-value-options). |
 | `String(sheet)` | `"[object HTMLStylesheet]"`. |

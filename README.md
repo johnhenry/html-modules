@@ -963,7 +963,8 @@ done with your page's authority.
 - **Only declared exports are exports.** `readHTMLModule()` / `scanHTMLModule()` collect `<html-export>`,
   `<html-import>` and the settings elements, and `recordFromRaw()` rejects anything else a module could smuggle in
   (nesting, a second template, data mixed with a template). Everything else in the file is never evaluated:
-  modules are parsed with `DOMParser` into an inert document, so a `<script>` in a module does not run.
+  a module is parsed into a detached element of an inert, script-less `DOMParser` document (never connected, so
+  nothing loads), and a `<script>` in a module does not run.
 - **JSON data is data.** A data export is read with `JSON.parse` (and compiled to `JSON.parse(...)`), so a
   `"__proto__"` key is an own key and never reaches a prototype.
 - **Fetched HTML can be pinned.** `integrity` (an `<html-import integrity>` attribute, or the `integrity` option of

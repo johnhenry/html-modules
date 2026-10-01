@@ -21,7 +21,7 @@ import { assertOption, reportLoudly } from './settings.js';
 import { componentRootCreated, lazyTargets, watchLazy } from './lazy.js';
 import { configureWindow, nonceFor, trustedHTML } from './policy.js';
 import { analyzeTemplate, resolveSites, updateSites } from './template.js';
-import { FORM_ATTRIBUTES, FORM_PROPERTIES, checkFormControl, formAttributeChanged, installFormAssociation, setupForm } from './form.js';
+import { FORM_ATTRIBUTES, FORM_PROPERTIES, FORM_ROLES, checkFormControl, connectButton, formAttributeChanged, installFormAssociation, setupForm } from './form.js';
 
 /** @typedef {import('./types.js').ModuleNamespace} ModuleNamespace */
 /** @typedef {import('./types.js').TagRecord} TagRecord */
@@ -61,7 +61,7 @@ export class HTMLComponent {
    *   loader is bound when one of its tags is first used); `element`: a JS-authored HTMLElement subclass instead of
    *   a template; `url`: where it came from, for messages.
    */
-  constructor({ name = null, template, shadow = 'open', delegatesFocus = false, styles = [], props = [], formAssociated = false, formControl, imports = [], element, url } = {}) {
+  constructor({ name = null, template, shadow = 'open', delegatesFocus = false, styles = [], props = [], formAssociated = false, formControl, formRole, imports = [], element, url } = {}) {
     if (element !== undefined) {
       if (typeof element !== 'function') throw new TypeError('defineHTMLComponent: `element` must be a class extending HTMLElement');
       this.#element = element;
@@ -88,6 +88,13 @@ export class HTMLComponent {
       if (!this.formAssociated) throw new TypeError('defineHTMLComponent: `formControl` needs `formAssociated: true`');
       /** @type {string | undefined} */
       this.formControl = String(formControl);
+    }
+    if (formRole !== undefined) {
+      if (!this.formAssociated) throw new TypeError('defineHTMLComponent: `formRole` needs `formAssociated: true`');
+      if (!FORM_ROLES.has(formRole)) throw new SyntaxError(`defineHTMLComponent: Invalid formRole ${JSON.stringify(formRole)}: use "submit" or "reset"`);
+      if (this.formControl !== undefined) throw new TypeError('defineHTMLComponent: a button (`formRole`) has no `formControl`: it carries no value');
+      /** @type {'submit' | 'reset' | undefined} */
+      this.formRole = formRole;
     }
     for (const p of this.props) {
       if (this.formAssociated && FORM_PROPERTIES.has(camelCase(p.name))) throw new SyntaxError(`defineHTMLComponent: "${p.name}" cannot be a prop of a form-associated component: it is a built-in property`);
@@ -299,7 +306,7 @@ function stamp(el, state, def) {
   state.def = def;
   state.live = live;
   if (live) updateSites(live, el);
-  if (def.formAssociated) setupForm(el, root, def.formControl, (host) => internalsOf(host, win));
+  if (def.formAssociated) setupForm(el, root, def.formControl, (host) => internalsOf(host, win), def.formRole);
 }
 
 function templateElementClass(def, win) {
@@ -369,9 +376,13 @@ function templateElementClass(def, win) {
       slot.instances.add(new WeakRef(this));
       applyComponentStyles(root, current, win);
       if (!rendered) stamp(this, state, current);
-      else if (current.formAssociated) setupForm(this, root, current.formControl, (host) => internalsOf(host, win));
+      else if (current.formAssociated) setupForm(this, root, current.formControl, (host) => internalsOf(host, win), current.formRole);
       // Lazy imports watch component shadow roots too (see lazy.js).
       componentRootCreated(this, root, win);
+    }
+
+    connectedCallback() {
+      if (def.formRole) connectButton(this);
     }
 
     attributeChangedCallback(name, previous, value) {
@@ -1037,7 +1048,7 @@ const importsKey = (def) => JSON.stringify(def.imports.map(({ module, lazy, ...r
  */
 function planComponentSwap(previous, next) {
   if (previous.isClass || next.isClass) return 'a JavaScript-authored class cannot be hot-swapped';
-  for (const key of ['shadow', 'delegatesFocus', 'formAssociated', 'formControl']) {
+  for (const key of ['shadow', 'delegatesFocus', 'formAssociated', 'formControl', 'formRole']) {
     if (previous[key] !== next[key]) return `${key} changed (${JSON.stringify(previous[key])} → ${JSON.stringify(next[key])}): it is fixed when an element is created`;
   }
   if (importsKey(previous) !== importsKey(next)) return 'the component\'s own imports changed';

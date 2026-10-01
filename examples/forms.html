@@ -7,7 +7,7 @@
   <script>try { const t = localStorage.getItem('html-modules-examples-theme'); if (t) document.documentElement.dataset.theme = t; } catch {}</script>
   <link rel="stylesheet" href="./shared/site.css">
   <style>
-    :is(ff--text-field, ff--secret-field, ff--star-input):not(:defined) { visibility: hidden; }
+    :is(ff--text-field, ff--secret-field, ff--star-input, ff--submit-button, ff--reset-button):not(:defined) { visibility: hidden; }
     form .row { align-items: end; }
     fieldset { border: 1px dashed var(--border, #bbb); border-radius: 6px; margin-top: 0.75rem; }
     output { display: block; font: 0.85rem ui-monospace, monospace; white-space: pre-wrap; margin-top: 0.5rem; }
@@ -35,6 +35,8 @@
     <html-import id="ff" src="./components/fields.html" as="ff">
       <html-binding export="text-field"></html-binding>
       <html-binding export="secret-field"></html-binding>
+      <html-binding export="submit-button"></html-binding>
+      <html-binding export="reset-button"></html-binding>
     </html-import>
 
     <section class="card">
@@ -49,6 +51,21 @@
         <fieldset id="locked" disabled><legend>Disabled fieldset</legend><ff--text-field id="locked-field" name="locked" value="nope">Locked</ff--text-field></fieldset>
         <div class="row" style="margin-top:.75rem"><button type="submit">Submit</button> <button type="reset">Reset</button></div>
         <output id="out"></output>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>A form with no native controls</h2>
+      <p class="small muted">Enter in a field submits, the way it does for native inputs (<code>form-control</code> on an <code>&lt;input&gt;</code>): the form's default button
+      is activated, and a disabled default button blocks it. <code>form-role="submit"</code> / <code>"reset"</code> make a component a button.</p>
+      <form id="form2">
+        <div class="row">
+          <ff--text-field id="title" name="title" value="Draft" required>Title</ff--text-field>
+          <ff--text-field id="tag" name="tag">Tag</ff--text-field>
+          <ff--submit-button id="go" name="intent" value="save">Save</ff--submit-button>
+          <ff--reset-button id="clear">Clear</ff--reset-button>
+        </div>
+        <output id="out2"></output>
       </form>
     </section>
 
@@ -111,6 +128,16 @@
     form.addEventListener('submit', (e) => { e.preventDefault(); show(); });
     show();
 
+    const form2 = document.getElementById('form2');
+    const submits = [];
+    form2.addEventListener('submit', (e) => {
+      e.preventDefault();
+      submits.push({ submitter: e.submitter?.id ?? null, data: Object.fromEntries(new FormData(form2)) });
+      document.getElementById('out2').textContent = JSON.stringify(submits.at(-1));
+    });
+    const tick = () => new Promise((r) => setTimeout(r, 10));
+    const enterIn = (host) => host.shadowRoot.querySelector('input').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, composed: true, cancelable: true }));
+
     const who = document.getElementById('who');
     const stars = document.getElementById('stars');
     const pin = document.getElementById('pin');
@@ -150,6 +177,34 @@
       await new Promise((r) => setTimeout(r));
       check('<code>form.reset()</code> restores every default (the value attribute; none for the stars)', data().who === 'Ada' && data().pin === '1234' && !('rating' in data()) && stars.paint() === undefined);
 
+      const go = document.getElementById('go');
+      const clear = document.getElementById('clear');
+      check('a <code>form-role="submit"</code> component is a button: <code>type</code> is "submit", and it adds nothing to FormData', go.type === 'submit' && clear.type === 'reset' && !('intent' in Object.fromEntries(new FormData(form2))));
+      enterIn(document.getElementById('title'));
+      await tick();
+      check('Enter in a field activates the form\'s default button: <code>submit</code> fires once with <code>submitter</code> = the component', submits.length === 1 && submits[0].submitter === (typeof SubmitEvent === 'function' ? 'go' : null) && submits[0].data.title === 'Draft');
+      go.click();
+      await tick();
+      check('clicking it submits as well; the form data has the fields and not the button', submits.length === 2 && !('intent' in submits[1].data));
+      go.setAttribute('disabled', '');
+      enterIn(document.getElementById('title'));
+      await tick();
+      check('a disabled default button blocks implicit submission, as a native one does', submits.length === 2);
+      go.removeAttribute('disabled');
+      document.getElementById('title').value = '';
+      go.click();
+      await tick();
+      check('the required field is empty: the button\'s submit is blocked by validation', submits.length === 2);
+      form2.requestSubmit();
+      await tick();
+      check('<code>form.requestSubmit()</code> from script is blocked by validation too', submits.length === 2);
+      document.getElementById('title').value = 'Again';
+      form2.requestSubmit();
+      await tick();
+      check('… and with a value it submits, with no submitter', submits.length === 3 && submits[2].submitter === null);
+      clear.click();
+      await tick();
+      check('a <code>form-role="reset"</code> component resets the form to its defaults', document.getElementById('title').value === 'Draft');
     }
 
     renderChecks(document.getElementById('checks'), results);

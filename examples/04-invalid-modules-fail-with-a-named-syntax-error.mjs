@@ -35,6 +35,10 @@ const cases = [
   [`<html-export name="f" form-associated form-control="">${T}</html-export>`, /form-control="" is empty; write a selector for the control inside the template/],
   [`<html-export name="f" form-associated props="value">${T}</html-export>`, /"value" cannot be a prop of a form-associated component: it is a built-in property \(name, value/],
   [`<html-export name="f" form-associated><style>p{}</style></html-export>`, /"form-associated" only applies to an export with a <template> in m\.html/],
+  [`<html-export name="f" form-role="submit">${T}</html-export>`, /form-role="submit" needs form-associated: the component must take part in forms to submit or reset one/],
+  [`<html-export name="f" form-associated form-role="">${T}</html-export>`, /form-role="" is empty; write form-role="submit" or form-role="reset"/],
+  [`<html-export name="f" form-associated form-role="button">${T}</html-export>`, /form-role="button" must be "submit" or "reset"/],
+  [`<html-export name="f" form-associated form-role="submit" form-control="input">${T}</html-export>`, /form-role="submit" and form-control="input" cannot be combined: a button carries no value/],
   // Scoped registries
   [`<html-import src="./a.html" as="a" registry="isolated"></html-import>`, /Invalid registry="isolated" on <html-import> in m\.html: use "global" or "scoped"/],
   [`<html-import-settings registry="shadow"></html-import-settings>`, /Invalid registry="shadow" on <html-import-settings> in m\.html: use "global" or "scoped"/],

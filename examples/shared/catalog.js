@@ -99,6 +99,8 @@ export const checklist = [
     ['frm.disabled', 'a disabled fieldset disables the component'],
     ['frm.reset', 'form.reset() restores the default value; state restore after navigation'],
     ['frm.internals', 'one ElementInternals, shared with a closed shadow root and with subclasses'],
+    ['frm.implicit', 'Enter in a form-control input submits the form: the default button, a disabled one blocks it'],
+    ['frm.buttons', 'form-role="submit"|"reset": a component that is a submit or reset button (and the default button)'],
   ] },
   { group: 'Scoped registries', items: [
     ['reg.scoped', 'registry="scoped" in a module: its own imports register in a registry its components\' shadow roots use'],
@@ -192,8 +194,8 @@ export const pages = [
   },
   {
     id: 'forms', href: 'forms.html', title: 'Form-associated components',
-    summary: 'form-associated on an export: components that take part in <form>: FormData, validity and :invalid, disabled fieldsets, reset, a closed shadow root, and a subclass sharing the same ElementInternals.',
-    covers: ['frm.associated', 'frm.control', 'frm.validity', 'frm.disabled', 'frm.reset', 'frm.internals', 'fmt.shadow'],
+    summary: 'form-associated on an export: components that take part in <form>: FormData, validity and :invalid, disabled fieldsets, reset, a closed shadow root, and a subclass sharing the same ElementInternals. Enter submits a form of components, and form-role makes a component a submit or reset button.',
+    covers: ['frm.associated', 'frm.control', 'frm.validity', 'frm.disabled', 'frm.reset', 'frm.internals', 'frm.implicit', 'frm.buttons', 'fmt.shadow'],
   },
   {
     id: 'scoped', href: 'scoped.html', title: 'Scoped registries',

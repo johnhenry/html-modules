@@ -29,6 +29,7 @@ export type ExportRecord = {
     }>;
     formAssociated?: true;
     formControl?: string;
+    formRole?: 'submit' | 'reset';
 } | {
     kind: 'stylesheet';
     name: string | null;

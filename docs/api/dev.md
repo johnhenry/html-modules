@@ -86,7 +86,7 @@ settings from the slot's current `HTMLComponent`. Replacing a definition under a
 - swaps a **stylesheet export** in every root that adopted it (a page's `<html-binding adopt>`, another module's components).
 
 **What cannot be applied in place** (the page reloads, and nothing was changed): `<html-export>`s added or removed, a
-data export whose value changed, a changed `shadow`, `delegates-focus`, `form-associated` or `form-control`; a template
+data export whose value changed, a changed `shadow`, `delegates-focus`, `form-associated`, `form-control` or `form-role`; a template
 that needs observed attributes or `props` the registered class does not have (`observedAttributes` and property
 accessors are fixed when the tag is defined); changed `<html-import>`s of the module; a JavaScript-authored class. Scoped
 registries and `registry`-bound imports follow the same rules.

@@ -443,8 +443,12 @@ See it live: [`examples/data.html`](examples/data.html).
 `form-control="input"` names the control in the template that carries the value and the validity (and makes the component delegate focus to it by default, so a browser can focus it when validation fails); without it the
 element is the control (`el.value = …`, or `el.internals.setFormValue()`). `attachInternals()` is memoized on every
 template class, so a closed shadow root (which needs the internals to be found) and your own subclass share the one
-object the platform allows. Not supported: non-string form values, radio-style groups, engines without form-associated
-custom elements. Reference: [HTML syntax](docs/api/html-syntax.md#form-associated-components);
+object the platform allows. **Enter** in a text-like `form-control` input submits the form as native implicit
+submission does (the form's default button, a disabled one blocking it), and `form-role="submit"` / `"reset"` make a
+component a submit or reset button (click, Enter and Space; it is the form's default button and the `submit` event's
+`submitter`; a custom element cannot be `form.requestSubmit(button)`'s argument, so the library fires the event itself
+and calls `form.submit()` unless it was cancelled). Not supported: non-string form values, radio-style groups,
+`formaction` and friends on a component, engines without form-associated custom elements. Reference: [HTML syntax](docs/api/html-syntax.md#form-associated-components);
 live: [`examples/forms.html`](examples/forms.html).
 
 ## Settings

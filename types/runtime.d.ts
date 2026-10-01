@@ -44,6 +44,8 @@ export declare class HTMLComponent {
     formAssociated: boolean;
     /** @type {string | undefined} */
     formControl: string | undefined;
+    /** @type {'submit' | 'reset' | undefined} */
+    formRole: 'submit' | 'reset' | undefined;
     /** @type {readonly Readonly<import('./types.js').ComponentImport>[]} */
     imports: readonly Readonly<import('./types.js').ComponentImport>[];
     /** @type {string | undefined} */
@@ -54,7 +56,7 @@ export declare class HTMLComponent {
      *   loader is bound when one of its tags is first used); `element`: a JS-authored HTMLElement subclass instead of
      *   a template; `url`: where it came from, for messages.
      */
-    constructor({ name, template, shadow, delegatesFocus, styles, props, formAssociated, formControl, imports, element, url }?: import('./types.js').ComponentSpec);
+    constructor({ name, template, shadow, delegatesFocus, styles, props, formAssociated, formControl, formRole, imports, element, url }?: import('./types.js').ComponentSpec);
     get [Symbol.toStringTag](): string;
     /** True when the component is a JS-authored class rather than a template. */
     get isClass(): boolean;

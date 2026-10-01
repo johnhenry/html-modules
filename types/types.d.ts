@@ -331,6 +331,10 @@ export type ComponentSpec = {
     props?: PropSpec[];
     formAssociated?: boolean;
     formControl?: string;
+    /**
+     * needs `formAssociated`; the element is a submit or reset button (no `formControl`)
+     */
+    formRole?: 'submit' | 'reset';
     imports?: ComponentImport[];
     /**
      * a JS-authored HTMLElement subclass instead of a template
@@ -535,6 +539,7 @@ export type CompileOptions = {
  * @property {PropSpec[]} [props]
  * @property {boolean} [formAssociated]
  * @property {string} [formControl]
+ * @property {'submit' | 'reset'} [formRole]       needs `formAssociated`; the element is a submit or reset button (no `formControl`)
  * @property {ComponentImport[]} [imports]
  * @property {Function} [element]              a JS-authored HTMLElement subclass instead of a template
  * @property {string} [url]

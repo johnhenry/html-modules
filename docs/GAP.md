@@ -201,7 +201,9 @@ would need an expression language. See [HTML syntax](api/html-syntax.md#data-bin
 `form-associated` (and `form-control="selector"`) on an export: the registered class is `static formAssociated` with
 `ElementInternals`, supplying a form value (a control in the template, or `el.value`), validity, disabled, reset and
 restore. `attachInternals()` is memoized so the closed-declarative-root lookup and subclasses share the one call the
-platform allows. See [HTML syntax](api/html-syntax.md#form-associated-components).
+platform allows. Enter in a `form-control` `<input>` does implicit submission (the default button, a disabled one blocking it),
+and `form-role="submit"|"reset"` makes a component a submit or reset button: the platform has no custom-element submit
+button (`requestSubmit(el)` throws), so the library fires `submit` with `submitter` itself. See [HTML syntax](api/html-syntax.md#form-associated-components).
 
 ## Extension beyond the PRD: dev server, hot reload and Vite
 

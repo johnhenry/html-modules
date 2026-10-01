@@ -65,8 +65,12 @@ binding is thrown when the component is **registered** (`define()`, an import's 
 | `SyntaxError` | `Invalid form-associated="<value>" on <html-export name="<n>"> in <url>: it is a boolean attribute; write form-associated, form-associated="true" or form-associated="false"` |
 | `SyntaxError` | `<html-export name="<n>">: form-control="" is empty; write a selector for the control inside the template, e.g. form-control="input" in <url>` |
 | `SyntaxError` | `<html-export name="<n>">: form-control="<selector>" needs form-associated: the component must take part in forms for its control's value to be the form value in <url>` |
+| `SyntaxError` | `<html-export name="<n>">: form-role="" is empty; write form-role="submit" or form-role="reset" in <url>` |
+| `SyntaxError` | `<html-export name="<n>">: form-role="<v>" must be "submit" or "reset" in <url>` |
+| `SyntaxError` | `<html-export name="<n>">: form-role="<v>" needs form-associated: the component must take part in forms to submit or reset one in <url>` |
+| `SyntaxError` | `<html-export name="<n>">: form-role="<v>" and form-control="<sel>" cannot be combined: a button carries no value, so it has no control in <url>` |
 | `SyntaxError` | `<html-export name="<n>">: "<name>" cannot be a prop of a form-associated component: it is a built-in property (name, value, …) in <url>` |
-| `SyntaxError` | `<html-export name="<n>">: "form-associated" only applies to an export with a <template> in <url>` (same for `"form-control"`) |
+| `SyntaxError` | `<html-export name="<n>">: "form-associated" only applies to an export with a <template> in <url>` (same for `"form-control"` and `"form-role"`) |
 | `SyntaxError` (at registration) | `"<name>" from <url>: form-control="<selector>" matches nothing in the template` / `is not a valid selector` / `matches <p>, which is not a form control (use an <input>, <textarea> or <select>)` |
 | `TypeError` (on construction) | `This environment has no ElementInternals (attachInternals())` |
 

@@ -134,7 +134,7 @@ export function compileRecord(record, { runtime = '@johnhenry/html-modules/runti
     switch (e.kind) {
       case 'component':
         helpers.add('defineHTMLComponent');
-        expr = `defineHTMLComponent({\n  name: ${str(e.name)},\n  template: ${str(e.template)},\n  shadow: ${str(e.shadow)},\n  delegatesFocus: ${e.delegatesFocus},\n  styles: ${str(e.styles)},${e.props ? `\n  props: ${str(e.props)},` : ''}${e.formAssociated ? `\n  formAssociated: true,${e.formControl ? `\n  formControl: ${str(e.formControl)},` : ''}` : ''}\n  imports: ${imports},\n  url: import.meta.url,\n})`;
+        expr = `defineHTMLComponent({\n  name: ${str(e.name)},\n  template: ${str(e.template)},\n  shadow: ${str(e.shadow)},\n  delegatesFocus: ${e.delegatesFocus},\n  styles: ${str(e.styles)},${e.props ? `\n  props: ${str(e.props)},` : ''}${e.formAssociated ? `\n  formAssociated: true,${e.formControl ? `\n  formControl: ${str(e.formControl)},` : ''}${e.formRole ? `\n  formRole: ${str(e.formRole)},` : ''}` : ''}\n  imports: ${imports},\n  url: import.meta.url,\n})`;
         break;
       case 'stylesheet':
         helpers.add('defineHTMLStylesheet');

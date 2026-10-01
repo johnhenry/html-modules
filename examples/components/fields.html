@@ -39,3 +39,27 @@
   <style>:host { display: inline-block; } input { font: inherit; padding: 0.3rem 0.45rem; }</style>
   <template><label><slot>Note</slot> <input type="text"></label></template>
 </html-export>
+
+<!--
+  Buttons for a form made of components. A custom element cannot be a native submit or reset button, so form-role
+  says it is one: click, Enter and Space activate it (it gets tabindex="0" if it has none), a submit button is the
+  form's default button (Enter in a text field of the form activates it, unless it is disabled), and it adds nothing
+  to the form's data. The submit event's `submitter` is the element.
+-->
+<html-export name="submit-button" form-associated form-role="submit">
+  <style>
+    :host { display: inline-block; padding: 0.3rem 0.8rem; border: 1px solid #3b6fd4; border-radius: 6px; background: #3b6fd4; color: #fff; cursor: pointer; user-select: none; }
+    :host(:focus-visible) { outline: 2px solid #1d3f8f; outline-offset: 2px; }
+    :host(:disabled) { opacity: 0.4; cursor: not-allowed; }
+  </style>
+  <template><slot>Submit</slot></template>
+</html-export>
+
+<html-export name="reset-button" form-associated form-role="reset">
+  <style>
+    :host { display: inline-block; padding: 0.3rem 0.8rem; border: 1px solid #888; border-radius: 6px; cursor: pointer; user-select: none; }
+    :host(:focus-visible) { outline: 2px solid #1d3f8f; outline-offset: 2px; }
+    :host(:disabled) { opacity: 0.4; cursor: not-allowed; }
+  </style>
+  <template><slot>Reset</slot></template>
+</html-export>

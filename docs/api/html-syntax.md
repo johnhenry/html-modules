@@ -9,7 +9,7 @@ syntax; an import inside a module is private to that module.
 
 - [`<html-export>`](#html-export): exports of a module
 - [Data binding in templates](#data-binding-in-templates): `{{attribute}}` and `props`
-- [Form-associated components](#form-associated-components): `form-associated`, `form-control`
+- [Form-associated components](#form-associated-components): `form-associated`, `form-control`, `form-role` (and [implicit submission](#implicit-submission-and-buttons))
 - [Scoped registries](#scoped-registries): `registry="scoped"` in a module
 - [`<html-import>`](#html-import): imports into a page or a module
 - [`<html-binding>`](#html-binding): selective bindings of one import
@@ -75,6 +75,7 @@ scripts, a non-JSON script with no template, invalid JSON.
 | `props` | component only | whitespace or comma separated `name` or `name:type` (`string`, `number`, `boolean`) | Declares attributes that are also **properties**: reflected, typed and observed (see [Data binding](#data-binding-in-templates)). `props="title count:number open:boolean"`. On a non-component export it is an error. |
 | `form-associated` | component only | [boolean](#boolean-attributes) | The component takes part in forms: `static formAssociated = true` and `ElementInternals`. See [Form-associated components](#form-associated-components). On a non-component export it is an error. |
 | `form-control` | component with `form-associated` | a CSS selector | The control in the template (an `<input>`, `<textarea>` or `<select>`) whose value is the form value. Without `form-associated` it is an error; the selector must match such an element in the template (checked at registration). |
+| `form-role` | component with `form-associated` | `submit` or `reset` | The component is a submit or reset button of its form (and, for `submit`, the form's default button). Without `form-associated`, with a `form-control`, or with another value it is an error. See [Implicit submission and buttons](#implicit-submission-and-buttons). |
 | `src` | re-export | a module specifier | Makes this a re-export of another module (HTML or JS), resolved like an `<html-import src>` of this module (including its `<html-import-settings base>`). |
 | `import` | re-export with `name` | an export name of the source module, `default`, or `*` | The export to take from `src`, when it differs from `name`. `import="*"` takes the whole namespace (`export * as ns from`). |
 | `type` | re-export | `html`, `js` | As on `<html-import>`: load `src` as an HTML module or as JavaScript, whatever its extension (`<html-export src="./part.tpl" type="html">`). The compiler ignores it (compiled dependencies are static imports). On an export without `src` it is an error. |
@@ -243,12 +244,59 @@ no message), and `focus()` and a click on the host never reached the input. A co
 control and keeps `delegates-focus` off unless you write it.
 
 **What the class provides**, besides the platform's: `name`, `disabled` and `required` (reflected attributes),
-`value` (current), `defaultValue` (the `value` attribute), `type` (the tag), `form`, `labels`, `validity`,
+`value` (current), `defaultValue` (the `value` attribute), `type` (the tag, or `"submit"` / `"reset"` for a [button](#implicit-submission-and-buttons)), `form`, `labels`, `validity`,
 `validationMessage`, `willValidate`, `checkValidity()`, `reportValidity()`, `setCustomValidity(message)` and
 `internals` (the `ElementInternals`). These names cannot be `props` of the same component. `formResetCallback` restores the
 initial value (the `value` attribute, or the control's initial value); `formStateRestoreCallback` writes the saved
 string back; `formDisabledCallback` disables the control; `formAssociatedCallback` is an empty hook. A subclass may
 override any of them and call `super`.
+
+### Implicit submission and buttons
+
+A native `<input>` in a form submits the form on Enter, and only a native `<button>` or `<input type="submit">` can be
+its submit button. Neither holds for a component, because its `<input>` lives in a shadow root (it has no form owner)
+and a custom element is not a submit button. html-modules supplies both:
+
+**Enter in a `form-control` input.** When the component's `form-control` is an `<input>` of a text-like type (`text`,
+`search`, `url`, `tel`, `email`, `password`, `date`, `month`, `week`, `time`, `datetime-local`, `number`) and Enter is
+pressed in it (not while composing with an IME), the form is submitted the way the HTML Standard's *implicit
+submission* does:
+
+- if the form has a **default button** (the first submit button in tree order among `form.elements`: a native
+  `<button>` / `<input type="submit">`, or a component with `form-role="submit"`), that button is activated; if it
+  is **disabled**, nothing happens and no other button takes over;
+- with no submit button, the form is submitted (`form.requestSubmit()`) only if at most one field blocks implicit
+  submission (text-like `<input>`s, native or a component's `form-control`; a checkbox, a `<textarea>` or a
+  `<select>` do not count).
+
+Validation runs as for any submission. Like the platform's, it is the *default action* of the key: a `keydown`
+listener that calls `preventDefault()` (a form that blocks Enter, say) stops it, wherever on the event's path it sits.
+Enter in a `<textarea>` or `<select>` control never submits.
+
+**`form-role="submit"` and `form-role="reset"`.** The component is a button. It takes no value (nothing of it
+reaches `FormData`, even with a `value` attribute), is never invalid, and reports `type` `"submit"` / `"reset"`.
+Click, **Enter** and **Space** (on keyup, like a native button) activate it: the host gets `tabindex="0"` when it is
+connected without a `tabindex` (unless its template has a native `<button>`, link or control, which handles the keys
+itself and whose click reaches the host), and `internals.role = "button"` where the engine supports it. A disabled
+component (its `disabled` attribute, or a disabled `<fieldset>`) does nothing.
+
+- **Submit.** A custom element cannot be `form.requestSubmit(button)`'s argument (the platform throws a `TypeError`: it
+  is not a submit button), so the component does what `requestSubmit` does: it validates the form (unless the form is
+  `novalidate` or the component has `formnovalidate`), fires a cancelable `submit` event on the form with
+  `event.submitter` set to the component, and, unless the event was cancelled, submits the form
+  (`HTMLFormElement.prototype.submit`). A click listener that calls `preventDefault()` stops it, as it does for a
+  native button (it is the click's default action, decided after dispatch; a listener that stops propagation before the
+  window sees the click is settled by a task instead). It is the form's default button for implicit submission.
+- **Reset.** `form.reset()`: the form's `reset` event fires and every control restores its default.
+
+`form.requestSubmit()` from script works unchanged (no submitter); to submit "as" a component call its `click()`.
+**Not supported:** `formaction`, `formmethod`, `formenctype` and `formtarget` on a component (the form's own are used);
+a component's `name`/`value` as the submitter's FormData entry (read `event.submitter.value` instead); a native text
+`<input>` in the same form does not know about component buttons, so Enter in *it* is the platform's implicit
+submission (no submitter, and a component default button is not consulted); a subclass that overrides
+`connectedCallback` without calling `super` loses the `tabindex`; a click listener added *before* the component was
+upgraded still sees the click first, and `preventDefault()` there is honoured only by listeners that run before the
+window's bubble phase.
 
 **`attachInternals()` coexists.** The platform allows one `attachInternals()` per element, and a component's base class
 may need it already (a *closed* declarative shadow root is only visible through it). On every template class,

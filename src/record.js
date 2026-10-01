@@ -46,7 +46,7 @@
  *
  * @typedef {{ export: string, element?: string, adopt?: boolean }} BindingRecord
  * @typedef {{ src: string, as?: string, delimiter?: string, type?: string, integrity?: string, conflict?: 'error'|'reuse', load?: 'eager'|'lazy', errors?: 'event'|'throw', registry?: 'global'|'scoped', bindings: BindingRecord[] }} ImportRecord
- * @typedef {{ kind: 'component', name: string|null, default?: true, template: string, shadow: 'open'|'closed', delegatesFocus: boolean, styles: string[], props?: Array<{ name: string, type: 'string'|'number'|'boolean' }>, formAssociated?: true, formControl?: string }
+ * @typedef {{ kind: 'component', name: string|null, default?: true, template: string, shadow: 'open'|'closed', delegatesFocus: boolean, styles: string[], props?: Array<{ name: string, type: 'string'|'number'|'boolean' }>, formAssociated?: true, formControl?: string, formRole?: 'submit'|'reset' }
  *         | { kind: 'stylesheet', name: string|null, default?: true, css: string }
  *         | { kind: 'data', name: string|null, default?: true, value: unknown }
  *         | { kind: 'reexport', src: string, type?: string, integrity?: string, name?: string|null, default?: true, import?: string }} ExportRecord
@@ -60,7 +60,7 @@
  */
 import { assertExportName, assertNamespace, camelCase } from './names.js';
 import { parseProps } from './template.js';
-import { FORM_PROPERTIES } from './form.js';
+import { FORM_PROPERTIES, FORM_ROLES } from './form.js';
 import { hasLazyTargets } from './lazy.js';
 import {
   EXPORT_DEFAULTS, IMPORT_DEFAULTS, assertOption, booleanAttribute, readImportOptions, readImportSettings, readModuleSettings,
@@ -274,6 +274,11 @@ function exportRecord(raw, where, defaults = {}) {
       ? booleanAttribute('delegates-focus', attrs['delegates-focus'], ` on ${describe(raw)}${where}`)
       : defaults.delegatesFocus ?? (formAssociated && formControl ? true : EXPORT_DEFAULTS.delegatesFocus);
     if (has(attrs, 'form-control') && !formControl) throw new SyntaxError(`${describe(raw)}: form-control="" is empty; write a selector for the control inside the template, e.g. form-control="input"${where}`);
+    const formRole = nonEmpty(attrs['form-role']);
+    if (has(attrs, 'form-role') && !formRole) throw new SyntaxError(`${describe(raw)}: form-role="" is empty; write form-role="submit" or form-role="reset"${where}`);
+    if (formRole && !FORM_ROLES.has(formRole)) throw new SyntaxError(`${describe(raw)}: form-role="${formRole}" must be "submit" or "reset"${where}`);
+    if (formRole && !formAssociated) throw new SyntaxError(`${describe(raw)}: form-role="${formRole}" needs form-associated: the component must take part in forms to submit or reset one${where}`);
+    if (formRole && formControl) throw new SyntaxError(`${describe(raw)}: form-role="${formRole}" and form-control="${formControl}" cannot be combined: a button carries no value, so it has no control${where}`);
     if (formControl && !formAssociated) throw new SyntaxError(`${describe(raw)}: form-control="${formControl}" needs form-associated: the component must take part in forms for its control's value to be the form value${where}`);
     if (formAssociated) {
       const clash = props?.find((p) => FORM_PROPERTIES.has(camelCase(p.name)));
@@ -281,10 +286,10 @@ function exportRecord(raw, where, defaults = {}) {
     }
     return [{
       kind: 'component', ...base, template: templates[0].html ?? '', shadow, delegatesFocus, styles, ...(props && { props }),
-      ...(formAssociated && { formAssociated: true, ...(formControl && { formControl }) }),
+      ...(formAssociated && { formAssociated: true, ...(formControl && { formControl }), ...(formRole && { formRole }) }),
     }];
   }
-  for (const a of ['shadow', 'delegates-focus', 'props', 'form-associated', 'form-control']) {
+  for (const a of ['shadow', 'delegates-focus', 'props', 'form-associated', 'form-control', 'form-role']) {
     if (has(attrs, a)) throw new SyntaxError(`${describe(raw)}: "${a}" only applies to an export with a <template>${where}`);
   }
   if (scripts.length) {

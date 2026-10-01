@@ -30,3 +30,12 @@
   <style>:host { display: inline-block; } input { font: inherit; padding: 0.3rem 0.45rem; }</style>
   <template><input type="password"></template>
 </html-export>
+
+<!--
+  A required text field with no delegates-focus written: a component with a form-control delegates focus to it by
+  default, so the browser can focus (and describe) the invalid control when its form is validated.
+-->
+<html-export name="note-field" form-associated form-control="input">
+  <style>:host { display: inline-block; } input { font: inherit; padding: 0.3rem 0.45rem; }</style>
+  <template><label><slot>Note</slot> <input type="text"></label></template>
+</html-export>

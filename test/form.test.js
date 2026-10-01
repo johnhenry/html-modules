@@ -67,6 +67,26 @@ test('records: form-associated and form-control, in both readers, with their err
   assert.match(code, /formAssociated: true,\n\s+formControl: "input",/);
 });
 
+test('records: a component with a form-control delegates focus by default; an explicit setting (or the module default) still decides', () => {
+  // regression: the host of a form-control component is not focusable, so a browser could not focus the invalid
+  // control on submit (Firefox: "The invalid form control with name='x' is not focusable"). Found by the workbench app.
+  const T = '<template><input></template>';
+  const delegates = (source) => {
+    const a = scanHTMLModule(source, 'm.html').exports[0].delegatesFocus;
+    assert.equal(readHTMLModule(specParse(source), 'm.html').exports[0].delegatesFocus, a, 'both readers agree');
+    return a;
+  };
+  assert.equal(delegates(`<html-export name="x-a" form-associated form-control="input">${T}</html-export>`), true);
+  assert.equal(delegates(`<html-export name="x-b" form-associated form-control="input" delegates-focus="false">${T}</html-export>`), false);
+  assert.equal(delegates(`<html-export name="x-c" form-associated form-control="input" delegates-focus>${T}</html-export>`), true);
+  assert.equal(delegates(`<html-module-settings delegates-focus="false"></html-module-settings><html-export name="x-d" form-associated form-control="input">${T}</html-export>`), false, 'the module default decides');
+  // no form-control: the element is the control, and nothing changes; neither does a plain component
+  assert.equal(delegates(`<html-export name="x-e" form-associated>${T}</html-export>`), false);
+  assert.equal(delegates(`<html-export name="x-f">${T}</html-export>`), false);
+  // the compiler bakes it in
+  assert.match(compileHTMLModule(`<html-export name="x-g" form-associated form-control="input">${T}</html-export>`, { url: 'g.html' }), /delegatesFocus: true,/);
+});
+
 test('registration: static formAssociated, a control that must exist in the template, one shared ElementInternals', () => {
   const win = windowWithInternals();
   const def = defineHTMLComponent({ name: 'x-reg', template: '<input>', formAssociated: true, formControl: 'input' });

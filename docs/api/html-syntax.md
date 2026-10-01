@@ -71,7 +71,7 @@ scripts, a non-JSON script with no template, invalid JSON.
 | `name` | all | a kebab name, `default`, or empty | The export name. A kebab name (`card`, `fancy-button`) is a **named export**; JavaScript sees it camelCased (`fancyButton`) and the `components` manifest keys it as written. `name="default"` or an empty `name` (`<html-export name>`) is the **default export** only. Required unless `src` is given. `components` is reserved (the manifest's name). |
 | `default` | all but a star re-export | boolean, no value (`default` or `default="default"`) | Also make this named export the module's default: `name="card" default` is `export { card, card as default }`. Not allowed alone (use `name="default"`), with `name="default"` / an empty name, with `names`, or on a star re-export. |
 | `shadow` | component only | `open` (default), `closed` | The shadow root mode. Overrides `<html-module-settings shadow>`. An empty value means "not set". On a non-component export it is an error. |
-| `delegates-focus` | component only | [boolean](#boolean-attributes): present, `"true"`, `"false"` | `delegatesFocus` for `attachShadow()`. Overrides `<html-module-settings delegates-focus>`; `delegates-focus="false"` turns a module default off. On a non-component export it is an error. |
+| `delegates-focus` | component only | [boolean](#boolean-attributes): present, `"true"`, `"false"` | `delegatesFocus` for `attachShadow()`. Overrides `<html-module-settings delegates-focus>`; `delegates-focus="false"` turns a module default off. **Default `true` for a `form-control` component** (see [Form-associated components](#form-associated-components)), `false` otherwise. On a non-component export it is an error. |
 | `props` | component only | whitespace or comma separated `name` or `name:type` (`string`, `number`, `boolean`) | Declares attributes that are also **properties**: reflected, typed and observed (see [Data binding](#data-binding-in-templates)). `props="title count:number open:boolean"`. On a non-component export it is an error. |
 | `form-associated` | component only | [boolean](#boolean-attributes) | The component takes part in forms: `static formAssociated = true` and `ElementInternals`. See [Form-associated components](#form-associated-components). On a non-component export it is an error. |
 | `form-control` | component with `form-associated` | a CSS selector | The control in the template (an `<input>`, `<textarea>` or `<select>`) whose value is the form value. Without `form-associated` it is an error; the selector must match such an element in the template (checked at registration). |
@@ -235,6 +235,12 @@ with its form.
   updates the form value. The control must exist in the template (a `SyntaxError` at registration otherwise).
 - Without it, **the element is the control**: assign `el.value` (or call `el.internals.setFormValue()` yourself);
   `required` on the host makes an empty value `valueMissing`.
+
+**Focus.** A component with a `form-control` has `delegates-focus` **on by default** (write `delegates-focus="false"`, or set it so in
+`<html-module-settings>`, to opt out). The host is not focusable on its own, so without delegation a browser cannot focus the
+invalid control when its form is validated (Firefox logged *The invalid form control with name='x' is not focusable* and showed
+no message), and `focus()` and a click on the host never reached the input. A component *without* a `form-control` is its own
+control and keeps `delegates-focus` off unless you write it.
 
 **What the class provides**, besides the platform's: `name`, `disabled` and `required` (reflected attributes),
 `value` (current), `defaultValue` (the `value` attribute), `type` (the tag), `form`, `labels`, `validity`,
@@ -440,7 +446,7 @@ Defaults for the component exports of the HTML module it is in. Only meaningful 
 | Attribute | Values | Default | Meaning |
 | --- | --- | --- | --- |
 | `shadow` | `open`, `closed` | `open` | the default shadow root mode |
-| `delegates-focus` | [boolean](#boolean-attributes) | `false` | the default `delegatesFocus` |
+| `delegates-focus` | [boolean](#boolean-attributes) | `false` (`true` for a `form-control` component, when the module sets none) | the default `delegatesFocus` |
 
 `id`, `class` and `data-*` are allowed; anything else is a `SyntaxError`. The defaults are baked into each component
 record (`shadow`, `delegatesFocus`), so runtime-loaded and compiled modules agree. **In a page** there is nothing to

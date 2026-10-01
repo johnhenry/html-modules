@@ -305,6 +305,11 @@ An import with no `as` and no bindings only loads the module, for its side effec
 
 Full detail: [Elements (DOM API)](docs/api/elements.md).
 
+**The configuration elements render nothing but are not hidden.** `<html-import>`, `<html-binding>`, `<html-import-settings>` and
+`<html-module-settings>` have no default style, so inside a grid or flex container (a `<body>` that is `display: grid`, say) each
+one becomes a layout item and can leave a gap. Hide them: `html-import, html-binding, html-import-settings, html-module-settings { display: none }`.
+(The library adds no stylesheet of its own, which is what keeps it usable under a strict `style-src`.)
+
 ## Namespaces and delimiters
 
 A namespace import registers each component as `<namespace><delimiter><export>`. The delimiter is `--` by default,
@@ -435,7 +440,7 @@ See it live: [`examples/data.html`](examples/data.html).
 <form><ui--text-field name="who" value="Ada" required>Name</ui--text-field></form>
 ```
 
-`form-control="input"` names the control in the template that carries the value and the validity; without it the
+`form-control="input"` names the control in the template that carries the value and the validity (and makes the component delegate focus to it by default, so a browser can focus it when validation fails); without it the
 element is the control (`el.value = …`, or `el.internals.setFormValue()`). `attachInternals()` is memoized on every
 template class, so a closed shadow root (which needs the internals to be found) and your own subclass share the one
 object the platform allows. Not supported: non-string form values, radio-style groups, engines without form-associated

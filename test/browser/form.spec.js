@@ -63,3 +63,27 @@ test('form state is restored on history navigation (formStateRestoreCallback), w
     expect(await page.$$eval('.checks .status.unsupported', (els) => els.length)).toBeGreaterThan(0);
   }
 });
+
+test('a form-control component delegates focus, so validating the form can focus the invalid control', async ({ page }) => {
+  // regression: Firefox logged "The invalid form control with name='note' is not focusable" and focused nothing,
+  // because the host of a form-control component was not focusable (found by the workbench app)
+  const errors = [];
+  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+  page.on('pageerror', (e) => errors.push(e.message));
+  const result = await page.evaluate(async () => {
+    await HTMLModules.import('./components/fields.html', { as: 'nf', bindings: [{ export: 'note-field' }] });
+    const form = document.createElement('form');
+    const field = document.createElement('nf--note-field');
+    field.setAttribute('name', 'note');
+    field.setAttribute('required', '');
+    form.append(field);
+    document.body.append(form);
+    const valid = form.requestSubmit() === undefined && form.reportValidity();
+    return { delegates: field.shadowRoot.delegatesFocus, valid, focusOnHost: document.activeElement === field, focusOnInput: field.shadowRoot.activeElement?.localName ?? null };
+  });
+  expect(result.delegates).toBe(true);
+  expect(result.valid).toBe(false);
+  expect(result.focusOnHost).toBe(true);
+  expect(result.focusOnInput).toBe('input');
+  expect(errors).toEqual([]);
+});

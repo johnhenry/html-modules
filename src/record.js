@@ -243,7 +243,7 @@ function reexportRecords(raw, src, where) {
   return [{ kind: 'reexport', src, ...via, name, ...(isDefault && { default: true }), ...(imported && { import: imported }) }];
 }
 
-function exportRecord(raw, where, defaults = EXPORT_DEFAULTS) {
+function exportRecord(raw, where, defaults = {}) {
   const { attrs } = raw;
   const src = nonEmpty(attrs.src);
   if (src) return reexportRecords(raw, src, where);
@@ -261,13 +261,18 @@ function exportRecord(raw, where, defaults = EXPORT_DEFAULTS) {
     // Per-export attributes override the module's <html-module-settings>.
     const shadow = nonEmpty(attrs.shadow) ?? defaults.shadow ?? EXPORT_DEFAULTS.shadow;
     if (shadow !== 'open' && shadow !== 'closed') throw new SyntaxError(`${describe(raw)}: shadow="${shadow}" must be "open" or "closed"${where}`);
-    const delegatesFocus = has(attrs, 'delegates-focus')
-      ? booleanAttribute('delegates-focus', attrs['delegates-focus'], ` on ${describe(raw)}${where}`)
-      : defaults.delegatesFocus ?? EXPORT_DEFAULTS.delegatesFocus;
     for (const css of styles) assertNoImport(raw, css, where);
     const props = has(attrs, 'props') ? parseProps(attrs.props, describe(raw), camelCase, where) : null;
     const formAssociated = has(attrs, 'form-associated') && booleanAttribute('form-associated', attrs['form-associated'], ` on ${describe(raw)}${where}`);
     const formControl = nonEmpty(attrs['form-control']);
+    // A component whose value lives in a control inside its shadow root delegates focus to it by default: the host
+    // itself is not focusable, so without this a browser cannot focus an invalid control when the form is validated
+    // (Firefox logs "The invalid form control with name='x' is not focusable" and shows no message), and focus(),
+    // a click on the host and a label's focus never reach the input. An explicit delegates-focus (or the module's
+    // <html-module-settings delegates-focus>) still decides.
+    const delegatesFocus = has(attrs, 'delegates-focus')
+      ? booleanAttribute('delegates-focus', attrs['delegates-focus'], ` on ${describe(raw)}${where}`)
+      : defaults.delegatesFocus ?? (formAssociated && formControl ? true : EXPORT_DEFAULTS.delegatesFocus);
     if (has(attrs, 'form-control') && !formControl) throw new SyntaxError(`${describe(raw)}: form-control="" is empty; write a selector for the control inside the template, e.g. form-control="input"${where}`);
     if (formControl && !formAssociated) throw new SyntaxError(`${describe(raw)}: form-control="${formControl}" needs form-associated: the component must take part in forms for its control's value to be the form value${where}`);
     if (formAssociated) {

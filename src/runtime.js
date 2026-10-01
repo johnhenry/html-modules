@@ -157,7 +157,7 @@ function templateElementClass(def, win) {
 
 /** The stylesheets a component's shadow roots get: its own `styles`, then any adopted by its imports. */
 function componentSheets(def) {
-  const list = def.styles.map((css) => defineHTMLStylesheet({ name: def.name, css }));
+  const list = def.styles.map((css) => defineHTMLStylesheet({ name: def.name, css, url: def.url }));
   for (const dep of def.imports) {
     for (const b of dep.bindings) if (b.adopt) list.push(lookupExport(dep.module, b.export, dep.from));
   }
@@ -195,7 +195,12 @@ export class HTMLStylesheet {
     if (!this.#sheets.has(win)) {
       let sheet = null;
       try {
-        sheet = new win.CSSStyleSheet();
+        // `baseURL` makes url(...) in the CSS resolve against the module, not the page that adopts the sheet.
+        try {
+          sheet = this.url ? new win.CSSStyleSheet({ baseURL: this.url }) : new win.CSSStyleSheet();
+        } catch {
+          sheet = new win.CSSStyleSheet(); // a url that is not absolute cannot be a base URL
+        }
         sheet.replaceSync(this.css);
       } catch {
         sheet = null;

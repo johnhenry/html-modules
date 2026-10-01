@@ -35,6 +35,7 @@ Nothing is silently ignored: a mistake is an exception, a rejection, or an `erro
 | `SyntaxError` | `<html-export name="<n>">: "shadow" only applies to an export with a <template> in <url>` (same for `"delegates-focus"`) |
 | `SyntaxError` | `<html-export name="<n>">: a data export has exactly one <script type="application/json"> and nothing else in <url>` |
 | `SyntaxError` | `<html-export name="<n>">: invalid JSON in <url>: <JSON.parse message>` |
+| `SyntaxError` | `<html-export name="<n>">: @import is not supported in a <style>: a constructed stylesheet ignores @import rules, so it would silently do nothing; link the stylesheet from the page, or inline its rules in <url>` (a component's `<style>` or a stylesheet export; `@import` in a comment or string is fine) |
 
 ## Module source (defaults and re-exports)
 

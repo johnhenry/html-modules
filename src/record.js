@@ -67,6 +67,32 @@ const JSON_TYPE = /^(application|text)\/([\w.+-]+\+)?json$/i;
 const has = (attrs, name) => Object.prototype.hasOwnProperty.call(attrs, name);
 const nonEmpty = (v) => (v == null || v === '' ? undefined : v);
 
+/**
+ * True when CSS text has an `@import` at-rule (outside comments and strings). `replaceSync()` silently drops
+ * `@import`, so a module that relies on one would render unstyled with no error.
+ */
+function usesImport(css) {
+  for (let i = 0; i < css.length; i++) {
+    const c = css[i];
+    if (c === '/' && css[i + 1] === '*') {
+      const end = css.indexOf('*/', i + 2);
+      if (end < 0) return false;
+      i = end + 1;
+    } else if (c === '"' || c === "'") {
+      for (i++; i < css.length && css[i] !== c && css[i] !== '\n'; i++) if (css[i] === '\\') i++;
+    } else if (c === '@' && /^@import(?![\w-])/i.test(css.slice(i, i + 8))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function assertNoImport(raw, css, where) {
+  if (usesImport(css)) {
+    throw new SyntaxError(`${describe(raw)}: @import is not supported in a <style>: a constructed stylesheet ignores @import rules, so it would silently do nothing; link the stylesheet from the page, or inline its rules${where}`);
+  }
+}
+
 function describe(raw) {
   const bits = ['name', 'src', 'import', 'names'].filter((a) => has(raw.attrs, a)).map((a) => ` ${a}="${raw.attrs[a]}"`);
   if (has(raw.attrs, 'default')) bits.push(' default');
@@ -201,6 +227,7 @@ function exportRecord(raw, where, defaults = EXPORT_DEFAULTS) {
     const delegatesFocus = has(attrs, 'delegates-focus')
       ? booleanAttribute('delegates-focus', attrs['delegates-focus'], ` on ${describe(raw)}${where}`)
       : defaults.delegatesFocus ?? EXPORT_DEFAULTS.delegatesFocus;
+    for (const css of styles) assertNoImport(raw, css, where);
     return [{ kind: 'component', ...base, template: templates[0].html ?? '', shadow, delegatesFocus, styles }];
   }
   for (const a of ['shadow', 'delegates-focus']) {
@@ -217,7 +244,10 @@ function exportRecord(raw, where, defaults = EXPORT_DEFAULTS) {
       throw new SyntaxError(`${describe(raw)}: invalid JSON${where}: ${error.message}`);
     }
   }
-  if (styles.length) return [{ kind: 'stylesheet', ...base, css: styles.join('\n') }];
+  if (styles.length) {
+    for (const css of styles) assertNoImport(raw, css, where);
+    return [{ kind: 'stylesheet', ...base, css: styles.join('\n') }];
+  }
   throw new SyntaxError(`${describe(raw)} needs a <template> (a component), <style> (a stylesheet) or <script type="application/json"> (data)${where}`);
 }
 

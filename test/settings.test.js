@@ -461,3 +461,13 @@ test('the same component definitions from settings, whether loaded at runtime or
   for (const k of ['name', 'template', 'shadow', 'delegatesFocus']) assert.deepEqual(cp.a[k], rt.a[k], k);
   assert.ok(defineHTMLComponent(cp.a) === cp.a);
 });
+
+test('settings.base: a document with no base URL (about:blank) falls back to the loader\'s, so relative imports still resolve', async () => {
+  const env = setup({ elements: true, files: { 'ui.html': UI } });
+  const { document, fetch } = env;
+  Object.defineProperty(document, 'baseURI', { value: 'about:blank' });
+  document.body.innerHTML = '<html-import id="i" src="./ui.html" as="ui"></html-import>';
+  await document.querySelector('#i').ready;
+  assert.equal(document.querySelector('#i').settings.base, undefined);
+  assert.deepEqual(fetch.log, [`${ORIGIN}ui.html`]);
+});

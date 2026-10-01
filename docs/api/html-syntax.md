@@ -42,6 +42,21 @@ Only **direct children** count.
 Anything else is a `SyntaxError`: no template/style/JSON, two templates, a JSON script next to a `<style>`, two
 scripts, a non-JSON script with no template, invalid JSON.
 
+### Relative URLs
+
+- **In a `<style>` (components and stylesheets):** `url(...)` resolves against the **module's URL**, because each
+  constructed stylesheet is created with `{ baseURL: <module url> }` (a compiled module uses `import.meta.url`).
+  Where constructable stylesheets are unavailable, the fallback `<style>` element is in the page, so `url(...)`
+  there resolves against the page.
+- **`@import` is not supported** in a `<style>`: `replaceSync()` silently drops `@import` rules, so it is a
+  `SyntaxError` naming the export (identical in both readers) rather than a stylesheet that quietly does nothing. Link the
+  stylesheet from the page, or inline its rules.
+- **In a `<template>`:** the content is stamped into the page, so `<img src="./logo.png">`, `<a href>`, `<use href>`,
+  `srcset` and inline `style="background:url(…)"` resolve against the **page's base URL**, not the module's. The
+  library does not rewrite them (a correct rewrite needs a full HTML-aware pass over every URL-bearing attribute,
+  and would break templates whose URLs are meant for the page). For a module served from another directory or
+  origin, write absolute URLs, or put the image in a `<style>` as a `url(...)` of the stylesheet.
+
 ### Attributes
 
 | Attribute | Applies to | Values | Meaning |

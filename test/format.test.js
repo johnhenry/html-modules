@@ -147,3 +147,23 @@ test('nested <html-export>/<html-import> is rejected identically by the DOM read
   assert.deepEqual(readHTMLModule(parse(ok)).exports.map((e) => e.name), ['a']);
   assert.deepEqual(scanHTMLModule(ok).exports.map((e) => e.name), ['a']);
 });
+
+test('@import in a <style> is rejected identically by both readers (replaceSync() would drop it silently)', () => {
+  const bad = [
+    '<html-export name="theme"><style>@import url("x.css"); p{}</style></html-export>',
+    '<html-export name="card"><style>p{} @IMPORT "x.css";</style><template>x</template></html-export>',
+    '<html-export name="card"><style>/* c */\n@import url(x.css) screen;</style><template>x</template></html-export>',
+  ];
+  const ok = [
+    '<html-export name="theme"><style>/* @import "x.css" */ p::after { content: "@import" }</style></html-export>',
+    '<html-export name="theme"><style>p { background: url(@importer.png) } .a-@imports{}</style></html-export>',
+  ];
+  for (const html of bad) {
+    for (const read of [(h) => scanHTMLModule(h, 'm.html'), (h) => readHTMLModule(specParse(h), 'm.html')]) {
+      assert.throws(() => read(html), (e) => e instanceof SyntaxError && /^<html-export name="(theme|card)">: @import is not supported in a <style>: a constructed stylesheet ignores @import rules.* in m\.html$/.test(e.message), html);
+    }
+  }
+  for (const html of ok) {
+    assert.deepEqual(scanHTMLModule(html, 'm.html'), readHTMLModule(specParse(html), 'm.html'));
+  }
+});

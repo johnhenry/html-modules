@@ -20,6 +20,7 @@ const cases = [
   [`<html-export name="card" shadow="none">${T}</html-export>`, /shadow="none" must be "open" or "closed"/],
   [`<html-export name="card" delegates-focus="maybe">${T}</html-export>`, /Invalid delegates-focus="maybe".*it is a boolean attribute/],
   [`<html-export name="theme" shadow="closed"><style>p{}</style></html-export>`, /"shadow" only applies to an export with a <template>/],
+  [`<html-export name="theme"><style>@import url("x.css");</style></html-export>`, /<html-export name="theme">: @import is not supported in a <style>: a constructed stylesheet ignores @import rules.* in m\.html/],
   [`<html-export name="cfg"><script type="application/json">{nope}</script></html-export>`, /<html-export name="cfg">: invalid JSON in m\.html/],
   // Defaults
   [`<html-export default>${T}</html-export>`, /"default" needs a name to go with it; write name="default" for a default-only export/],

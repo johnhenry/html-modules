@@ -730,6 +730,11 @@ shared record, plus the equivalence test, is what keeps them in step.
   other's definitions, but keep separate registration bookkeeping, lazy-loading watchers and stylesheet caches, so
   conflict messages lose the "defined by" detail and lazy imports stop seeing the other copy's shadow roots. Map
   `@johnhenry/html-modules/runtime` to the same file the bootstrap uses ([Install](#install)).
+- **Relative URLs in a template resolve against the page.** A module's `<style>` resolves `url(...)` against the
+  module (constructed stylesheets get `baseURL`), but its `<template>` is stamped into the page, so
+  `<img src="./logo.png">` is relative to the page, not the module, and html-modules does not rewrite it. Use
+  absolute URLs for assets of a module served from elsewhere. `@import` in a `<style>` is rejected (constructed
+  stylesheets drop it silently).
 - **The `.` (and `_`) delimiter cannot name one-word exports.** `.` is a legal custom element name character, but
   `ui.card` has no hyphen, so binding a one-word export under `delimiter="."` is a `SyntaxError` naming the tag; a
   namespace import checks every tag before registering any, so it fails whole. Two-word exports (`ui.custom-card`)

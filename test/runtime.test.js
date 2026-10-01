@@ -250,3 +250,29 @@ test('bindings are all or nothing too: a bad or clashing one binds nothing, adop
   }
   assert.equal(Object.keys(bindModule(ns, { bindings: [{ export: 'a', element: 'x-a' }, { export: 'b', element: 'x-taken' }], window: win, conflict: 'reuse' }).elements).length, 2);
 });
+
+test('constructed stylesheets get the module URL as their baseURL (url() resolves against the module, not the page)', () => {
+  const win = makeWindow();
+  const made = [];
+  win.CSSStyleSheet = class {
+    constructor(options) {
+      if (options?.baseURL) new URL(options.baseURL); // a browser throws on an invalid baseURL
+      made.push(options);
+      this.cssRules = [];
+    }
+    replaceSync(css) {
+      this.text = css;
+    }
+  };
+  const sheet = defineHTMLStylesheet({ name: 'theme', css: 'p{background:url(bg.png)}', url: 'http://cdn.test/lib/ui.html' });
+  assert.ok(sheet.sheetFor(win));
+  const def = defineHTMLComponent({ name: 'card', template: 'x', styles: [':host{background:url(a.png)}'], url: 'http://cdn.test/lib/ui.html' });
+  def.define('base-card', { window: win });
+  win.document.body.append(win.document.createElement('base-card'));
+  assert.deepEqual(made, [{ baseURL: 'http://cdn.test/lib/ui.html' }, { baseURL: 'http://cdn.test/lib/ui.html' }]);
+  const loose = defineHTMLStylesheet({ name: 'loose', css: 'p{}', url: 'not absolute' });
+  assert.ok(loose.sheetFor(win), 'a url that cannot be a base URL falls back to a plain sheet');
+  assert.equal(made.at(-1), undefined);
+  assert.equal(defineHTMLStylesheet({ css: 'p{}' }).sheetFor(win) !== null, true);
+  assert.equal(made.at(-1), undefined, 'no url, no options');
+});

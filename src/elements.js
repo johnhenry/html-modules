@@ -68,6 +68,8 @@ export function defineHTMLModuleElements({ modules, window: win = globalThis, re
   const documents = new WeakMap();
 
   const documentURL = (doc) => (doc?.URL && doc.URL !== 'about:blank' ? doc.URL : modules.loader?.baseURL);
+  // The page's base URL (honoring <base href>), unless the document has none (about:blank): then the loader's.
+  const documentBase = (doc) => (doc?.baseURI && doc.baseURI !== 'about:blank' ? doc.baseURI : undefined);
 
   /** Why this settings element is not the document's settings, or null. */
   function placementProblem(el, doc) {
@@ -249,7 +251,7 @@ export function defineHTMLModuleElements({ modules, window: win = globalThis, re
       try {
         own = readImportOptions(attrsOf(this));
       } catch {}
-      return { ...resolveImportOptions(own, state.values, instance), base: state.base ?? modules.base ?? doc?.baseURI };
+      return { ...resolveImportOptions(own, state.values, instance), base: state.base ?? modules.base ?? documentBase(doc) };
     }
 
     /** The namespace delimiter this import uses. */
@@ -277,7 +279,7 @@ export function defineHTMLModuleElements({ modules, window: win = globalThis, re
       state.started = true;
       if (state.error) throw state.error;
       const own = readImportOptions(attrsOf(this));
-      this.#config = { ...resolveImportOptions(own, state.values, instance), base: state.base ?? modules.base ?? doc?.baseURI };
+      this.#config = { ...resolveImportOptions(own, state.values, instance), base: state.base ?? modules.base ?? documentBase(doc) };
       return this.#config;
     }
 

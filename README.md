@@ -59,6 +59,7 @@ dependencies.
 - [JavaScript-authored components](#javascript-authored-components)
 - [The compiler](#the-compiler)
 - [Dev server, hot reload and Vite](#dev-server-hot-reload-and-vite)
+- [TypeScript](#typescript)
 - [Resolution and caching](#resolution-and-caching)
 - [Errors](#errors)
 - [Non-goals](#non-goals)
@@ -705,6 +706,20 @@ customCard.define('x-card');
 
 `vite` is a dev dependency of this package only; `npm install @johnhenry/html-modules` adds no runtime dependency.
 
+## TypeScript
+
+Declarations ship for every entry point (`.`, `./browser`, `./runtime`, `./compiler`, `./dev`, `./vite`), generated from the
+source's JSDoc, with a `types` condition in `package.json`'s `exports`. They include the record types
+(`ModuleRecord`, `ImportRecord`, `ExportRecord`), module namespaces, the `HTMLModules` instance and the element classes:
+
+```ts
+import { scanHTMLModule, type ModuleRecord } from '@johnhenry/html-modules';
+import { HTMLModules, type HTMLImportElement } from '@johnhenry/html-modules/browser';
+```
+
+A strict typed consumer of every entry point is compiled by `npm run types:check` (in `npm test` and CI); `npm run types`
+regenerates `types/`. See [TypeScript in the API reference](docs/api.md#typescript).
+
 ## Resolution and caching
 
 - `src` resolves like a module specifier: relative to the importing document (or, inside a module, the importing
@@ -758,6 +773,7 @@ src/
   settings.js      the settings vocabulary, validation and precedence
   runtime.js       HTML Component Definitions → custom elements; binding (shared by runtime and compiled code)
   record.js        module records; readHTMLModule() from a DOM
+  types.js         JSDoc typedefs (type definitions only)
   template.js      data binding: {{attribute}} sites, props, URL escaping
   form.js          form-associated components (ElementInternals)
   dev-server.js    html-module dev: static server, fs.watch, SSE (and dev-client.js, the page half)
@@ -770,6 +786,7 @@ src/
   compiler.js      compileHTMLModule()
   index.js         the side-effect-free root entry point
   browser.js       the one-script bootstrap
+types/             generated .d.ts files (npm run types), shipped
 bin/html-module.js the compiler CLI
 examples/          numbered Node examples (npm run examples) and the browser demo site (open /examples/)
 test/              node:test suites (npm test), with linkedom as the test DOM

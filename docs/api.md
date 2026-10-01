@@ -47,6 +47,27 @@ unadoptStylesheet watchLazy
 Everything else in `src/` (for example `assertDelimiter`, `bindingRecord`, `scanRawElements`, `reportLoudly`,
 `componentRootCreated`) is internal: not exported from any entry point, and not reachable through `exports`.
 
+## TypeScript
+
+Every entry point ships declarations (`types/`, generated from the JSDoc in `src/` by `npm run types`, and exposed through a
+`"types"` condition in each `exports` entry): the record types (`ModuleRecord`, `ImportRecord`, `ExportRecord`,
+`BindingRecord`), `ModuleNamespace`, the `HTMLModulesInstance` returned by `createHTMLModules()`, the element classes
+(`HTMLImportElement`, …), `ComponentSpec`, `CompileOptions` and the option and result types of the API. The root,
+`/browser`, `/runtime` and `/compiler` re-export the types they use, so `import type { ModuleRecord } from
+'@johnhenry/html-modules'` works; `/dev` and `/vite` are typed too (`/vite` refers to Vite's own `Plugin` type).
+`tsc --noEmit` over a strict typed consumer of every entry point (`test/types/usage.ts`) runs in `npm test` and in CI, and
+`test/types.test.js` fails when `types/` is stale (run `npm run types`).
+
+```ts
+import { scanHTMLModule, type ModuleRecord, type ExportRecord } from '@johnhenry/html-modules';
+import { HTMLModules, type HTMLImportElement } from '@johnhenry/html-modules/browser';
+
+const record: ModuleRecord = scanHTMLModule(source, 'ui.html');
+const ui = await HTMLModules.load('./ui.html');          // ModuleNamespace
+const imp = document.querySelector('html-import') as HTMLImportElement;
+const { tags } = await imp.ready;
+```
+
 ## Conventions used in this reference
 
 - **Kebab name**: lower-case ASCII words of letters and digits, each starting with a letter, joined by single

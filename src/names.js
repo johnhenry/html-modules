@@ -36,10 +36,18 @@ const RESERVED_TAGS = new Set([
  */
 export const RESERVED_EXPORTS = new Set(['components', 'default']);
 
-/** True for a lower-case kebab word such as "ui" or "custom-card". */
+/**
+ * True for a lower-case kebab word such as "ui" or "custom-card".
+ * @param {unknown} name
+ * @returns {boolean}
+ */
 export const isKebabName = (name) => typeof name === 'string' && KEBAB.test(name);
 
-/** Why `name` is not a valid custom element name, or null if it is. */
+/**
+ * Why `name` is not a valid custom element name, or null if it is.
+ * @param {unknown} name
+ * @returns {string | null}
+ */
 export function elementNameProblem(name) {
   if (typeof name !== 'string' || name === '') return 'it is empty';
   if (!/^[a-z]/.test(name)) return 'it must start with a lower-case ASCII letter';
@@ -50,13 +58,24 @@ export function elementNameProblem(name) {
   return null;
 }
 
-/** True for a valid custom element name. */
+/**
+ * True for a valid custom element name.
+ * @param {unknown} name
+ * @returns {boolean}
+ */
 export const isValidElementName = (name) => elementNameProblem(name) === null;
 
-/** True for a string that can be a namespace delimiter: non-empty, and only characters allowed in custom element names. */
+/**
+ * True for a string that can be a namespace delimiter: non-empty, and only characters allowed in custom element names.
+ * @param {unknown} delimiter
+ * @returns {boolean}
+ */
 export const isValidDelimiter = (delimiter) => typeof delimiter === 'string' && PCEN_CHARS.test(delimiter);
 
-/** Throw unless `delimiter` can be a namespace delimiter. */
+/**
+ * Throw unless `delimiter` can be a namespace delimiter.
+ * @param {unknown} delimiter
+ */
 export function assertDelimiter(delimiter) {
   if (!isValidDelimiter(delimiter)) {
     const shown = typeof delimiter === 'string' ? `"${delimiter}"` : String(delimiter);
@@ -64,13 +83,25 @@ export function assertDelimiter(delimiter) {
   }
 }
 
-/** "custom-card" → "customCard". */
+/**
+ * "custom-card" → "customCard".
+ * @param {string} name
+ * @returns {string}
+ */
 export const camelCase = (name) => name.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
 
-/** "customCard" / "CustomCard" → "custom-card"; kebab names pass through. */
+/**
+ * "customCard" / "CustomCard" → "custom-card"; kebab names pass through.
+ * @param {string} name
+ * @returns {string}
+ */
 export const kebabCase = (name) => name.replace(/([a-z0-9])([A-Z])/g, '$1-$2').replace(/([A-Z])([A-Z][a-z])/g, '$1-$2').toLowerCase();
 
-/** Throw unless `name` can be a named export of an HTML module. */
+/**
+ * Throw unless `name` can be a named export of an HTML module.
+ * @param {string} name
+ * @param {string} [where]
+ */
 export function assertExportName(name, where = '') {
   if (!isKebabName(name)) {
     throw new SyntaxError(`Invalid export name "${name}"${where}: use lower-case words joined by single hyphens, e.g. "custom-card"`);
@@ -83,14 +114,20 @@ export function assertExportName(name, where = '') {
   }
 }
 
-/** Throw unless `namespace` can be an import namespace. */
+/**
+ * Throw unless `namespace` can be an import namespace.
+ * @param {unknown} namespace
+ */
 export function assertNamespace(namespace) {
   if (!isKebabName(namespace)) {
     throw new SyntaxError(`Invalid namespace "${namespace}": use lower-case words joined by single hyphens (no "--"), e.g. "ui"`);
   }
 }
 
-/** Throw unless `tag` is a valid custom element name. */
+/**
+ * Throw unless `tag` is a valid custom element name.
+ * @param {unknown} tag
+ */
 export function assertElementName(tag) {
   const problem = elementNameProblem(tag);
   if (problem) throw new SyntaxError(`"${tag}" is not a valid custom element name: ${problem}`);
@@ -101,6 +138,10 @@ export function assertElementName(tag) {
  * ("ui", "custom-card") → "ui--custom-card"; ("ui", "card", "-") → "ui-card".
  * Throws a SyntaxError naming the tag when the result is not a valid custom
  * element name (e.g. ("ui", "card", ".") → "ui.card", which has no hyphen).
+ * @param {string} namespace
+ * @param {string} exportName
+ * @param {string} [delimiter]
+ * @returns {string}
  */
 export function bindingName(namespace, exportName, delimiter = DELIMITER) {
   assertNamespace(namespace);
@@ -119,6 +160,9 @@ export function bindingName(namespace, exportName, delimiter = DELIMITER) {
  * bound tag splits one way; with "-", "ui-card" does but "ui-custom-card" does
  * not (null). A display helper only: the runtime never parses tags, it records
  * `{ tag, namespace, export }` when it binds.
+ * @param {string} tag
+ * @param {string} [delimiter]
+ * @returns {{ namespace: string, name: string } | null}
  */
 export function parseBindingName(tag, delimiter = DELIMITER) {
   if (typeof tag !== 'string' || !isValidDelimiter(delimiter)) return null;

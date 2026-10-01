@@ -23,6 +23,13 @@ import { configureWindow, nonceFor, trustedHTML } from './policy.js';
 import { analyzeTemplate, resolveSites, updateSites } from './template.js';
 import { FORM_ATTRIBUTES, FORM_PROPERTIES, checkFormControl, formAttributeChanged, installFormAssociation, setupForm } from './form.js';
 
+/** @typedef {import('./types.js').ModuleNamespace} ModuleNamespace */
+/** @typedef {import('./types.js').TagRecord} TagRecord */
+/** @typedef {import('./types.js').BindResult} BindResult */
+/** @typedef {import('./types.js').PropSpec} PropSpec */
+/** @typedef {import('./types.js').ComponentImport} ComponentImport */
+/** @typedef {import('./types.js').ComponentSpec} ComponentSpec */
+
 /**
  * Configure page-security options for a window: a Trusted Types policy for the HTML the runtime parses
  * (`{ createHTML(html) }`, or `false` for none), and the CSP `nonce` for the fallback `<style>` elements.
@@ -49,20 +56,10 @@ export class HTMLComponent {
   #perWindow = new WeakMap(); // window → template-backed base class
 
   /**
-   * @param {object} spec
-   * @param {string|null} [spec.name]        module-local identity, e.g. "custom-card"
-   * @param {string} [spec.template]         template HTML (the content of the <template>)
-   * @param {'open'|'closed'} [spec.shadow]  shadow root mode (default "open")
-   * @param {boolean} [spec.delegatesFocus]
-   * @param {string[]} [spec.styles]         CSS text, adopted into every shadow root (one sheet per definition)
-   * @param {boolean} [spec.formAssociated]  take part in forms (`static formAssociated`, ElementInternals): `form-associated`
-   * @param {string} [spec.formControl]      selector of the control in the template whose value is the form value: `form-control`
-   * @param {Array<{ name: string, type?: 'string'|'number'|'boolean' }>} [spec.props]  attributes reflected as properties and observed (`props="count:number"`)
-   * @param {Array<{module: object, from: string, as?: string, delimiter?: string, conflict?: string, errors?: string, load?: string, lazy?: () => Promise<object>, bindings?: object[]}>} [spec.imports]
-   *                                         modules this component uses, bound before it is registered
-   *                                         (an entry with no `module` and a `lazy` loader is bound when one of its tags is first used)
-   * @param {Function} [spec.element]        a JS-authored HTMLElement subclass instead of a template
-   * @param {string} [spec.url]              where it came from, for messages
+   * @param {import('./types.js').ComponentSpec} [spec]
+   *   `imports`: modules this component uses, bound before it is registered (an entry with no `module` and a `lazy`
+   *   loader is bound when one of its tags is first used); `element`: a JS-authored HTMLElement subclass instead of
+   *   a template; `url`: where it came from, for messages.
    */
   constructor({ name = null, template, shadow = 'open', delegatesFocus = false, styles = [], props = [], formAssociated = false, formControl, imports = [], element, url } = {}) {
     if (element !== undefined) {
@@ -73,22 +70,34 @@ export class HTMLComponent {
       throw new TypeError('defineHTMLComponent: pass a `template` string or an `element` class');
     }
     if (!SHADOW_MODES.has(shadow)) throw new SyntaxError(`Invalid shadow mode "${shadow}": use "open" or "closed"`);
+    /** @type {string | null} */
     this.name = name;
+    /** @type {string | null} */
     this.template = element === undefined ? template : null;
+    /** @type {'open' | 'closed'} */
     this.shadow = shadow;
+    /** @type {boolean} */
     this.delegatesFocus = Boolean(delegatesFocus);
+    /** @type {readonly string[]} */
     this.styles = Object.freeze([...styles]);
+    /** @type {readonly Readonly<{ name: string, type: 'string' | 'number' | 'boolean' }>[]} */
     this.props = Object.freeze(props.map((p) => Object.freeze({ name: p.name, type: p.type ?? 'string' })));
+    /** @type {boolean} */
     this.formAssociated = Boolean(formAssociated);
     if (formControl !== undefined) {
       if (!this.formAssociated) throw new TypeError('defineHTMLComponent: `formControl` needs `formAssociated: true`');
+      /** @type {string | undefined} */
       this.formControl = String(formControl);
     }
     for (const p of this.props) {
       if (this.formAssociated && FORM_PROPERTIES.has(camelCase(p.name))) throw new SyntaxError(`defineHTMLComponent: "${p.name}" cannot be a prop of a form-associated component: it is a built-in property`);
     }
+    /** @type {readonly Readonly<import('./types.js').ComponentImport>[]} */
     this.imports = Object.freeze(imports.map((i) => Object.freeze({ ...i, bindings: Object.freeze([...(i.bindings ?? [])]) })));
-    if (url) this.url = url;
+    if (url) {
+      /** @type {string | undefined} */
+      this.url = url;
+    }
     Object.defineProperty(this, COMPONENT, { value: true });
     Object.freeze(this);
   }
@@ -102,12 +111,19 @@ export class HTMLComponent {
     return this.#element !== undefined;
   }
 
-  /** The base element class, for `customElements.define(tag, class extends def.element {})`. */
+  /**
+   * The base element class, for `customElements.define(tag, class extends def.element {})`.
+   * @returns {CustomElementConstructor}
+   */
   get element() {
     return this.elementFor(globalThis);
   }
 
-  /** The base element class for another window (e.g. a test DOM). */
+  /**
+   * The base element class for another window (e.g. a test DOM).
+   * @param {any} [win]
+   * @returns {CustomElementConstructor}
+   */
   elementFor(win = globalThis) {
     if (this.#element) return this.#element;
     if (!this.#perWindow.has(win)) this.#perWindow.set(win, templateElementClass(this, win));
@@ -130,6 +146,7 @@ export class HTMLComponent {
  * Make an HTML Component Definition from a spec, a JS-authored class, or an
  * existing definition (returned as-is).
  * @param {ConstructorParameters<typeof HTMLComponent>[0] | Function | HTMLComponent} spec
+ * @returns {HTMLComponent}
  */
 export function defineHTMLComponent(spec) {
   if (isHTMLComponent(spec)) return spec;
@@ -137,6 +154,10 @@ export function defineHTMLComponent(spec) {
   return new HTMLComponent(spec);
 }
 
+/**
+ * @param {unknown} value
+ * @returns {value is HTMLComponent}
+ */
 export const isHTMLComponent = (value) => value != null && value[COMPONENT] === true;
 
 const pascal = (name) => (name ? camelCase(name).replace(/^./, (c) => c.toUpperCase()) : 'HTMLModuleElement');
@@ -151,6 +172,7 @@ const scopedSupport = new WeakMap(); // window → boolean
  * `attachShadow({ customElementRegistry })`. Detected by trying it (feature-detecting only the constructor would
  * claim support in browsers that have the interface but ignore the shadow root option).
  * @param {any} [win]
+ * @returns {boolean}
  */
 export function supportsScopedRegistries(win = globalThis) {
   if (!scopedSupport.has(win)) {
@@ -456,10 +478,16 @@ export class HTMLStylesheet {
   #sheets = new WeakMap(); // window → CSSStyleSheet
   #resolved;
 
+  /** @param {{ name?: string | null, css?: string, url?: string }} [spec] */
   constructor({ name = null, css = '', url } = {}) {
+    /** @type {string | null} */
     this.name = name;
+    /** @type {string} */
     this.css = String(css);
-    if (url) this.url = url;
+    if (url) {
+      /** @type {string | undefined} */
+      this.url = url;
+    }
     this.#resolved = url ? resolveCssUrls(this.css, url) : this.css;
     Object.defineProperty(this, STYLESHEET, { value: true });
     Object.freeze(this);
@@ -474,7 +502,11 @@ export class HTMLStylesheet {
     return this.#resolved;
   }
 
-  /** A constructed CSSStyleSheet for `win` (one per window, shared), or null without constructable sheets. */
+  /**
+   * A constructed CSSStyleSheet for `win` (one per window, shared), or null without constructable sheets.
+   * @param {any} [win]
+   * @returns {CSSStyleSheet | null}
+   */
   sheetFor(win = globalThis) {
     if (!this.#sheets.has(win)) {
       let sheet = null;
@@ -494,15 +526,31 @@ export class HTMLStylesheet {
     return this.#sheets.get(win);
   }
 
-  /** Adopt into a document or shadow root. */
+  /**
+   * Adopt into a document or shadow root.
+   * @param {Document | ShadowRoot} root
+   * @param {{ window?: any }} [options]
+   */
   adopt(root, options) {
     adoptStylesheet(root, this, options);
   }
 }
 
+/**
+ * @param {{ name?: string | null, css?: string, url?: string } | HTMLStylesheet} spec
+ * @returns {HTMLStylesheet}
+ */
 export const defineHTMLStylesheet = (spec) => (isHTMLStylesheet(spec) ? spec : new HTMLStylesheet(spec));
+/**
+ * @param {unknown} value
+ * @returns {value is HTMLStylesheet}
+ */
 export const isHTMLStylesheet = (value) => value != null && value[STYLESHEET] === true;
 const isCSSStyleSheet = (value) => value != null && typeof value === 'object' && typeof value.replaceSync === 'function' && 'cssRules' in value;
+/**
+ * @param {unknown} value
+ * @returns {value is HTMLStylesheet | CSSStyleSheet}
+ */
 export const isStylesheet = (value) => isHTMLStylesheet(value) || isCSSStyleSheet(value);
 
 const adoptedFallback = new WeakMap(); // root → Map<stylesheet, <style> element> (roots without adoptedStyleSheets)
@@ -522,6 +570,9 @@ const windowOf = (root) => root.defaultView ?? root.ownerDocument?.defaultView ?
  * or shadow root. Adopting the same sheet twice is a no-op. Where constructable
  * stylesheets are unavailable, a <style> element is inserted instead (with the window's CSP `nonce`, if one is
  * configured: see `configureRuntime()`).
+ * @param {Document | ShadowRoot} root
+ * @param {HTMLStylesheet | CSSStyleSheet} value
+ * @param {{ window?: any }} [options]
  */
 export function adoptStylesheet(root, value, { window: win } = {}) {
   if (!isStylesheet(value)) throw new TypeError('adoptStylesheet: not a stylesheet');
@@ -561,6 +612,9 @@ function adoptSheet(root, value, win) {
  * The counterpart of `adoptStylesheet()`: take a stylesheet out of a document or shadow root again. A no-op when
  * it was not adopted there. It is removed outright, whoever adopted it: adoption is not reference-counted, so
  * two bindings that adopted the same sheet into one root lose it together.
+ * @param {Document | ShadowRoot} root
+ * @param {HTMLStylesheet | CSSStyleSheet} value
+ * @param {{ window?: any }} [options]
  */
 export function unadoptStylesheet(root, value, { window: win } = {}) {
   if (!isStylesheet(value)) throw new TypeError('unadoptStylesheet: not a stylesheet');
@@ -610,7 +664,12 @@ function kindOf(value) {
 
 const wrapped = new WeakMap(); // class or template → definition (stable identity)
 
-/** The definition for any element-like value; throws a TypeError for anything else. */
+/**
+ * The definition for any element-like value; throws a TypeError for anything else.
+ * @param {unknown} value
+ * @param {{ window?: any, what?: string }} [options]
+ * @returns {HTMLComponent}
+ */
 export function toComponent(value, { window: win = globalThis, what = 'value' } = {}) {
   if (isHTMLComponent(value)) return value;
   if (isTemplateElement(value) || extendsHTMLElement(value, win)) {
@@ -745,6 +804,10 @@ function watchLazyDep(dep, options, registry, win, failed) {
  * Look up an export of a module namespace by the name used in markup.
  * Checks the `components` manifest, then the name as written, then its
  * camelCase form ("custom-card" → `customCard`).
+ * @param {import('./types.js').ModuleNamespace} ns
+ * @param {string} name
+ * @param {string} [from]
+ * @returns {unknown}
  */
 export function lookupExport(ns, name, from = 'module') {
   if (name === 'default') {
@@ -763,6 +826,9 @@ export function lookupExport(ns, name, from = 'module') {
  * [exportName, value] pairs: its `components` manifest if it has one,
  * otherwise its exports made with defineHTMLComponent(). Other exports
  * (constants, functions, plain classes) are never treated as components.
+ * @param {import('./types.js').ModuleNamespace} ns
+ * @param {string} [from]
+ * @returns {Array<[string, unknown]>}
  */
 export function componentsOf(ns, from = 'module') {
   if (ns?.components != null && typeof ns.components === 'object') return Object.entries(ns.components);
@@ -801,6 +867,9 @@ export function namespaceComponents(name, ns) {
  * recorded here, never parsed back out of the tag. `reused: true` is added
  * when `conflict: 'reuse'` kept a different, existing definition of the tag.
  * @returns {{ export: string, value: unknown, tag: string|null, namespace: string|null, element: Function|null, adopted: boolean, reused?: true }}
+ * @param {import('./types.js').ModuleNamespace} ns
+ * @param {{ export: string, element?: string, adopt?: boolean }} binding
+ * @param {{ as?: string, delimiter?: string, from?: string, registry?: CustomElementRegistry, window?: any, root?: Document | ShadowRoot, conflict?: 'error' | 'reuse' }} [options]
  */
 export function applyBinding(ns, binding, options = {}) {
   return runBinding(planBinding(ns, binding, options));
@@ -872,7 +941,9 @@ function planComponents(ns, { as, delimiter = DELIMITER, from = 'module' } = {})
  * `<as><delimiter><export>` (delimiter "--" unless given); without it, the
  * export names themselves (which then must be valid custom element names).
  * This is what compiled `register` modules call.
- * @returns {Record<string, Function>} tag → registered class
+ * @returns {Record<string, CustomElementConstructor>} tag → registered class
+ * @param {import('./types.js').ModuleNamespace | { components: Record<string, unknown> }} ns
+ * @param {{ as?: string, delimiter?: string, from?: string, registry?: CustomElementRegistry, window?: any, conflict?: 'error' | 'reuse' }} [options]
  */
 export function registerComponents(ns, options = {}) {
   return Object.fromEntries(registerAll(ns, options).map((b) => [b.tag, b.element]));
@@ -900,7 +971,7 @@ function registerAll(ns, { as, delimiter, from = 'module', registry, window: win
  * (recorded with `reused: true`) instead of throwing.
  * @param {object} ns module namespace (runtime-loaded HTML, compiled, or plain JS)
  * @param {{ as?: string, delimiter?: string, bindings?: object[], from?: string, registry?: CustomElementRegistry, window?: any, root?: Document|ShadowRoot, conflict?: 'error'|'reuse' }} [options]
- * @returns {{ elements: Record<string, Function>, values: Record<string, unknown>, tags: Record<string, { tag: string, namespace: string|null, export: string, reused?: true }> }}
+ * @returns {BindResult}
  */
 export function bindModule(ns, { as, delimiter = DELIMITER, bindings = [], from = 'module', registry, window: win = globalThis, root, conflict } = {}) {
   if (as != null) assertNamespace(as);
@@ -1027,7 +1098,11 @@ export function hotReplaceComponent(previous, next) {
   return { ok: true, elements: plan() };
 }
 
-/** Replace a stylesheet export: every root that adopted `previous` gets `next` instead, and later adoptions of `previous` adopt `next`. */
+/**
+ * Replace a stylesheet export: every root that adopted `previous` gets `next` instead, and later adoptions of `previous` adopt `next`.
+ * @param {HTMLStylesheet} previous
+ * @param {HTMLStylesheet} next
+ */
 export function hotReplaceStylesheet(previous, next) {
   if (!isHTMLStylesheet(previous) || !isHTMLStylesheet(next)) throw new TypeError('hotReplaceStylesheet: both must be HTMLStylesheets');
   if (previous === next) return 0;
@@ -1055,6 +1130,8 @@ export function hotReplaceStylesheet(previous, next) {
  * @param {object} previous the module namespace before
  * @param {object} next     the module namespace after
  * @returns {{ reload: boolean, reasons: string[], updated: string[], elements: number }}
+ * @param {import('./types.js').ModuleNamespace | Record<string, unknown>} previous
+ * @param {import('./types.js').ModuleNamespace | Record<string, unknown>} next
  */
 export function hotReplaceModule(previous, next) {
   const names = (ns) => Object.keys(ns).filter((k) => k !== 'components').sort();

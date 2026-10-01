@@ -33,13 +33,17 @@ const split = (id) => {
 const isMarked = (id) => new URLSearchParams(split(id)[1]).has(MARK);
 
 /**
- * @param {object} [options]
- * @param {string} [options.runtime]  where compiled modules import the runtime from (default "@johnhenry/html-modules/runtime")
- * @param {'esm'|'register'} [options.format]
- * @param {string} [options.as]
- * @param {string} [options.delimiter]
- * @param {'error'|'reuse'} [options.conflict]
- * @param {boolean} [options.hot]     HMR code in dev (default true)
+ * @typedef {object} HTMLModulesPluginOptions
+ * @property {string} [runtime]  where compiled modules import the runtime from (default "@johnhenry/html-modules/runtime")
+ * @property {'esm' | 'register'} [format]
+ * @property {string} [as]
+ * @property {string} [delimiter]
+ * @property {'error' | 'reuse'} [conflict]
+ * @property {boolean} [hot]     HMR code in dev (default true)
+ */
+
+/**
+ * @param {HTMLModulesPluginOptions} [options]
  * @returns {import('vite').Plugin}
  */
 export default function htmlModules({ runtime, format, as, delimiter, conflict, hot = true } = {}) {

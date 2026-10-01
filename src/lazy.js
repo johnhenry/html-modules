@@ -27,7 +27,11 @@ export function componentRootCreated(host, root, win = globalThis) {
   hubs.get(win)?.rootCreated(root);
 }
 
-/** The shadow root html-modules created for a component instance (also for closed roots), or null. */
+/**
+ * The shadow root html-modules created for a component instance (also for closed roots), or null.
+ * @param {Element} host
+ * @returns {ShadowRoot | null}
+ */
 export const componentRoot = (host) => componentRoots.get(host) ?? null;
 
 /**
@@ -57,6 +61,8 @@ export function lazyTargets({ as, delimiter = '--', bindings = [] } = {}) {
  * Whether a lazy import has any tag to wait for (what `lazyTargets()` would watch, ignoring whether each tag is
  * valid): a namespace import, or a binding that registers a tag. Adopt, data and default-without-`element`
  * bindings register none, and neither does an import with no `as` and no `element=`.
+ * @param {{ as?: string, bindings?: Array<{ export: string, element?: string, adopt?: boolean }> }} [spec]
+ * @returns {boolean}
  */
 export function hasLazyTargets({ as, bindings = [] } = {}) {
   if (!bindings.length) return Boolean(as);

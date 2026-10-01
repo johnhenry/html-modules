@@ -13,6 +13,17 @@
 import { createHTMLModules } from './html-modules.js';
 import { defineHTMLModuleElements } from './elements.js';
 
+/** @typedef {import('./types.js').HTMLModulesInstance} HTMLModulesInstance */
+/** @typedef {import('./types.js').HTMLModuleElements} HTMLModuleElements */
+/** @typedef {import('./types.js').HTMLImportElement} HTMLImportElement */
+/** @typedef {import('./types.js').HTMLImportSettingsElement} HTMLImportSettingsElement */
+/** @typedef {import('./types.js').HTMLModuleSettingsElement} HTMLModuleSettingsElement */
+/** @typedef {import('./types.js').ModuleNamespace} ModuleNamespace */
+/** @typedef {import('./types.js').ImportResult} ImportResult */
+/** @typedef {import('./types.js').ImportOptions} ImportOptions */
+/** @typedef {import('./types.js').LazyImportHandle} LazyImportHandle */
+/** @typedef {import('./types.js').HotReloadResult} HotReloadResult */
+
 export const HTMLModules = createHTMLModules({
   hostResolve: (specifier) => import.meta.resolve(specifier),
 });

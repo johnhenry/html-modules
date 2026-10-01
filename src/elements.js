@@ -53,6 +53,7 @@ const precedes = (a, b) => a !== b && Boolean(a.compareDocumentPosition(b) & FOL
 /**
  * Define the html-modules elements over an HTMLModules instance.
  * @param {{ modules: ReturnType<typeof import('./html-modules.js').createHTMLModules>, window?: any, registry?: CustomElementRegistry }} options
+ * @returns {import('./types.js').HTMLModuleElements}
  */
 export function defineHTMLModuleElements({ modules, window: win = globalThis, registry } = {}) {
   if (!modules) throw new TypeError('defineHTMLModuleElements: pass { modules } (from createHTMLModules())');

@@ -18,24 +18,13 @@ import { lazyTargets, watchLazy } from './lazy.js';
 import { lazyImportProblem } from './record.js';
 
 /**
- * @param {object} [options]  loader options (`fetch`, `parseHTML`, `hostResolve`, `baseURL`,
- *                            `importModule`, `onEvent`) plus these defaults for this instance's imports
- *                            (lowest precedence: `<html-import>` attributes and the page's
- *                            `<html-import-settings>` override them; they never apply inside modules):
- * @param {'omit'|'same-origin'|'include'} [options.credentials]  fetch `credentials` for HTML modules (default: the platform's)
- * @param {'cors'|'same-origin'|'no-cors'} [options.mode]          fetch `mode` for HTML modules (default: the platform's)
- * @param {{ createHTML(html: string): unknown } | false} [options.trustedTypes]  Trusted Types policy for the HTML parsed and stamped in `window`
- *                                                (default: a policy named "html-modules" where `window.trustedTypes` exists; `false`: never)
- * @param {string} [options.nonce]                 CSP nonce for the `<style>` elements used where constructable stylesheets are unavailable
- * @param {any} [options.window]                   the window whose DOM and registry to use
- * @param {CustomElementRegistry} [options.registry]
- * @param {string} [options.delimiter]            namespace delimiter (default "--")
- * @param {string} [options.base]                 base URL for resolving import specifiers, relative to `baseURL`
- *                                                (default: the importing document's base URL)
- * @param {'error'|'reuse'} [options.conflict]    a tag already defined by something else: error (default) or keep it
- * @param {'eager'|'lazy'} [options.load]         default for `<html-import>` elements (default "eager");
- *                                                `import()` is lazy only when the call says `load: 'lazy'`
- * @param {'event'|'throw'} [options.errors]      also reportError() failures (default "event": events and rejections only)
+ * `options`: loader options (`fetch`, `parseHTML`, `hostResolve`, `baseURL`, `importModule`, `onEvent`, `credentials`,
+ * `mode`, `trustedTypes`, `nonce`) plus these defaults for this instance's imports (lowest precedence: `<html-import>`
+ * attributes and the page's `<html-import-settings>` override them; they never apply inside modules): `delimiter`,
+ * `base`, `conflict`, `load` (the default for `<html-import>` elements; `import()` is lazy only when the call says
+ * `load: 'lazy'`) and `errors`. See `CreateHTMLModulesOptions`.
+ * @param {import('./types.js').CreateHTMLModulesOptions} [options]
+ * @returns {import('./types.js').HTMLModulesInstance}
  */
 export function createHTMLModules({
   window: win = globalThis, registry, delimiter, base, conflict, load, errors, ...loaderOptions

@@ -21,12 +21,30 @@
   ],
   "main": "./src/index.js",
   "exports": {
-    ".": "./src/index.js",
-    "./browser": "./src/browser.js",
-    "./runtime": "./src/runtime.js",
-    "./compiler": "./src/compiler.js",
-    "./dev": "./src/dev-server.js",
-    "./vite": "./src/vite.js",
+    ".": {
+      "types": "./types/index.d.ts",
+      "default": "./src/index.js"
+    },
+    "./browser": {
+      "types": "./types/browser.d.ts",
+      "default": "./src/browser.js"
+    },
+    "./runtime": {
+      "types": "./types/runtime.d.ts",
+      "default": "./src/runtime.js"
+    },
+    "./compiler": {
+      "types": "./types/compiler.d.ts",
+      "default": "./src/compiler.js"
+    },
+    "./dev": {
+      "types": "./types/dev-server.d.ts",
+      "default": "./src/dev-server.js"
+    },
+    "./vite": {
+      "types": "./types/vite.d.ts",
+      "default": "./src/vite.js"
+    },
     "./package.json": "./package.json"
   },
   "bin": {
@@ -34,12 +52,14 @@
   },
   "files": [
     "src",
+    "types",
     "bin",
     "CHANGELOG.md"
   ],
   "scripts": {
     "test": "node --test \"test/*.test.js\"",
     "check": "node scripts/check.js",
+    "types": "tsc -p tsconfig.types.json",
     "build": "node scripts/check.js",
     "examples": "for f in examples/[0-9]*.mjs; do node \"$f\" || exit 1; done",
     "example:01": "node examples/01-a-module-reads-into-a-json-record.mjs",
@@ -50,6 +70,7 @@
     "example:06": "node examples/06-lazy-import-fetches-on-first-use.mjs",
     "example:07": "node examples/07-hot-reload-swaps-components-under-live-elements.mjs",
     "examples:compile": "node scripts/compile-examples.js",
+    "types:check": "tsc -p tsconfig.usage.json",
     "test:browser": "playwright test",
     "bench": "node scripts/bench.js"
   },
@@ -69,8 +90,11 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
+    "@types/node": "^26.6.3",
     "linkedom": "^0.18.13",
     "parse5": "^8.0.1",
+    "typescript": "^7.0.2",
     "vite": "^8.3.1"
-  }
+  },
+  "types": "./types/index.d.ts"
 }

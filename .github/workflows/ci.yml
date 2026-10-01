@@ -33,6 +33,9 @@ jobs:
       # Includes test/examples.test.js, which is the drift gate for the
       # committed examples/compiled/ output (see the comment below).
       - run: npm test
+      # A strict typed consumer of every entry point compiles against the shipped declarations (types/).
+      - name: Type-check a typed usage file
+        run: npm run types:check
       - name: Examples smoke test
         run: npm run examples
       - name: Pack list

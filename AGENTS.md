@@ -15,13 +15,16 @@ compiler/CLI and the numbered examples, so a green `npm test` does not prove any
 3. `npm test`: 0 failed, **0 skipped**. `test/examples.test.js` is part of it and is also the drift gate for
    `examples/compiled/`.
 4. `npm run examples`: the numbered Node examples, each self-verifying.
-5. `npm pack --dry-run`: read the file list (`src/`, `bin/`, README, LICENSE, CHANGELOG, package.json; no tests,
-   examples or docs).
-6. For anything that changes rendering, styles, events or lazy loading: serve the root (`python3 -m http.server`),
-   open `/examples/` in a real browser **with the cache disabled**, and check the page's pass/fail list.
+5. `npm pack --dry-run`: read the file list (`src/`, `types/`, `bin/`, README, LICENSE, CHANGELOG, package.json; no tests,
+   examples or docs). `npm run types:check` compiles a strict typed consumer of every entry point against `types/`.
+6. For anything that changes rendering, styles, shadow DOM, registries, forms, security, hot reload or lazy loading:
+   `npm run test:browser` (Playwright: Chromium, Firefox and WebKit over every `examples/*.html` page and the targeted
+   specs in `test/browser/`; `npx playwright install --with-deps` once; `--project=chromium` for one engine), and look at
+   the change in a real browser (`node scripts/test-server.js`, cache disabled). Features an engine lacks must be
+   reported by the page as *unsupported* (`renderChecks` takes `'unsupported'`), not as a failure.
 7. A genuinely fresh clone: `git clone . /tmp/html-modules-verifyN && cd $_ && npm ci && npm test && npm run examples`.
 
-CI (`.github/workflows/ci.yml`) runs steps 1-5 in this order on Node 26. Locally, Node 24 also works (npm prints an
+CI (`.github/workflows/ci.yml`) runs steps 1-5 in this order on Node 26, plus a `browsers` job (step 6, all three engines). Locally, Node 24 also works (npm prints an
 `EBADENGINE` warning only); the floor is a contract, not an install gate.
 
 ## Repo-specific gotchas
@@ -46,6 +49,15 @@ CI (`.github/workflows/ci.yml`) runs steps 1-5 in this order on Node 26. Locally
   reader with the scanner read through `specParse()` (parse5, `test/spec-dom.js`), never `shared.DOMParser`. parse5
   follows the pre-"customizable select" parsing rules: a real current browser finds `<html-export>` inside
   `<select>`, parse5 does not, so keep `<select>` out of fuzz alphabets.
+- **`types/` is generated from JSDoc.** After changing a public signature or typedef run `npm run types`; `test/types.test.js`
+  fails on a stale `types/`. Shared shapes live in `src/types.js` (typedefs only). Compiled output and `examples/compiled/` are
+  separate: a compiler change needs `npm run examples:compile`.
+- **Hot reload rests on slots.** Registered classes delegate to `slotOf(def).def`; a replacement definition shares the
+  slot of the one it replaces (`sameDefinition`). Anything fixed when an element is created (shadow mode, observed
+  attributes, props, form association, imports) cannot change under live elements, so `planComponentSwap` reports it and
+  the page reloads. Keep `viewOf`, `stamp` and `planComponentSwap` in step when adding per-definition state.
+- **The sandbox here cannot launch Firefox** (its profile folder is not found); Chromium and WebKit run locally, Firefox in CI.
+  Do not work around that with a sandbox bypass.
 - **linkedom is not a browser.** It does not upgrade custom elements inside shadow roots (`test/lazy.test.js`
   upgrades them by hand with `upgradeIn`), does not carry events out of shadow roots, and has no constructable
   stylesheets (styles fall back to `<style>`). Do not "fix" the tests by removing those workarounds; check the real
@@ -74,7 +86,9 @@ A change is done when all of the following hold, not just when tests pass:
 ## Non-goals
 
 No custom JavaScript module loader, no `import "./x.html"` from JavaScript, no service worker, no bundler, no
-framework, and no package or CDN routing (that is `@johnhenry/mport`). See the README's `## Non-goals` and
+framework, and no package or CDN routing (that is `@johnhenry/mport`). The dev server (`html-module dev`) is a static
+server with a change feed and the Vite plugin only compiles `.html` imports with the existing compiler: dev tooling, not a
+loader or a bundler, and with no runtime dependencies. See the README's `## Non-goals` and
 `docs/GAP.md` (`## Deferred`) for what was deliberately left out and why.
 
 ## Releases

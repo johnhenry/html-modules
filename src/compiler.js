@@ -25,9 +25,16 @@ import { moduleImportOptions, readHTMLModule } from './record.js';
 import { DELIMITER, assertDelimiter, assertNamespace, bindingName, camelCase } from './names.js';
 import { assertOption } from './settings.js';
 
+/** @typedef {import('./types.js').CompileOptions} CompileOptions */
+/** @typedef {import('./record.js').ModuleRecord} ModuleRecord */
+
 const str = (v) => JSON.stringify(v);
 
-/** "./icons.html" → "./icons.js"; other specifiers are left alone. */
+/**
+ * "./icons.html" → "./icons.js"; other specifiers are left alone.
+ * @param {string} src
+ * @returns {string}
+ */
 export const rewriteSpecifier = (src) => src.replace(/\.html?(?=[?#]|$)/i, '.js');
 
 const basename = (url) => String(url).split(/[\\/]/).pop();
@@ -41,6 +48,9 @@ const DUMMY = 'http://html-modules.invalid/r/0/1/2/3/4/5/6/7/8/9/';
  * → "./vendor/ui@1/card.html"; ("./card.html", "../lib/") → "../lib/card.html";
  * with an absolute base, the absolute URL. Bare and absolute specifiers are
  * left alone, as the runtime leaves them.
+ * @param {string} src
+ * @param {string} [base]
+ * @returns {string}
  */
 export function rebaseSpecifier(src, base) {
   if (!base || !URL_LIKE.test(src)) return src;
@@ -79,6 +89,8 @@ export function compileHTMLModule(source, { url = 'module.html', parse, ...optio
 /**
  * Generate an ES module from a module record.
  * @param {import('./record.js').ModuleRecord} record
+ * @param {import('./types.js').CompileOptions} [options]
+ * @returns {string} JavaScript module source
  */
 export function compileRecord(record, { runtime = '@johnhenry/html-modules/runtime', format = 'esm', as, delimiter = DELIMITER, conflict = 'error', rewrite = rewriteSpecifier, hot = false } = {}) {
   if (format !== 'esm' && format !== 'register') throw new TypeError(`Unknown format "${format}": use "esm" or "register"`);

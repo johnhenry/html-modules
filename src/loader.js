@@ -67,6 +67,7 @@ const dependencyKey = (src, type) => (type ? `${type}:${src}` : src);
  * @param {import('./record.js').ModuleRecord} record
  * @param {Map<string, object>} modules src (as written, or `type:src` for a dependency with a `type`) → loaded namespace
  * @param {{ lazy?: (src: string, type?: string, integrity?: string) => () => Promise<object> }} [options]
+ * @returns {import('./types.js').ModuleNamespace}
  */
 export function linkHTMLModule(record, modules, { lazy } = {}) {
   const { url } = record;
@@ -129,7 +130,11 @@ export function linkHTMLModule(record, modules, { lazy } = {}) {
   return createNamespace(entries);
 }
 
-/** A module-namespace-like object: null prototype, sorted keys, frozen, tagged "Module". */
+/**
+ * A module-namespace-like object: null prototype, sorted keys, frozen, tagged "Module".
+ * @param {Iterable<[string, unknown]>} entries
+ * @returns {import('./types.js').ModuleNamespace}
+ */
 export function createNamespace(entries) {
   const ns = Object.create(null);
   for (const [name, value] of [...entries].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
@@ -152,6 +157,7 @@ export function createNamespace(entries) {
  * @param {(url: string) => Promise<object>} [options.importModule]      default: native import()
  * @param {any} [options.window]
  * @param {(event: { type: 'fetch'|'load'|'error', url: string, kind?: string, error?: unknown }) => void} [options.onEvent]
+ * @returns {import('./types.js').Loader}
  */
 export function createLoader({
   baseURL = globalThis.document?.baseURI ?? globalThis.location?.href,

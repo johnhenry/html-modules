@@ -219,6 +219,11 @@ module loader (the PRD's non-goals), only a static server with a change feed. Se
 names coexist. Feature-detected (`supportsScopedRegistries()`), with a warned fallback to the global registry; page-level
 use is rejected because a page's tags live in the document's registry. See [HTML syntax](api/html-syntax.md#scoped-registries).
 
+## Extension beyond the PRD: TypeScript declarations
+
+Declarations for every entry point, generated from JSDoc (`tsc --declaration --allowJs --emitDeclarationOnly`) and checked
+by compiling a typed consumer in strict mode. See [TypeScript](api.md#typescript).
+
 ## Deferred
 
 | Item | Why |

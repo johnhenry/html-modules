@@ -740,6 +740,12 @@ shared record, plus the equivalence test, is what keeps them in step.
   `<img src="./logo.png">` is relative to the page, not the module, and html-modules does not rewrite it. Use
   absolute URLs for assets of a module served from elsewhere. `@import` in a `<style>` is rejected (constructed
   stylesheets drop it silently).
+- **Server-side rendering is supported by declarative shadow DOM, not by running the library on the server.**
+  `renderDeclarative(def, innerHTML)` returns the `<template shadowrootmode>` markup for a component (styles
+  included) to put inside its host tag; when the element upgrades, the runtime keeps that shadow root (open or
+  closed), adopts the component's sheets and does not stamp the template again. It does not render nested
+  components or run any script. A `shadow="closed"` component's base class calls `attachInternals()` (to see a closed
+  declarative root), so a subclass of one cannot call it again; use `shadow="open"` for those.
 - **The `.` (and `_`) delimiter cannot name one-word exports.** `.` is a legal custom element name character, but
   `ui.card` has no hyphen, so binding a one-word export under `delimiter="."` is a `SyntaxError` naming the tag; a
   namespace import checks every tag before registering any, so it fails whole. Two-word exports (`ui.custom-card`)

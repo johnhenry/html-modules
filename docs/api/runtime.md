@@ -9,6 +9,7 @@ tag.**
 
 - Definitions: [`HTMLComponent` / `defineHTMLComponent`](#htmlcomponent), [`isHTMLComponent`](#ishtmlcomponentvalue)
 - Stylesheets: [`HTMLStylesheet` / `defineHTMLStylesheet`](#htmlstylesheet), [`adoptStylesheet`](#adoptstylesheetroot-value-options), [`isHTMLStylesheet`, `isStylesheet`](#ishtmlstylesheetvalue-isstylesheetvalue)
+- Server-side rendering: [`renderDeclarative`](#renderdeclarativedef-innerhtml)
 - Page security: [`configureRuntime`](#configureruntimewindow-options)
 - Registration: [`defineElement`](#defineelementtag-value-options), [`toComponent`](#tocomponentvalue-options), [`isElementLike`](#iselementlikevalue-window)
 - Binding: [`bindModule`](#bindmodule), [`applyBinding`](#applybinding), [`registerComponents`](#registercomponentsns-options)
@@ -57,12 +58,19 @@ The instance is frozen.
 
 **What an instance of a template-backed element does** when constructed:
 
-1. If it already has a shadow root with content (declarative shadow DOM, server-rendered), it keeps it and does not
-   re-stamp.
-2. Otherwise it attaches a shadow root (`{ mode: shadow, delegatesFocus }`, or reuses an empty existing one), adopts
-   the component's stylesheets (its own `styles` as one shared constructed sheet per window, then any stylesheet its
-   module's imports `adopt`), and appends a clone of the template content (parsed once per window, on first use).
-3. It reports the shadow root to lazy loading (so lazily imported tags inside it are seen, even when `closed`).
+1. It looks for a shadow root it already has: `this.shadowRoot`, and for a `shadow="closed"` component also
+   `attachInternals().shadowRoot`, the only way to see a closed **declarative** shadow root (a server-rendered
+   `<template shadowrootmode="closed">`). Because `attachInternals()` can be called once per element, a closed
+   component's base class calls it itself: a subclass of one that needs its own `ElementInternals` should be
+   `shadow="open"`. If the root's mode is not the component's `shadow`, it throws `Error: <tag> already has an open|a closed shadow root
+   (server-rendered?), but "<name>" is shadow="<mode>": render it with shadowrootmode="<mode>" (renderDeclarative() does), …`.
+2. Otherwise it attaches a shadow root (`{ mode: shadow, delegatesFocus }`).
+3. Either way it adopts the component's stylesheets (its own `styles` as one shared constructed sheet per window,
+   created with the module's URL as `baseURL`, then any stylesheet its module's imports `adopt`), so a server-rendered
+   root is styled like a stamped one. If the root already has content (server-rendered) it is kept and the template is
+   **not** stamped again; if it is empty, a clone of the template content (parsed once per window, on first use) is
+   appended.
+4. It reports the shadow root to lazy loading (so lazily imported tags inside it are seen, even when `closed`).
 
 The base class is named after the identity in PascalCase (`custom-card` → `CustomCard`, `HTMLModuleElement` when the
 name is `null`), and has a static `component` getter returning the definition, so
@@ -127,6 +135,29 @@ Where `adoptedStyleSheets` is available, the window's constructed sheet is appen
 `HTMLStylesheet`) a `<style data-html-module="<name>">` is appended once to `document.head` (for a document) or the
 shadow root. `window` defaults to the root's window; the fallback `<style>` gets the window's configured `nonce`. Throws `TypeError: adoptStylesheet: not a stylesheet`, or
 `TypeError: This document cannot adopt a CSSStyleSheet` for a raw `CSSStyleSheet` where adoption is unsupported.
+
+## `renderDeclarative(def, innerHTML)`
+
+```ts
+renderDeclarative(def: HTMLComponent, innerHTML?: string): string
+```
+
+Declarative shadow DOM markup for one server-rendered instance of a template-backed component, to put **inside** its
+host tag, followed by the host's light DOM (`innerHTML`, inserted as written: escape untrusted text yourself):
+
+```js
+const html = `<ui--card>${renderDeclarative(ui.card, '<h2>Title</h2>')}</ui--card>`;
+// <ui--card><template shadowrootmode="open"><style>…</style><article>…</article></template><h2>Title</h2></ui--card>
+```
+
+`shadowrootmode` and `shadowrootdelegatesfocus` come from the definition. Its styles, and those its imports `adopt`,
+are written as `<style>` elements in the template so the first paint is styled before any script runs; when the
+element upgrades the component adopts its constructed sheets as well, so the rules are listed twice (harmless). `</style`
+inside the CSS is escaped. It is pure string work: it runs in Node, on definitions from `HTMLModules.load()` or from a
+compiled module. Throws `TypeError: renderDeclarative: pass a component definition …`, or `… is a JavaScript-authored
+class, not a template; there is no template to render`. It does not render the module's *nested* components (a
+template that uses `<ui--icon>` gets the declarative markup of that one from you), and it does not set the page's
+Trusted Types policy: server-rendered markup goes through the HTML parser, not `innerHTML`.
 
 ## `configureRuntime(window, options)`
 

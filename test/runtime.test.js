@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   defineHTMLComponent, defineHTMLStylesheet, isHTMLComponent, defineElement, bindModule, registerComponents,
-  applyBinding, lookupExport, componentsOf, manifest, toComponent, adoptStylesheet,
+  applyBinding, lookupExport, componentsOf, manifest, toComponent, adoptStylesheet, componentRoot, renderDeclarative,
   bindingName, parseBindingName, camelCase, kebabCase, isValidElementName, DELIMITER,
 } from '../src/index.js';
 import { makeWindow, shared } from './helpers.js';
@@ -99,7 +99,91 @@ test('a server-rendered shadow root is kept rather than re-stamped', () => {
   el.attachShadow({ mode: 'open' }).innerHTML = '<p>ssr</p>';
   win.document.body.append(el);
   card().define('z--card', { window: win });
-  assert.equal(el.shadowRoot.innerHTML, '<p>ssr</p>');
+  assert.equal(el.shadowRoot.querySelector('p').textContent, 'ssr');
+  assert.equal(el.shadowRoot.querySelector('article'), null, 'not stamped again');
+  assert.equal(el.shadowRoot.querySelectorAll('style[data-html-module="custom-card"]').length, 1, 'but it gets the component\'s styles (a <style> where there are no constructable sheets)');
+});
+
+test('a server-rendered shadow root adopts the component\'s constructed sheets', () => {
+  const win = makeWindow();
+  const el = win.document.createElement('z--sheet');
+  const root = el.attachShadow({ mode: 'open' });
+  root.innerHTML = '<p>ssr</p>';
+  root.adoptedStyleSheets = [];
+  win.CSSStyleSheet = class {
+    constructor() {
+      this.cssRules = [];
+    }
+    replaceSync(css) {
+      this.text = css;
+    }
+  };
+  win.document.body.append(el);
+  card().define('z--sheet', { window: win });
+  assert.deepEqual(root.adoptedStyleSheets.map((s) => s.text), [':host{display:block}']);
+});
+
+test('a closed declarative shadow root is found through attachInternals().shadowRoot and kept', () => {
+  const win = makeWindow();
+  const closed = defineHTMLComponent({ name: 'sealed', template: '<b>stamped</b>', shadow: 'closed', styles: ['p{}'] });
+  const el = win.document.createElement('z--sealed');
+  const root = el.attachShadow({ mode: 'closed' }); // what <template shadowrootmode="closed"> makes
+  root.mode = 'closed';
+  root.innerHTML = '<p>ssr</p>';
+  let asked = 0;
+  el.attachInternals = () => (asked++, { shadowRoot: root });
+  win.document.body.append(el);
+  closed.define('z--sealed', { window: win });
+  assert.equal(asked, 1);
+  assert.equal(root.querySelector('b'), null, 'the server-rendered content is kept');
+  assert.equal(root.querySelectorAll('style[data-html-module="sealed"]').length, 1, 'and styled');
+  assert.equal(componentRoot(el), root, 'lazy imports can still watch it');
+});
+
+test('a declarative root of the other mode is a clear error, not a NotSupportedError', () => {
+  const win = makeWindow();
+  const open = defineHTMLComponent({ name: 'open-one', template: '<b>x</b>', shadow: 'open' });
+  const closed = defineHTMLComponent({ name: 'closed-one', template: '<b>x</b>', shadow: 'closed' });
+  // An open server-rendered root on a closed component.
+  const a = win.document.createElement('z--mismatch-a');
+  a.attachShadow({ mode: 'open' }).mode = 'open';
+  a.shadowRoot.mode = 'open';
+  // A closed one on an open component: shadowRoot hides it and attachShadow() refuses.
+  const b = win.document.createElement('z--mismatch-b');
+  const sealed = b.attachShadow({ mode: 'closed' });
+  sealed.mode = 'closed';
+  b.attachInternals = () => ({ shadowRoot: sealed });
+  win.document.body.append(a, b);
+  const errors = [];
+  for (const [def, tag] of [[closed, 'z--mismatch-a'], [open, 'z--mismatch-b']]) {
+    try {
+      def.define(tag, { window: win });
+      win.customElements.upgrade(win.document.querySelector(tag));
+    } catch (error) {
+      errors.push(error.message);
+    }
+  }
+  assert.match(errors[0] ?? '', /<z--mismatch-a> already has an open shadow root \(server-rendered\?\), but "closed-one" is shadow="closed": render it with shadowrootmode="closed" \(renderDeclarative\(\) does\)/);
+  assert.match(errors[1] ?? '', /<z--mismatch-b> already has a closed shadow root.*shadow="open"/);
+});
+
+test('renderDeclarative(): declarative shadow DOM markup for server-side rendering', () => {
+  const sheet = defineHTMLStylesheet({ name: 'theme', css: 'b{color:red} /* </style> */' });
+  const def = defineHTMLComponent({
+    name: 'badge', template: '<b><slot></slot></b>', shadow: 'closed', delegatesFocus: true, styles: [':host{display:block}'],
+    imports: [{ module: { theme: sheet }, from: './t.html', bindings: [{ export: 'theme', adopt: true }] }],
+  });
+  assert.equal(
+    renderDeclarative(def, '<i>hi</i>'),
+    '<template shadowrootmode="closed" shadowrootdelegatesfocus><style>:host{display:block}</style><style>b{color:red} /* <\\/style> */</style><b><slot></slot></b></template><i>hi</i>',
+  );
+  assert.equal(renderDeclarative(defineHTMLComponent({ template: 'x' })), '<template shadowrootmode="open">x</template>');
+  assert.throws(() => renderDeclarative({}), /renderDeclarative: pass a component definition/);
+  assert.throws(() => renderDeclarative(defineHTMLComponent(class extends shared.HTMLElement {})), /JavaScript-authored class, not a template/);
+  // What it renders is what the runtime keeps when the element upgrades.
+  const win = makeWindow();
+  win.document.body.innerHTML = `<z--ssr>${renderDeclarative(defineHTMLComponent({ template: '<u>ssr</u>' }))}</z--ssr>`;
+  assert.ok(win.document.querySelector('z--ssr'));
 });
 
 test('stylesheets adopt into documents and shadow roots, once', () => {

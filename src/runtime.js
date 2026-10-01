@@ -139,20 +139,44 @@ function templateElementClass(def, win) {
     }
     constructor() {
       super();
-      // A server-rendered (declarative) shadow root is kept, not re-stamped.
-      if (this.shadowRoot?.childNodes.length) {
-        componentRootCreated(this, this.shadowRoot, win);
-        return;
+      // A server-rendered (declarative) shadow root is kept, not re-stamped, but still gets the component's styles.
+      let root = existingShadowRoot(this, def.shadow === 'closed');
+      if (!root) {
+        try {
+          root = this.attachShadow({ mode: def.shadow, delegatesFocus: def.delegatesFocus });
+        } catch (error) {
+          // A declarative root of the other mode: `shadowRoot` hides a closed one, `attachInternals()` shows it.
+          root = existingShadowRoot(this, true);
+          if (!root) throw error;
+        }
       }
-      const root = this.shadowRoot ?? this.attachShadow({ mode: def.shadow, delegatesFocus: def.delegatesFocus });
+      if (root.mode && root.mode !== def.shadow) {
+        throw new Error(`<${this.localName}> already has ${root.mode === 'open' ? 'an open' : 'a closed'} shadow root (server-rendered?), but ${describeDefinition(def)} is shadow="${def.shadow}": render it with shadowrootmode="${def.shadow}" (renderDeclarative() does), or set shadow="${root.mode}" on the export`);
+      }
+      const rendered = root.childNodes.length > 0; // (before the fallback <style> lands in the root)
       applyComponentStyles(root, def, win);
-      root.append((this.ownerDocument ?? win.document).importNode(content(), true));
+      if (!rendered) root.append((this.ownerDocument ?? win.document).importNode(content(), true));
       // Lazy imports watch component shadow roots too (see lazy.js).
       componentRootCreated(this, root, win);
     }
   };
   Object.defineProperty(cls, 'name', { value: pascal(def.name) });
   return cls;
+}
+
+/**
+ * A shadow root the element already has: an open one (declarative or not) is `host.shadowRoot`; a closed
+ * declarative one is only visible through `attachInternals().shadowRoot` (which can be called once per element,
+ * so it is only asked for when the component is closed, or after attachShadow() has refused).
+ */
+function existingShadowRoot(host, includeClosed) {
+  if (host.shadowRoot) return host.shadowRoot;
+  if (!includeClosed || typeof host.attachInternals !== 'function') return null;
+  try {
+    return host.attachInternals().shadowRoot ?? null;
+  } catch {
+    return null; // no internals available (already attached by a subclass, or disabled)
+  }
 }
 
 /** The stylesheets a component's shadow roots get: its own `styles`, then any adopted by its imports. */
@@ -164,11 +188,37 @@ function componentSheets(def) {
   return list;
 }
 
+/**
+ * Server-side rendering: the declarative shadow DOM markup for one instance of a component, to place inside its
+ * host element together with the host's own light DOM. Pure string work, so it runs in Node.
+ *
+ *   `<ui--card>${renderDeclarative(card, '<h2>Title</h2>')}</ui--card>`
+ *   // <ui--card><template shadowrootmode="open"><style>…</style><article>…</article></template><h2>Title</h2></ui--card>
+ *
+ * The root's mode and `delegatesFocus` are the definition's. The definition's styles (and those its imports
+ * adopt) are written as `<style>` elements so the first paint is styled before any script runs; on upgrade the
+ * component adopts its constructed sheets as well (the rules are then listed twice, which is harmless).
+ * `innerHTML` is the host's light DOM children and is inserted as written: escape untrusted text yourself.
+ * @param {HTMLComponent} def a template-backed component (not a JS-authored class)
+ * @param {string} [innerHTML]
+ * @returns {string}
+ */
+export function renderDeclarative(def, innerHTML = '') {
+  if (!isHTMLComponent(def)) throw new TypeError('renderDeclarative: pass a component definition (from defineHTMLComponent() or a loaded module)');
+  if (def.isClass) throw new TypeError(`renderDeclarative: ${describeDefinition(def)} is a JavaScript-authored class, not a template; there is no template to render`);
+  const css = sheetsOf(def).filter(isHTMLStylesheet).map((sheet) => `<style>${sheet.css.replace(/<\/style/gi, '<\\/style')}</style>`);
+  return `<template shadowrootmode="${def.shadow}"${def.delegatesFocus ? ' shadowrootdelegatesfocus' : ''}>${css.join('')}${def.template}</template>${innerHTML}`;
+}
+
 const sheetCache = new WeakMap(); // def → stylesheet values (built once, shared by every instance)
 
-function applyComponentStyles(root, def, win) {
+const sheetsOf = (def) => {
   if (!sheetCache.has(def)) sheetCache.set(def, componentSheets(def));
-  for (const sheet of sheetCache.get(def)) adoptStylesheet(root, sheet, { window: win });
+  return sheetCache.get(def);
+};
+
+function applyComponentStyles(root, def, win) {
+  for (const sheet of sheetsOf(def)) adoptStylesheet(root, sheet, { window: win });
 }
 
 // ---------------------------------------------------------------------------

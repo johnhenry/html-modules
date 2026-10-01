@@ -248,23 +248,23 @@ test('integrity on a re-export pins the re-exported module', async () => {
   await assert.rejects(bad.modules.load('./barrel.html'), /Integrity check failed for HTML module http:\/\/modules\.test\/part\.html/);
 });
 
-test('parseModuleSource: parses into a detached element (never a CSP-checked document), falling back to DOMParser', async () => {
+test('parseModuleSource: a browser\'s DOMParser makes a detached container; any other DOM gets a whole document', async () => {
   const { parseModuleSource } = await import('../src/loader.js');
   const { readHTMLModule } = await import('../src/index.js');
   const win = makeWindow();
   const html = '<!doctype html><html><head><title>t</title></head><body><html-export name="a"><style>b{}</style><template><b>x</b></template></html-export></body></html>';
+  // A native-looking DOMParser (a bound function prints "[native code]") whose documents hand out linkedom bodies.
   const made = [];
-  const withImpl = { document: { implementation: { createHTMLDocument: (title) => (made.push(title), { createElement: (name) => win.document.createElement(name) }) } } };
-  const holder = parseModuleSource(html, withImpl);
-  assert.deepEqual(made, [''], 'a scripting-less document made for the purpose');
+  const Native = function () { return { parseFromString: (h, type) => (made.push([h, type]), { createElement: (name) => win.document.createElement(name) }) }; }.bind(null);
+  const holder = parseModuleSource(html, { DOMParser: Native });
+  assert.deepEqual(made, [['', 'text/html']], 'one empty document is made, and reused');
   assert.equal(holder.parentNode, null, 'nothing parsed is attached to a document tree');
   assert.notEqual(holder.nodeType, 9, 'a container element, not a Document');
-  const record = readHTMLModule(holder, 'm.html');
-  assert.deepEqual(record.exports.map((e) => [e.name, e.kind]), [['a', 'component']]);
-  // Without document.implementation the window's DOMParser is used, and a window with neither is a TypeError.
+  assert.deepEqual(readHTMLModule(holder, 'm.html').exports.map((e) => [e.name, e.kind]), [['a', 'component']]);
+  // Not native (linkedom here): whole documents, as before.
   const calls = [];
-  const noImpl = { DOMParser: class { parseFromString(h, t) { calls.push([h, t]); return win.document; } } };
-  parseModuleSource(html, noImpl);
+  const Plain = class { parseFromString(h, t) { calls.push([h, t]); return win.document; } };
+  parseModuleSource(html, { DOMParser: Plain });
   assert.deepEqual(calls, [[html, 'text/html']]);
   assert.throws(() => parseModuleSource(html, {}), /No DOMParser available/);
 });

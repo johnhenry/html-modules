@@ -27,14 +27,17 @@ export declare function linkHTMLModule(record: import('./record.js').ModuleRecor
  */
 export declare function createNamespace(entries: Iterable<[string, unknown]>): import('./types.js').ModuleNamespace;
 /**
- * Parse module source into a container whose descendants are the module's elements, without a Document the
- * engine CSP-checks. `DOMParser` (and `createHTMLDocument()` + `innerHTML`) build a *connected* tree, and Chromium
- * evaluates the page's `style-src` for every `<style>` inserted into one, logging a `style-src-elem` violation
- * (and sending a report) per element even though nothing is applied. A detached `<body>` of a scripting-less
- * `createHTMLDocument()` document takes the same fragment-parsing path with the same insertion mode as a document
- * parse after `<body>` (`<html>`/`<head>`/`<body>` tags are ignored, `<style>`/`<title>`/`<link>` keep their
- * head behaviour, and `<noscript>` is parsed as elements, as in a `DOMParser` document), but its tree is never
- * connected, so nothing is checked. Falls back to `DOMParser` where the window has no `document.implementation`.
+ * Parse module source without a document tree the engine CSP-checks, returning a container whose descendants are
+ * the module's elements. A `DOMParser` document is such a tree: Chromium evaluates the page's `style-src` for every
+ * `<style>` inserted into a *connected* tree, logging a `style-src-elem` violation (and sending a report) per
+ * element though nothing is applied. The container here is a detached `<body>` created by an (empty) `DOMParser`
+ * document, so it never is connected, and `innerHTML` runs the fragment parse with `<body>` as the context: the
+ * insertion mode a document parse is in after `<body>` (`<html>`/`<head>`/`<body>` tags are ignored, `<style>`,
+ * `<title>` and `<link>` keep their head behaviour). The factory is a `DOMParser` document, not
+ * `document.implementation.createHTMLDocument()`, because the scripting flag decides how `<noscript>` parses and
+ * only a `DOMParser` document is scripting-less in every engine (Firefox treats a `createHTMLDocument()` document
+ * as scripting-enabled, so `<noscript>` content became text there). Anything else (another DOM implementation, or no
+ * `DOMParser`) gets a whole document from `DOMParser`; with none it is a TypeError.
  * @param {string} html
  * @param {any} [win]
  * @returns {ParentNode}

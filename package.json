@@ -46,7 +46,8 @@
     "example:04": "node examples/04-invalid-modules-fail-with-a-named-syntax-error.mjs",
     "example:05": "node examples/05-html-import-registers-and-upgrades-in-place.mjs",
     "example:06": "node examples/06-lazy-import-fetches-on-first-use.mjs",
-    "examples:compile": "node scripts/compile-examples.js"
+    "examples:compile": "node scripts/compile-examples.js",
+    "test:browser": "playwright test"
   },
   "keywords": [
     "html-modules",
@@ -63,6 +64,7 @@
     "access": "public"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "linkedom": "^0.18.13",
     "parse5": "^8.0.1"
   }

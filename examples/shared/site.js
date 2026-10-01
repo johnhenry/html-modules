@@ -114,14 +114,14 @@ export function errorText(error) {
 
 /** A list of labelled checks. `checks` is [label, boolean | null][]; null means "not run yet". */
 export function renderChecks(target, checks) {
-  const view = (ok) => (ok == null ? ['pending', 'not run'] : ok ? ['pass', 'pass'] : ['fail', 'fail']);
+  const view = (ok) => (ok == null ? ['pending', 'not run'] : ok === 'unsupported' ? ['unsupported', 'unsupported here'] : ok ? ['pass', 'pass'] : ['fail', 'fail']);
   target.innerHTML = checks
     .map(([label, ok]) => { const [cls, text] = view(ok); return `<li><span class="status ${cls}">${text}</span><span>${label}</span></li>`; })
     .join('');
   target.classList.add('checks');
-  return checks.every(([, ok]) => ok === true);
+  return checks.every(([, ok]) => ok === true || ok === 'unsupported');
 }
 
 export function status(ok, text = ok ? 'pass' : 'fail') {
-  return `<span class="status ${ok === 'pending' ? 'pending' : ok ? 'pass' : 'fail'}">${esc(text)}</span>`;
+  return `<span class="status ${ok === 'pending' ? 'pending' : ok === 'unsupported' ? 'unsupported' : ok ? 'pass' : 'fail'}">${esc(text)}</span>`;
 }

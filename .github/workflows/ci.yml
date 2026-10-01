@@ -38,6 +38,27 @@ jobs:
       - name: Pack list
         run: npm pack --dry-run
 
+  # Real browsers: linkedom (the unit-test DOM) has no constructable stylesheets, Trusted Types or custom-element
+  # upgrade semantics inside shadow roots, so rendering, styles, forms and security are proven in Chromium, Firefox
+  # and WebKit against every examples/*.html page and the targeted specs in test/browser/.
+  browsers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps
+      - run: npm run test:browser
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-traces
+          path: test-results/
+          retention-days: 7
+
   # No separate generated-<what> job: examples/compiled/ is generated
   # (npm run examples:compile) and committed, but it does NOT ship (files is
   # src + bin), and "examples/compiled/ is up to date" in

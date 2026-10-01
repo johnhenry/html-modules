@@ -152,6 +152,7 @@ label { font-size: 0.88rem; color: var(--muted); }
 .status.pass { background: var(--ok-soft); color: var(--ok); }
 .status.fail { background: var(--bad-soft); color: var(--bad); }
 .status.pending { background: var(--warn-soft); color: var(--warn); }
+.status.unsupported { background: var(--warn-soft); color: var(--muted, var(--warn)); font-style: italic; }
 
 .checks { list-style: none; padding: 0; margin: 0.5rem 0; display: grid; gap: 0.3rem; }
 .checks li { display: flex; gap: 0.5rem; align-items: baseline; }

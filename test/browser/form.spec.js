@@ -217,9 +217,9 @@ test('a reset button component resets the form (click and keyboard), without bei
 
 test('an uncancelled submit from a button component really submits the form (a GET with the fields, none from the button)', async ({ page }) => {
   await build(page, '<ff--text-field id="a" name="who" value="Ada">A</ff--text-field><ff--submit-button id="sgo" name="intent" value="save">Go</ff--submit-button>', { prevent: false });
-  await page.evaluate(() => { const f = document.getElementById('scratch-form'); f.action = '/package.json'; f.method = 'get'; });
-  const request = page.waitForRequest((r) => r.url().includes('/package.json?'));
-  await page.locator('#sgo').click();
+  await page.evaluate(() => { const f = document.getElementById('scratch-form'); f.action = '/examples/index.html'; f.method = 'get'; });
+  const request = page.waitForRequest((r) => r.url().includes('/examples/index.html?'), { timeout: 8000 });
+  await page.locator('#sgo').click({ noWaitAfter: true });
   const url = new URL((await request).url());
   expect(Object.fromEntries(url.searchParams)).toEqual({ who: 'Ada' });
 });

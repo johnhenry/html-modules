@@ -172,6 +172,7 @@ not know stays as written. Template, `<style>` and `<script>` text is not decode
 ```ts
 recordFromRaw(raw: {
   imports: RawElement[], exports: RawElement[], importSettings?: RawElement[], moduleSettings?: RawElement[],
+  bindings?: Array<{ tag: 'html-binding', order?: number, attrs, parent: { tag: string, attrs } | null }>,
 }, url?: string): ModuleRecord
 
 type RawElement = {
@@ -185,7 +186,11 @@ position among all collected elements, used for the placement rules (a settings 
 or export). A child's `html` is a `<template>`'s content; `text` is any other child's text content. Useful for
 writing another front end (an HTML parser of your choice, a build tool's AST).
 
-Checks, in order: settings count and placement; `<html-import-settings>` and `<html-module-settings>` attributes;
+`bindings` lists **every** `<html-binding>` of the document (outside templates) with its nearest enclosing element, so one that
+is not a direct child of an `<html-import>` (typically swallowed by a self-closed `<html-binding />`) is rejected. A
+raw `<html-import>`'s `children` must hold only `<html-binding>`s. Both readers fill these in.
+
+Checks, in order: nesting; misplaced bindings; settings count and placement; `<html-import-settings>` and `<html-module-settings>` attributes;
 each import (`src`, namespace, per-import options, bindings); lazy imports that `adopt`; each export (name, default,
 kind, attributes, JSON); duplicate names; more than one default.
 

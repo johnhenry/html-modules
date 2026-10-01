@@ -95,9 +95,26 @@ function assertNoImport(raw, css, where) {
 }
 
 function describe(raw) {
-  const bits = ['name', 'src', 'import', 'names'].filter((a) => has(raw.attrs, a)).map((a) => ` ${a}="${raw.attrs[a]}"`);
+  const bits = ['name', 'src', 'import', 'names', 'export', 'element'].filter((a) => has(raw.attrs, a)).map((a) => ` ${a}="${raw.attrs[a]}"`);
   if (has(raw.attrs, 'default')) bits.push(' default');
   return `<${raw.tag}${bits.join('')}>`;
+}
+
+const SELF_CLOSING = '"/>" does not close an element in HTML, so a self-closed <html-binding … />, <html-import … /> or <html-export … /> swallows everything that follows it as its children: write the end tag';
+
+/**
+ * Why an `<html-binding>` is misplaced, or null when its parent is an `<html-import>`. `parent` is the nearest
+ * enclosing element, `{ tag, attrs }`, or null (outside any element but the document's own).
+ * Shared by the module record (both readers) and by `<html-binding>` in a page.
+ */
+export function bindingPlacementProblem(attrs, parent, where = '') {
+  if (parent?.tag === 'html-import') return null;
+  const named = (a) => `<html-binding${has(a, 'export') ? ` export="${a.export}"` : ''}>`;
+  const document = !parent || ['html', 'head', 'body'].includes(parent.tag);
+  if (parent?.tag === 'html-binding') {
+    return `${named(attrs)} is nested inside ${named(parent.attrs)}${where}: an <html-binding> must be a direct child of <html-import>. ${SELF_CLOSING}: <html-binding …></html-binding>`;
+  }
+  return `${named(attrs)} is not a direct child of <html-import>${where}: it is ${document ? 'outside any <html-import>' : `inside <${parent.tag}>`}, and an <html-binding> only means something as a direct child of <html-import>. ${SELF_CLOSING}`;
 }
 
 /** Build a binding record from an <html-binding>'s attributes. */
@@ -122,6 +139,10 @@ export function importRecord(raw, url = '') {
   const where = url ? ` in ${url}` : '';
   const src = nonEmpty(raw.attrs.src);
   if (!src) throw new SyntaxError(`<html-import> requires a "src" attribute${where}`);
+  const stray = raw.children.find((c) => c.tag !== 'html-binding');
+  if (stray) {
+    throw new SyntaxError(`${describe(raw)} has a <${stray.tag}> child${where}: only <html-binding> elements may be children of <html-import>. ${SELF_CLOSING}`);
+  }
   const as = nonEmpty(raw.attrs.as);
   if (as) {
     try {
@@ -292,17 +313,25 @@ export function moduleImportOptions(record, i) {
 
 /**
  * Validate raw elements and build a module record.
- * @param {{ imports: RawElement[], exports: RawElement[], importSettings?: RawElement[], moduleSettings?: RawElement[] }} raw
+ * @param {{ imports: RawElement[], exports: RawElement[], importSettings?: RawElement[], moduleSettings?: RawElement[],
+ *   bindings?: Array<{ tag: 'html-binding', attrs: Record<string, string>, parent: { tag: string, attrs: Record<string, string> } | null }> }} raw
+ *   (`bindings` is every <html-binding> in the document, with its parent, so a misplaced one is rejected)
  * @param {string} [url]
  * @returns {ModuleRecord}
  */
-export function recordFromRaw({ imports, exports, importSettings: iset = [], moduleSettings: mset = [] }, url = '') {
+export function recordFromRaw({ imports, exports, importSettings: iset = [], moduleSettings: mset = [], bindings: stray = [] }, url = '') {
   const where = url ? ` in ${url}` : '';
   // Exports and imports are top-level declarations. A nested one would be read by
   // a DOM (querySelectorAll finds it) but not by a scanner that stops at the outer
   // element, so both readers reject it the same way.
   for (const raw of [...exports, ...imports]) {
-    if (raw.nestedIn) throw new SyntaxError(`${describe(raw)} is nested inside ${describe(raw.nestedIn)}${where}: <html-export> and <html-import> must not be nested`);
+    if (raw.nestedIn) throw new SyntaxError(`${describe(raw)} is nested inside ${describe(raw.nestedIn)}${where}: <html-export> and <html-import> must not be nested. ${SELF_CLOSING}`);
+  }
+  // An <html-binding> belongs directly inside an <html-import>: anywhere else (typically because a
+  // self-closed `<html-binding />` swallowed the next one) a DOM would find it and a scanner not.
+  for (const b of stray) {
+    const problem = bindingPlacementProblem(b.attrs, b.parent, where);
+    if (problem) throw new SyntaxError(problem);
   }
   const iel = settingsElement(iset, imports, 'html-import', where);
   const mel = settingsElement(mset, exports, 'html-export', where);
@@ -344,6 +373,10 @@ export function recordFromRaw({ imports, exports, importSettings: iset = [], mod
 function rawOf(el, order) {
   const attrs = (node) => Object.fromEntries([...node.attributes].map((a) => [a.name, a.value]));
   const parent = el.parentElement?.closest?.('html-export, html-import');
+  if (el.localName === 'html-binding') {
+    const p = el.parentElement;
+    return { tag: 'html-binding', order, attrs: attrs(el), children: [], parent: p ? { tag: p.localName, attrs: attrs(p) } : null };
+  }
   return {
     tag: el.localName,
     order,
@@ -366,8 +399,8 @@ function rawOf(el, order) {
  * @returns {ModuleRecord}
  */
 export function readHTMLModule(doc, url = '') {
-  const raw = { imports: [], exports: [], importSettings: [], moduleSettings: [] };
-  const into = { 'html-import': raw.imports, 'html-export': raw.exports, 'html-import-settings': raw.importSettings, 'html-module-settings': raw.moduleSettings };
+  const raw = { imports: [], exports: [], importSettings: [], moduleSettings: [], bindings: [] };
+  const into = { 'html-import': raw.imports, 'html-export': raw.exports, 'html-import-settings': raw.importSettings, 'html-module-settings': raw.moduleSettings, 'html-binding': raw.bindings };
   [...doc.querySelectorAll(Object.keys(into).join(', '))].forEach((el, order) => into[el.localName].push(rawOf(el, order)));
   return recordFromRaw(raw, url);
 }

@@ -28,7 +28,7 @@ const SCOPED_END = new Set(('address article aside blockquote button center deta
 const SCOPE = new Set(['applet', 'caption', 'html', 'table', 'td', 'th', 'marquee', 'object', 'template']);
 // Start tags that close an open <p>.
 const CLOSES_P = new Set(('address article aside blockquote center details dialog dir div dl fieldset figcaption figure footer header hgroup main menu nav ol p search section summary ul ' +
-  'h1 h2 h3 h4 h5 h6 pre listing form table hr xmp').split(' '));
+  'h1 h2 h3 h4 h5 h6 pre listing form table hr xmp plaintext li dd dt').split(' '));
 // Start tags that leave the "frameset-ok" flag alone (anything else, and any text, clears it; so does <template>).
 const FRAMESET_NEUTRAL = new Set(('style script meta link base title noembed noframes div span p section article header footer nav main aside h1 h2 h3 h4 h5 h6 ul ol a b i em strong small code').split(' '));
 // Start tags that do not begin the body (they are "in head": the body does not exist yet).
@@ -216,10 +216,11 @@ function skipRawText(src, tag, from) {
 export function scanRawElements(src) {
   // Input stream preprocessing: CRLF and CR are LF.
   src = String(src).replace(/\r\n?/g, '\n');
-  const out = { imports: [], exports: [], importSettings: [], moduleSettings: [] };
+  const out = { imports: [], exports: [], importSettings: [], moduleSettings: [], bindings: [] };
   let order = 0; // document order of the collected elements, for placement rules
   const stack = []; // open elements outside templates
   const rawAt = []; // parallel to `stack`: the raw element of an open <html-export>/<html-import>
+  const attrsAt = []; // parallel to `stack`: each open element's attributes
   let collecting = null; // { raw, depth }
   let template = null; // { depth, start, child }
   let framesetOk = true;
@@ -230,6 +231,7 @@ export function scanRawElements(src) {
   const popTo = (k) => {
     stack.length = k;
     if (rawAt.length > k) rawAt.length = k;
+    attrsAt.length = k;
     if (collecting && stack.length < collecting.depth) collecting = null;
   };
   // An end tag: a dedicated one closes the nearest such element within scope; any other
@@ -239,8 +241,11 @@ export function scanRawElements(src) {
     const scoped = SCOPED_END.has(tag);
     for (let k = stack.length - 1; k >= 0; k--) {
       if (stack[k] === tag) return popTo(k);
-      if (scoped ? SCOPE.has(stack[k]) : SPECIAL.has(stack[k])) return;
+      if (tag === 'p' && stack[k] === 'button') break; // "button scope"
+      if (scoped ? SCOPE.has(stack[k]) : SPECIAL.has(stack[k])) break;
     }
+    // `</p>` with no <p> in scope inserts an empty <p>; `</br>` is a <br>. They are elements a DOM has.
+    if ((tag === 'p' || tag === 'br') && collecting && stack.length === collecting.depth) collecting.raw.children.push({ tag, attrs: {} });
   };
   const closeP = () => {
     for (let k = stack.length - 1; k >= 0; k--) {
@@ -322,7 +327,7 @@ export function scanRawElements(src) {
     if (tag === 'frameset' && (!bodyStarted || framesetOk)) {
       // A <frameset> before the body starts, or in a body that has nothing but neutral content,
       // replaces the body: nothing before it is in the document any more, and nothing after it can be.
-      return { imports: [], exports: [], importSettings: [], moduleSettings: [] };
+      return { imports: [], exports: [], importSettings: [], moduleSettings: [], bindings: [] };
     }
     if (CLOSES_P.has(tag)) closeP();
     if (DOCUMENT_TAGS.has(tag) || tag === 'frameset') continue;
@@ -347,6 +352,7 @@ export function scanRawElements(src) {
       const raw = { tag, order: order++, attrs, children: [], nestedIn: { tag: parent.tag, attrs: parent.attrs } };
       (tag === 'html-export' ? out.exports : out.imports).push(raw);
       stack.push(tag);
+      attrsAt[stack.length - 1] = attrs;
       rawAt[stack.length - 1] = raw;
       continue;
     }
@@ -354,9 +360,15 @@ export function scanRawElements(src) {
       const raw = { tag, order: order++, attrs, children: [] };
       (tag === 'html-export' ? out.exports : out.imports).push(raw);
       stack.push(tag);
+      attrsAt[stack.length - 1] = attrs;
       rawAt[stack.length - 1] = raw;
       collecting = { raw, depth: stack.length };
       continue;
+    }
+    if (tag === 'html-binding') {
+      // Every binding is recorded with its parent, so one that is not a direct child of an <html-import> is rejected.
+      const top = stack.length - 1;
+      out.bindings.push({ tag, order: order++, attrs, children: [], parent: top >= 0 ? { tag: stack[top], attrs: attrsAt[top] } : null });
     }
     const child = directChild ? { tag, attrs } : null;
     if (child) collecting.raw.children.push(child);
@@ -366,7 +378,10 @@ export function scanRawElements(src) {
       i = after;
       continue;
     }
-    if (!VOID.has(tag)) stack.push(tag);
+    if (!VOID.has(tag)) {
+      stack.push(tag);
+      attrsAt[stack.length - 1] = attrs;
+    }
   }
   // The source ended inside a <template>: its content runs to the end.
   if (template?.child) template.child.html = src.slice(template.start);

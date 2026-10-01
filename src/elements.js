@@ -31,7 +31,7 @@
  * misplaced, duplicate or invalid settings element.
  */
 import { applyBinding, bindModule } from './runtime.js';
-import { bindingRecord, lazyImportProblem } from './record.js';
+import { bindingPlacementProblem, bindingRecord, lazyImportProblem } from './record.js';
 import { assertNamespace } from './names.js';
 import { readImportOptions, readImportSettings, resolveImportOptions, reportLoudly } from './settings.js';
 import { lazyTargets, watchLazy } from './lazy.js';
@@ -559,7 +559,13 @@ export function defineHTMLModuleElements({ modules, window: win = globalThis, re
   class HTMLBinding extends win.HTMLElement {
     connectedCallback() {
       const parent = this.parentElement;
-      if (parent?.localName === 'html-import' && typeof parent[BIND] === 'function') parent[BIND](this);
+      if (parent?.localName === 'html-import') {
+        if (typeof parent[BIND] === 'function') parent[BIND](this);
+        return;
+      }
+      // Usually a self-closed `<html-binding … />` that swallowed the next binding: it would be silently dropped.
+      const problem = bindingPlacementProblem(attrsOf(this), parent && { tag: parent.localName, attrs: attrsOf(parent) });
+      fail(this, new SyntaxError(problem), errorsMode(this, this.ownerDocument));
     }
   }
 

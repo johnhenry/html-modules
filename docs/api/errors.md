@@ -27,7 +27,10 @@ Nothing is silently ignored: a mistake is an exception, a rejection, or an `erro
 | `SyntaxError` | `Invalid export name "<name>" in <url>: use lower-case words joined by single hyphens, e.g. "custom-card"` |
 | `SyntaxError` | `"components" is reserved and cannot be used as an export name in <url>` |
 | `SyntaxError` | `Duplicate export "<name>" in <url>` |
-| `SyntaxError` | `<html-export name="<b>"> is nested inside <html-export name="<a>"> in <url>: <html-export> and <html-import> must not be nested` (also for `<html-import>` in either position) |
+| `SyntaxError` | `<html-export name="<b>"> is nested inside <html-export name="<a>"> in <url>: <html-export> and <html-import> must not be nested. "/>" does not close an element in HTML, so a self-closed <html-binding … />, <html-import … /> or <html-export … /> swallows everything that follows it as its children: write the end tag` (also for `<html-import>` in either position) |
+| `SyntaxError` | `<html-binding export="<b>"> is nested inside <html-binding export="<a>"> in <url>: an <html-binding> must be a direct child of <html-import>. "/>" does not close an element in HTML, …: <html-binding …></html-binding>` (a self-closed binding swallowed the next one) |
+| `SyntaxError` | `<html-binding export="<b>"> is not a direct child of <html-import> in <url>: it is outside any <html-import>` / `it is inside <<tag>>, and an <html-binding> only means something as a direct child of <html-import>. "/>" does not close …` |
+| `SyntaxError` | `<html-import src="<src>"> has a <<tag>> child in <url>: only <html-binding> elements may be children of <html-import>. "/>" does not close …` |
 | `SyntaxError` | `<html-export name="<n>"> needs a <template> (a component), <style> (a stylesheet) or <script type="application/json"> (data) in <url>` |
 | `SyntaxError` | `<html-export name="<n>"> has <N> <template> elements; an export has one in <url>` |
 | `SyntaxError` | `<html-export name="<n>">: shadow="<value>" must be "open" or "closed" in <url>` |
@@ -99,6 +102,7 @@ Nothing is silently ignored: a mistake is an exception, a rejection, or an `erro
 | A tag the delimiter makes invalid (namespace import) | `SyntaxError: Cannot bind '<export>' under namespace "<as>" with delimiter "<d>": <<tag>> is not a valid custom element name (<reason>)` (checked for every tag before any is registered) | `<html-import>` |
 | Tag already defined by a different definition (`conflict="error"`) | `Error: Cannot bind <<tag>>: it is already defined by "<name>" from <url> (conflict="reuse" keeps the existing definition instead)` | `<html-import>` (namespace) or `<html-binding>` |
 | Missing export | `SyntaxError: The requested module '<src>' does not provide an export named '<name>'` | `<html-binding>` |
+| `<html-binding>` whose parent is not an `<html-import>` | `SyntaxError: <html-binding export="<b>"> is nested inside <html-binding export="<a>">: an <html-binding> must be a direct child of <html-import>. "/>" does not close …` / `… is not a direct child of <html-import>: it is outside any <html-import>` / `… it is inside <<tag>> …` (it is not applied) | that `<html-binding>` |
 | No `export` attribute | `SyntaxError: <html-binding> requires an "export" attribute` | `<html-binding>` |
 | Invalid `element=` | `SyntaxError: "<tag>" is not a valid custom element name: <reason>` | `<html-binding>` |
 | Stylesheet or data with `element=` | `TypeError: Cannot register '<export>' from '<src>' as <<tag>>: it is a stylesheet, not a component` (or `data (an object)`, …) | `<html-binding>` |

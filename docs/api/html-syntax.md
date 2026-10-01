@@ -198,7 +198,11 @@ An `<html-import>` in an HTML module is a dependency of that module:
 
 ## `<html-binding>`
 
-A direct child of an `<html-import>` (anywhere else it does nothing). With any `<html-binding>` children, only
+A direct child of an `<html-import>`: anywhere else it is an error (a `SyntaxError` in a module, an `error` event on the
+binding in a page), because HTML has no self-closing tags. `<html-binding export="a" />` does **not** close the
+element, so the binding that follows it is parsed as its **child**, and used to be dropped silently. Write
+`<html-binding export="a"></html-binding>`. Any other element child of an `<html-import>` is an error in a module too
+(only whitespace, comments and `<html-binding>` belong there). With any `<html-binding>` children, only
 those exports are bound. The same export may be bound several times (two `element=` tags).
 
 | Attribute | Values | Meaning |
@@ -307,9 +311,11 @@ elements only; `import()` is lazy only when the call says `load: 'lazy'`.
 - **`<html-export>` and `<html-import>` are top-level declarations and must not be nested inside one another.** A
   nested one is a `SyntaxError` naming both elements, e.g. `<html-export name="b"> is nested inside <html-export
   name="a">`, raised identically by the runtime loader and the compiler. (Inside a `<template>` they are inert
-  template content, which is allowed.)
-- `<html-binding>` counts only as a direct child of `<html-import>`, and template/style/script count only as direct
-  children of `<html-export>`.
+  template content, which is allowed.) The message also says that `/>` does not close an element in HTML, the usual
+  cause (`<html-import … />` swallows what follows).
+- `<html-binding>` must be a direct child of `<html-import>` (anywhere else is a `SyntaxError`, see above), an
+  `<html-import>` has no element children but bindings, and template/style/script count only as direct children of
+  `<html-export>`.
 
 ## Boolean attributes
 

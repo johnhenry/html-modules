@@ -349,6 +349,9 @@ registry free of components the page never uses.
 </html-import>
 ```
 
+- **Always write the end tag.** HTML has no self-closing tags: `<html-binding export="card" />` does not close the
+  element, so the binding after it becomes its child. That is an error (a `SyntaxError` in a module, an `error` event in
+  a page), not a silent drop, and so is any other element child of an `<html-import>`.
 - `element=` sets the tag, overriding `<as>--<export>`. It is the markup form of `definition.define(tag)`.
 - `adopt` adopts a stylesheet export into the root that contains the import: the document, or a shadow root.
 - A binding can be added at any time, before or after its module loads; it fires `load` (with `detail.tag`,

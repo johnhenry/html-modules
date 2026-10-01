@@ -257,3 +257,27 @@ test('changing src after loading has started fires an error event and changes no
   assert.deepEqual(fetch.log, [`${ORIGIN}a.html`]);
   assert.equal(imp.state, 'loaded');
 });
+
+test('a page <html-binding> that is not a direct child of <html-import> fires an error event (a self-closed one nests the next)', async () => {
+  const { document, window, fetch } = page('', { files: { 'ui.html': '<html-export name="card"><template>c</template></html-export>' } });
+  const imp = document.createElement('html-import');
+  imp.setAttribute('src', './ui.html');
+  const outer = document.createElement('html-binding');
+  outer.setAttribute('export', 'card');
+  const inner = document.createElement('html-binding');
+  inner.setAttribute('export', 'card');
+  inner.setAttribute('element', 'x-inner');
+  outer.append(inner); // what `<html-binding export="card"/><html-binding …/>` parses to
+  const heard = once(inner, 'error');
+  imp.append(outer);
+  document.body.append(imp);
+  assert.match((await heard).detail.error.message, /^<html-binding export="card"> is nested inside <html-binding export="card">: an <html-binding> must be a direct child of <html-import>\. .*"\/>" does not close/);
+  await imp.ready;
+  assert.equal(window.customElements.get('x-inner'), undefined, 'the swallowed binding was not applied');
+  const stray = document.createElement('html-binding');
+  stray.setAttribute('export', 'card');
+  const strayHeard = once(stray, 'error');
+  document.body.append(stray);
+  assert.match((await strayHeard).detail.error.message, /<html-binding export="card"> is not a direct child of <html-import>: it is outside any <html-import>/);
+  assert.deepEqual(fetch.log, [`${ORIGIN}ui.html`]);
+});

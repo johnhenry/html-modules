@@ -167,3 +167,27 @@ test('@import in a <style> is rejected identically by both readers (replaceSync(
     assert.deepEqual(scanHTMLModule(html, 'm.html'), readHTMLModule(specParse(html), 'm.html'));
   }
 });
+
+test('an <html-binding> that is not a direct child of <html-import> is rejected by both readers (a self-closed one swallows the next)', () => {
+  const NESTED = /^<html-binding export="y"> is nested inside <html-binding export="x"> in m\.html: an <html-binding> must be a direct child of <html-import>\..*"\/>" does not close an element in HTML.*<html-binding …><\/html-binding>$/;
+  const cases = [
+    // What `<html-binding export="x"/>` followed by another binding is, to an HTML parser.
+    ['<html-import src="./a.html" as="a"><html-binding export="x"><html-binding export="y"></html-binding></html-binding></html-import>', NESTED],
+    ['<html-import src="./a.html" as="a"><html-binding export="x"/><html-binding export="y"/></html-import>', NESTED],
+    ['<html-binding export="z"></html-binding>', /^<html-binding export="z"> is not a direct child of <html-import> in m\.html: it is outside any <html-import>.*"\/>" does not close an element/],
+    ['<html-export name="a"><html-binding export="z"></html-binding><template>x</template></html-export>', /^<html-binding export="z"> is not a direct child of <html-import> in m\.html: it is inside <html-export>/],
+    ['<html-import src="./a.html"><div><html-binding export="z"></html-binding></div></html-import>', /^<html-binding export="z"> is not a direct child of <html-import> in m\.html: it is inside <div>/],
+    ['<html-import src="./a.html"><div></div><html-binding export="z"></html-binding></html-import>', /^<html-import src="\.\/a\.html"> has a <div> child in m\.html: only <html-binding> elements may be children of <html-import>.*"\/>" does not close/],
+    ['<html-import src="./a.html"></p></html-import>', /has a <p> child in m\.html/],
+    ['<html-import src="./a.html"><html-export name="x"><template>t</template></html-export></html-import>', /<html-export name="x"> is nested inside <html-import src="\.\/a\.html"> in m\.html: <html-export> and <html-import> must not be nested\. "\/>" does not close an element in HTML/],
+  ];
+  for (const [html, message] of cases) {
+    for (const reader of [scan, read]) assert.throws(() => reader(html), (e) => e instanceof SyntaxError && message.test(e.message), `${html}\n  ${message}`);
+  }
+  // Bindings inside a <template> are not part of the document, and well-formed imports are untouched.
+  for (const html of [
+    '<html-export name="a"><template><html-import src="./a.html"><html-binding export="z"></html-binding></html-import></template></html-export>',
+    '<html-import src="./a.html" as="a">\n  <html-binding export="x"></html-binding>\n  <!-- c -->\n  <html-binding export="y" element="y-y"></html-binding>\n</html-import>',
+  ]) assert.deepEqual(scan(html), read(html));
+  assert.equal(scan('<html-import src="./a.html" as="a"><html-binding export="x"></html-binding><html-binding export="y"></html-binding></html-import>').imports[0].bindings.length, 2);
+});

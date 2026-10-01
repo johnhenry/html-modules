@@ -129,7 +129,8 @@ First release checklist (nothing has been published yet; `package.json` is `0.0.
 2. `package.json` `repository.url` is `git+https://github.com/johnhenry/html-modules.git` (provenance checks it against the
    publishing repo) and `homepage`, `exports`/`types`, `files`, `engines` (>=26) are as shipped; `@johnhenry/safe-fragment` is an
    optional peer, and its git devDependency is the only non-registry dependency (dev only, not installed by consumers).
-3. Choose the first version (bump from `0.0.0`), add the dated, commit-linked `CHANGELOG.md` entry, merge through green CI.
+3. The first release is `0.0.0` itself (family convention: a new `@johnhenry/*` address starts at 0.0.0, and `CHANGELOG.md`
+   already has its dated `0.0.0` entry), so there is no bump; just make sure `main` is green.
 4. `npm pack --dry-run` and `npm publish --dry-run`: only `src/`, `types/`, `bin/`, README, LICENSE, CHANGELOG, package.json.
-5. `gh release create v<version>`; watch the Publish run (`gh run watch <id> --exit-status`); then `npm view @johnhenry/html-modules`.
+5. `gh release create v0.0.0`; watch the Publish run (`gh run watch <id> --exit-status`); then `npm view @johnhenry/html-modules`.
 6. If two runs race on a first publish, one may show a red `403 cannot publish over`; the other published, so check npm first.

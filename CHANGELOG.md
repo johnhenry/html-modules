@@ -6,6 +6,25 @@ Fixes found by an audit of the first build. Nothing is published yet, so these a
 
 ### Features
 
+- **An integrity manifest and a strict mode pin a whole module graph (#2).** `createHTMLModules({ integrity: { [url]: "sha384-…" }, strict })`:
+  every HTML module fetched, at any depth (root, `<html-import>`, `<html-export src>`, lazy imports), is verified against its entry, and
+  `strict: true` refuses an HTML fetch that has neither an entry nor an `integrity` attribute, before the request. The manifest is the shape of
+  an import map's `integrity` object, so one object can drive both; `@johnhenry/mport` generates it (`build({ html })`, `htmlGraph()`,
+  `mport build --html`, using `scanHTMLModule`). The per-import `integrity` attribute keeps working, and attribute and entry must both match.
+  Unit tests (`test/integrity.test.js`) and browser tests on Chromium, Firefox and WebKit (`test/browser/integrity.spec.js`: a tampered
+  module anywhere in a pinned graph is refused; strict refuses unpinned fetches and never requests them). `4558a7a`.
+- **JavaScript imports are verified through the page's import map `integrity` (#1).** An `integrity` on an `<html-import src="*.js">` (or a
+  manifest entry for a `.js` URL) is checked against the page's inline `<script type="importmap">` `integrity` entry for the resolved URL: a
+  matching entry proceeds (the browser enforces it for `import()`), a missing or different one rejects with the entry to add and a pointer to
+  mport's `build({ graph })`. It used to be a `TypeError` (`integrity applies to HTML modules only`). Browser tests on all three engines
+  record per engine whether the tampered module was refused by the engine (`enforced`) or ran (`unsupported`). `4558a7a`.
+- **Size budgets and bench tracking in CI.** `npm run size` fails the new CI `size` job when the packed tarball or the gzip size of any entry
+  point (the file plus its relative imports) passes `package.json` `sizeBudget`; the bench stores its numbers as an artifact and warns (never
+  fails) when a row is more than 3x worse than `bench/baseline.json`. `beae40a`.
+- **JSR readiness (nothing is published).** `jsr.json` mirrors `package.json`, every entry point carries `@ts-self-types`, a test keeps the two in
+  step, and CI runs `jsr publish --dry-run` (`npm run jsr-dry-run`). Creating the package on jsr.io is a manual step for the owner. `beae40a`.
+- **README `## Family` lists `@johnhenry/workbench`.** `4558a7a`.
+
 - **safe-fragment `99ac557`: the vendoring workaround is gone, `registerTemplateProfile()` derives from `component-template-v1`,
   and template ids are kept.** safe-fragment fixed its four issues: #10 (a git install now builds `dist/` through a `prepare`
   script, `1817d79`), #11 (the built-in `component-template-v1`, `idPolicy: "keep-in-shadow"`, `INVALID_OPTION`, `<style>` a

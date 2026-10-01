@@ -1,3 +1,4 @@
+// @ts-self-types="../types/vite.d.ts"
 /**
  * A Vite plugin: import HTML modules from JavaScript, compiled to ES modules, with HMR.
  *

@@ -1,4 +1,4 @@
-// A non-gating benchmark: `npm run bench`. Numbers vary by machine; the README records one run.
+// A non-gating benchmark: `npm run bench` [-- --json] [-- --out file.json]. Numbers vary by machine; the README records one run.
 //
 //   scanner throughput on a large module · compile time · DOM reader (linkedom) for comparison
 //   and, in each Playwright engine that can launch: registering 500 components (load + parse + bind + define) and
@@ -105,3 +105,9 @@ if (playwright) {
 }
 
 if (process.argv.includes('--json')) console.log(JSON.stringify(rows, null, 2));
+// `--out <file>`: the rows as JSON in a file (CI keeps it as an artifact; scripts/bench-compare.mjs reads it).
+const outAt = process.argv.indexOf('--out');
+if (outAt !== -1) {
+  const { writeFile } = await import('node:fs/promises');
+  await writeFile(process.argv[outAt + 1] ?? 'bench-results.json', `${JSON.stringify({ node: process.version, platform: `${process.platform}-${process.arch}`, rows }, null, 2)}\n`);
+}

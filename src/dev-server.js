@@ -1,3 +1,4 @@
+// @ts-self-types="../types/dev-server.d.ts"
 /**
  * The dev server behind `html-module dev [dir]`: a static file server over a directory that watches it and tells
  * open pages what changed, over Server-Sent Events. Only `node:http` and `node:fs`: no dependencies.

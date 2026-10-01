@@ -1,3 +1,4 @@
+// @ts-self-types="../types/browser.d.ts"
 /**
  * One-script bootstrap for browsers:
  *

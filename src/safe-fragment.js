@@ -1,3 +1,4 @@
+// @ts-self-types="../types/safe-fragment.d.ts"
 /**
  * An adapter from `@johnhenry/safe-fragment` to the `sanitize` option of html-modules. Nothing here imports
  * safe-fragment statically and html-modules does not depend on it: pass the module, or let the adapter `import()` it

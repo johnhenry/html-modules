@@ -23,12 +23,53 @@ compiler/CLI and the numbered examples, so a green `npm test` does not prove any
    loads the pinned safe-fragment from `node_modules`: see the gotcha below), and look at
    the change in a real browser (`node scripts/test-server.js`, cache disabled). Features an engine lacks must be
    reported by the page as *unsupported* (`renderChecks` takes `'unsupported'`), not as a failure.
-7. A genuinely fresh clone: `git clone . /tmp/html-modules-verifyN && cd $_ && npm ci && npm test && npm run examples`.
+7. `npm run size` (the size budgets, below), and `npm run jsr-dry-run` when you touched an entry point, `exports`, `types/` or `jsr.json`
+   (JSR, below).
+8. A genuinely fresh clone: `git clone . /tmp/html-modules-verifyN && cd $_ && npm ci && npm test && npm run examples`.
 
-CI (`.github/workflows/ci.yml`) calls the family's reusable `johnhenry/workflows` `ci.yml@v1` for steps 2-5 (Node 26; `npm ci` is its default install) plus a local `browsers` job (step 6, all three engines). Locally, Node 24 also works (npm prints an
+CI (`.github/workflows/ci.yml`) calls the family's reusable `johnhenry/workflows` `ci.yml@v1` for steps 2-5 (Node 26; `npm ci` is its default install) plus local jobs: `browsers` (step 6, all three engines), `size` and `jsr-dry-run` (step 7). Locally, Node 24 also works (npm prints an
 `EBADENGINE` warning only); the floor is a contract, not an install gate.
 
+## Size budgets and the bench
+
+`npm run size` (`scripts/size.mjs`, gating in the CI `size` job) measures the packed tarball (`npm pack --dry-run --json`: compressed
+and unpacked bytes) and the **gzip size of every entry point of `exports`**, counted as the entry file plus everything it reaches
+through relative static imports (what a no-bundler page downloads). The limits are `package.json` `sizeBudget`
+(`tarball`, `unpacked`, `entries: { "<export key>": <gzip bytes> }`), set at today's measurement plus about 10%. It exits 1 when a
+measure is over its budget, when an export has no budget, or when a budget names an export that is gone, and `-- --json <file>`
+writes the report (CI uploads it as the `size-report` artifact). Raise a limit deliberately, in the commit that grows the package,
+with the reason in the message; never to turn a red build green. A new entry point needs its `sizeBudget.entries` row.
+
+`npm run bench` stays non-gating (it is the last step of the `browsers` job); `-- --out <file>` also writes the rows as JSON. CI stores
+that file as the `bench-results` artifact and runs `node scripts/bench-compare.mjs bench-results.json` against the committed
+`bench/baseline.json`: a row more than 3x worse prints a `::warning::` annotation and never fails the build (runners differ).
+Refresh the baseline on purpose, ideally from a CI run's artifact (`gh run download <id> -n bench-results`, then copy it to
+`bench/baseline.json`; it has the Firefox rows too, which this sandbox cannot produce).
+
+## JSR (prepared, not published)
+
+`jsr.json` names `@johnhenry/html-modules` at the package version, exports the same entry points as `package.json` (minus
+`./package.json`), and publishes `src/**/*.js`, `types/**/*.d.ts`, README, LICENSE, CHANGELOG. JSR needs types for a JavaScript entry
+point, so each entry file starts with `// @ts-self-types="../types/<its>.d.ts"` (the generated declaration of that export; run
+`npm run types` first). `test/jsr.test.js` fails when `jsr.json` drifts from `package.json` (name, version, exports, the
+self-types comment), so a version bump touches both. `npm run jsr-dry-run` (`npx jsr@0.14.3 publish --dry-run --allow-dirty`) must
+say `Success Dry run complete`; the CI `jsr-dry-run` job runs it. Its one `unanalyzable-dynamic-import` warning is expected: the default
+`importModule` is `import(url)`. **Never run a real `jsr publish` from here.** Creating the `@johnhenry/html-modules` package on
+jsr.io is a **manual browser step for the owner** (JSR has no API or CLI for creating a scope or package; sign in at
+https://jsr.io/new as `johnhenry`); see `~/Projects/@johnhenry/ecosystem/jsr-packages/README.md`. After it exists, publishing from
+CI uses GitHub OIDC (no token).
+
 ## Repo-specific gotchas
+
+- **The integrity manifest is `{ [absolute url]: "sha384-…" }`, the shape of an import map's `integrity`; do not invent another.**
+  `createLoader({ integrity, strict })` normalizes it once (keys resolved against `baseURL`, `#fragment` dropped, every value parsed
+  as SRI). It is consulted in `start()`, so every fetch of a graph (root, imports, re-exports, lazy imports, `hotReload()`) goes through
+  it; keep new load paths on `start()`. `strict` refuses before the network. An attribute and a manifest entry must both match.
+  `@johnhenry/mport`'s `htmlGraph()` / `build({ html })` produce the manifest from `scanHTMLModule`; the unit tests build it by hand.
+- **A JavaScript import's `integrity` is checked against the page's import map, never against bytes.** `import()` is the browser's, so
+  `checkImportMapPin()` reads the inline `<script type="importmap">` `integrity` entries (`pageImportMapIntegrity()`) and requires the
+  same digest set; the browser then enforces it. The browser test says `enforced` or `unsupported in this engine` per engine rather
+  than assuming. Do not "fix" this by fetching the module to hash it (non-goal: no custom module loader).
 
 - **The DOM reader and the scanner must produce the same record.** The loader reads modules with `readHTMLModule`
   (DOM), the compiler with `scanHTMLModule` (text); both feed `recordFromRaw`, and `test/examples.test.js` compares

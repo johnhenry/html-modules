@@ -1,3 +1,4 @@
+// @ts-self-types="../types/runtime.d.ts"
 /**
  * The common runtime: HTML Component Definitions → native Custom Elements.
  *

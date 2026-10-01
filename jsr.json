@@ -1,0 +1,17 @@
+{
+  "name": "@johnhenry/html-modules",
+  "version": "0.0.0",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.js",
+    "./browser": "./src/browser.js",
+    "./runtime": "./src/runtime.js",
+    "./compiler": "./src/compiler.js",
+    "./dev": "./src/dev-server.js",
+    "./vite": "./src/vite.js",
+    "./safe-fragment": "./src/safe-fragment.js"
+  },
+  "publish": {
+    "include": ["src/**/*.js", "types/**/*.d.ts", "README.md", "LICENSE", "CHANGELOG.md", "jsr.json"]
+  }
+}

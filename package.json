@@ -76,7 +76,9 @@
     "examples:compile": "node scripts/compile-examples.js",
     "types:check": "tsc -p tsconfig.usage.json",
     "test:browser": "playwright test",
-    "bench": "node scripts/bench.js"
+    "bench": "node scripts/bench.js",
+    "size": "node scripts/size.mjs",
+    "jsr-dry-run": "npx --yes jsr@0.14.3 publish --dry-run --allow-dirty"
   },
   "keywords": [
     "html-modules",
@@ -109,5 +111,18 @@
     "typescript": "^7.0.2",
     "vite": "^8.3.1"
   },
-  "types": "./types/index.d.ts"
+  "types": "./types/index.d.ts",
+  "sizeBudget": {
+    "tarball": 170000,
+    "unpacked": 565000,
+    "entries": {
+      ".": 88000,
+      "./browser": 63500,
+      "./runtime": 35500,
+      "./compiler": 48200,
+      "./dev": 3200,
+      "./vite": 49600,
+      "./safe-fragment": 4200
+    }
+  }
 }

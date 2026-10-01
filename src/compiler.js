@@ -1,3 +1,4 @@
+// @ts-self-types="../types/compiler.d.ts"
 /**
  * The optional compiler: an HTML module → an ordinary ES module.
  *

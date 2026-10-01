@@ -1,3 +1,4 @@
+// @ts-self-types="../types/index.d.ts"
 // Side-effect free. For the browser bootstrap, import "@johnhenry/html-modules/browser".
 /** @typedef {import('./types.js').ModuleNamespace} ModuleNamespace */
 /** @typedef {import('./types.js').TagRecord} TagRecord */

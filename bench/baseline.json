@@ -1,0 +1,66 @@
+{
+  "node": "v24.9.0",
+  "platform": "darwin-arm64",
+  "rows": [
+    {
+      "name": "scanHTMLModule (text scanner)",
+      "value": 3.85,
+      "unit": "ms",
+      "note": "42.6 MB/s"
+    },
+    {
+      "name": "compileHTMLModule (scan + codegen)",
+      "value": 3.99,
+      "unit": "ms",
+      "note": "41.0 MB/s"
+    },
+    {
+      "name": "readHTMLModule (DOM reader, linkedom, parse excluded)",
+      "value": 3.81,
+      "unit": "ms",
+      "note": ""
+    },
+    {
+      "name": "scanHTMLModule, a 10-component module",
+      "value": 0.07,
+      "unit": "ms",
+      "note": ""
+    },
+    {
+      "name": "chromium: load + parse + register 500 components",
+      "value": 23.7,
+      "unit": "ms",
+      "note": ""
+    },
+    {
+      "name": "chromium: create and stamp 500 elements (one per component)",
+      "value": 10,
+      "unit": "ms",
+      "note": ""
+    },
+    {
+      "name": "chromium: patch one bound attribute",
+      "value": 0.73,
+      "unit": "µs",
+      "note": ""
+    },
+    {
+      "name": "webkit: load + parse + register 500 components",
+      "value": 29,
+      "unit": "ms",
+      "note": ""
+    },
+    {
+      "name": "webkit: create and stamp 500 elements (one per component)",
+      "value": 14,
+      "unit": "ms",
+      "note": ""
+    },
+    {
+      "name": "webkit: patch one bound attribute",
+      "value": 0.65,
+      "unit": "µs",
+      "note": ""
+    }
+  ]
+}

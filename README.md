@@ -790,13 +790,14 @@ done with your page's authority.
   you import can do what its markup can do: `<img src=x onerror="…">`, `<a href="javascript:…">`,
   `<iframe srcdoc="…">` and inline event handlers all execute (subject to your CSP). Import only modules you would
   load as a script, from origins you control or have pinned with `integrity`; do not build a module's URL or source
-  from user input.
+  from user input. An opt-in sanitizer for less-trusted markup is tracked in [html-modules#3](https://github.com/johnhenry/html-modules/issues/3).
 - **Importing JavaScript runs code.** `<html-import src="./x.js">` is a native `import()`: the module's top level
   runs with full page authority, and html-modules cannot verify it (use an import map `integrity` field, or a CSP
-  `script-src` allowlist).
+  `script-src` allowlist). Tracked in [html-modules#1](https://github.com/johnhenry/html-modules/issues/1).
 - **`integrity` covers only what you give it.** Each import is pinned individually; a re-export or dependency
   without its own `integrity` is fetched unverified, and a module that is verified can still import a
-  JavaScript module that is not. Compiled output is ordinary JavaScript: pin it as you pin any script.
+  JavaScript module that is not. Compiled output is ordinary JavaScript: pin it as you pin any script. Pinning a
+  whole module graph in one place is tracked in [html-modules#2](https://github.com/johnhenry/html-modules/issues/2).
 - **CORS, cookies and CSP are the platform's.** `credentials: 'include'` sends cookies to whatever origin the
   module is on; html-modules does not add or relax any CORS check, and `connect-src` / `script-src` decide what may
   be fetched or imported.

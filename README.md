@@ -1138,8 +1138,8 @@ depends on neither of these packages, and neither depends on it.
   map mport generated (a prefix entry such as `"@acme/ui/": "https://…/"` covers HTML files too) in the page before
   `browser.js` loads, and bare HTML-module specifiers resolve through it. The same map can point
   `@johnhenry/html-modules/runtime` at one runtime copy. This library used to carry an mport adapter, routers and a
-  lockfile; they were removed in `1c0c416` when it became html-modules. (mport's current line is not yet published
-  under the scope.)
+  lockfile; they were removed in `1c0c416` when it became html-modules. (mport's router is published as
+  `@johnhenry/mport`.)
 - **[`@johnhenry/safe-fragment`](https://github.com/johnhenry/safe-fragment)**: the sanitizer to reach for when markup comes
   from somewhere less trusted. Two mechanisms, neither a dependency in either direction:
   - **The `sanitize` hook**, wired by [`safeFragmentSanitizer()`](docs/api/sanitize.md#the-safe-fragment-adapter) from

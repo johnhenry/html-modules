@@ -1152,7 +1152,7 @@ depends on neither of these packages, and neither depends on it.
     re-renders when it changes (`content` is safe-fragment's lowest-precedence source and logs a console note; it is the one a
     `{{binding}}` can feed). Call `registerSafeFragment()` on the page. In a *sanitized* module the element is not one of the
     profile's custom elements and is unwrapped, so use it in modules you trust.
-- **[`@johnhenry/workbench`](https://github.com/johnhenry/workbench)**: the integration app that runs the family together ([live](https://johnhenry.github.io/workbench/), [docs](https://opensource.johnhenry.me/workbench/)).
+- **[Untrusted Desk](https://opensource.johnhenry.me/orrery/#/workbench)**: the Orrery planet (it replaced the retired `johnhenry/workbench` app) where every window's content is an html-modules component, one loaded through the `sanitize` hook, alongside window-algebra and safe-fragment.
 - **[`@johnhenry/window-algebra`](https://github.com/johnhenry/window-algebra)**: window-algebra's views host *surfaces*, `{ mount(target), unmount() }`, and its
   `htmlSurface(element)` simply appends an element. An html-modules component is a native custom element, so
   `htmlSurface(document.createElement('ui--card'))` is a window whose content upgrades when its import registers the

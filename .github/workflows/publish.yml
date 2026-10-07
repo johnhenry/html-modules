@@ -12,19 +12,14 @@
 
 name: Publish to npm
 
+# Publish model: main is the release branch. A push to main publishes only if
+# package.json's version isn't on npm yet (otherwise a clean no-op), then tags
+# v<version> and creates a GitHub Release. See johnhenry/workflows' README.
 on:
-  release:
-    types: [published]
   push:
-    tags:
-      - "v*"
+    branches: [main]
   workflow_dispatch: {}
 
-# Releases fire twice: `release: published`, and the tag push it creates.
-# Queue the second run (never cancel it) so its `npm view` guard sees the
-# version the first one published and exits cleanly, instead of both runs
-# publishing at once and one failing (E403/E409). This is not the CI
-# concurrency-cancel block: publish runs must never be cancelled.
 concurrency:
   group: publish-${{ github.ref }}
   cancel-in-progress: false
@@ -32,8 +27,8 @@ concurrency:
 jobs:
   publish:
     permissions:
-      contents: read
-      id-token: write # npm provenance: the reusable workflow's job needs it, and the caller must grant it too
+      contents: write # tag + GitHub Release by-product of npm-publish.yml
+      id-token: write # npm provenance
     uses: johnhenry/workflows/.github/workflows/npm-publish.yml@v1
     with:
       node-version: "26"

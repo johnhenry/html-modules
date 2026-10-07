@@ -96,6 +96,9 @@ jobs:
       - run: npm ci
       - run: npm run jsr-dry-run
 
+  workflow-lint:
+    uses: johnhenry/workflows/.github/workflows/workflow-lint.yml@v1
+
   # No separate generated-<what> job: examples/compiled/ is generated (npm run examples:compile) and committed, but it
   # does NOT ship (files is src + bin), and "examples/compiled/ is up to date" in test/examples.test.js already fails
   # npm test when it drifts, so the reusable workflow's drift-check stays off.

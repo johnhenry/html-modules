@@ -1,7 +1,7 @@
 # Agent playbook
 
 `@johnhenry/html-modules`: declarative HTML modules (`<html-export>`, `<html-import src as>`) with a shared runtime and
-an optional compiler to ES modules. Single package, Node >= 26, `node:test` (`npm test`) with linkedom as the test
+an optional compiler to ES modules. Single package; development requires Node >= 26 for the test tools, compiler/CLI and examples, `node:test` (`npm test`) with linkedom as the test
 DOM and parse5 as the spec-parser oracle for the reader-agreement tests (`test/spec-dom.js`), ships source (`src/`, `bin/`); no build step. The library is browser code; Node runs only the tests, the
 compiler/CLI and the numbered examples, so a green `npm test` does not prove anything about real rendering.
 
@@ -168,8 +168,9 @@ guard skips a version already on npm and treats the E404 of a never-published pa
 First release checklist (nothing has been published yet; `package.json` is `0.0.0`):
 1. The `NPM_TOKEN` repo secret exists and can publish to the `@johnhenry` scope (never put it in a file or a command).
 2. `package.json` `repository.url` is `git+https://github.com/johnhenry/html-modules.git` (provenance checks it against the
-   publishing repo) and `homepage`, `exports`/`types`, `files`, `engines` (>=26) are as shipped; `@johnhenry/safe-fragment` is an
+   publishing repo) and `homepage`, `exports`/`types`, `files` are as shipped; `@johnhenry/safe-fragment` is an
    optional peer, and its git devDependency is the only non-registry dependency (dev only, not installed by consumers).
+   Note: `engines.node` is not declared because the library is for browsers; Node >= 26 is required only for development tools (tests, compiler, CLI).
 3. The first release is `0.0.0` itself (family convention: a new `@johnhenry/*` address starts at 0.0.0, and `CHANGELOG.md`
    already has its dated `0.0.0` entry), so there is no bump; just make sure `main` is green.
 4. `npm pack --dry-run` and `npm publish --dry-run`: only `src/`, `types/`, `bin/`, README, LICENSE, CHANGELOG, package.json.

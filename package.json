@@ -1,6 +1,6 @@
 {
   "name": "@johnhenry/html-modules",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "Declarative HTML modules: export components from ordinary HTML, import them with <html-import src as>, and optionally compile them to ES modules.",
   "author": "John Henry <john@iamjohnhenry.com>",
   "license": "MIT",
@@ -13,9 +13,6 @@
     "url": "https://github.com/johnhenry/html-modules/issues"
   },
   "type": "module",
-  "engines": {
-    "node": ">=26.0.0"
-  },
   "sideEffects": [
     "./src/browser.js"
   ],

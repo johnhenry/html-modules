@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.1 (2026-10-14)
+
+### Fixes
+
+- **Remove `engines.node >= 26` from package.json (#8).** The library is for browsers and does not require a specific Node version to use. Node >= 26 is required only for development (tests, compiler CLI, and examples). Browser consumers no longer see an engine warning or failure with `npm --engine-strict`.
+
 ## 0.0.0 — first release, as `@johnhenry/html-modules` (2026-09-28)
 
 Not published yet: everything in this entry ships as `0.0.0`. Work since the initial build comes first; the initial build itself is under "Initial build" below.
